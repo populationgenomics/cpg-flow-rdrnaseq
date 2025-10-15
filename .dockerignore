@@ -1,0 +1,11 @@
+build
+.venv
+venv
+*.egg-info/
+hail-*
+.git
+work
+test
+*.log*
+*_results
+*_outputs
