@@ -32,6 +32,7 @@ BWAMEM2_INDEX_EXTS = ['0123', 'amb', 'bwt.2bit.64', 'ann', 'pac', 'alt']
 DRAGMAP_INDEX_FILES = ['hash_table.cfg.bin', 'hash_table.cmp', 'reference.bin']
 
 
+
 class Aligner(Enum):
     """
     Tool that performs the alignment. Value must be the name of the executable.
