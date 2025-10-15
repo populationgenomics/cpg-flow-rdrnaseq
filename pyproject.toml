@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name='cpg-flow-RD-RnaSeq'
+name='cpg-flow-rdrnaseq'
 description='Rare Disease RNAseq workflow, implemented in CPG-Flow'
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
@@ -25,7 +25,7 @@ dependencies=[
 ]
 
 [project.urls]
-Repository = "https://github.com/populationgenomics/cpg-flow-RD-RnaSeq.git"
+Repository = "https://github.com/populationgenomics/cpg-flow-rdrnaseq.git"
 
 [project.optional-dependencies]
 test = [
@@ -35,10 +35,10 @@ test = [
 ]
 
 [project.scripts]
-run_workflow = 'cpg-flow-RD-RnaSeq.run_workflow:cli_main'
+run_workflow = 'cpg-flow-rdrnaseq.run_workflow:cli_main'
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/cpg-flow-RD-RnaSeq"]
+packages = ["src/cpg-flow-rdrnaseq"]
 
 [tool.hatch.build.targets.wheel.sources]
 "src" = ""
@@ -47,7 +47,7 @@ packages = ["src/cpg-flow-RD-RnaSeq"]
 include_package_data = true
 
 [options.package_data]
-'cpg-flow-RD-RnaSeq'=  ['config_template.toml']
+'cpg-flow-rdrnaseq'=  ['config_template.toml']
 
 [tool.mypy]
 ignore_missing_imports = true
