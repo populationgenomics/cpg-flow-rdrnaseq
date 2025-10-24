@@ -5,27 +5,24 @@ Trim raw FASTQ reads using cutadapt
 from dataclasses import dataclass
 from enum import Enum
 
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
-
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import Batch, command
 from cpg_workflows.filetypes import FastqPair
 from cpg_workflows.resources import STANDARD
 from cpg_workflows.utils import can_reuse
 from cpg_workflows.workflow import SequencingGroup
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
 
 
 class MissingFastqInputException(Exception):
     """Raise if alignment input is missing"""
 
-    pass
 
 
 class InvalidSequencingTypeException(Exception):
     """Raise if alignment type is not 'rna'"""
 
-    pass
 
 
 @dataclass
@@ -189,7 +186,7 @@ def trim(
     if not get_config()['workflow']['sequencing_type'] == 'transcriptome':
         raise InvalidSequencingTypeException(
             f"Invalid sequencing type '{get_config()['workflow']['sequencing_type']}'"
-            + f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
+             f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
         )
 
     try:

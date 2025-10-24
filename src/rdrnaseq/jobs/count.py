@@ -3,8 +3,6 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command
@@ -15,9 +13,7 @@ from cpg_workflows.filetypes import (
 from cpg_workflows.jobs.bam_to_cram import cram_to_bam
 from cpg_workflows.resources import STANDARD
 from cpg_workflows.utils import can_reuse
-from cpg_workflows.workflow import (
-    SequencingGroup,
-)
+from hailtop.batch.job import Job
 
 
 def count_res_group(b: hb.Batch) -> hb.ResourceGroup:
@@ -161,7 +157,7 @@ def count(
         if j and isinstance(j, Job):
             jobs.append(j)
     else:
-        raise ValueError(f'Invalid alignment input: "{str(input_cram_or_bam)}", expected BAM or CRAM file.')
+        raise ValueError(f'Invalid alignment input: "{input_cram_or_bam!s}", expected BAM or CRAM file.')
 
     assert isinstance(input_bam_reads, hb.ResourceGroup)
 

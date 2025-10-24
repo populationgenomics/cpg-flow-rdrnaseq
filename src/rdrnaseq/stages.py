@@ -23,18 +23,13 @@ Each Stage should be a Class, and should inherit from one of
 
 from typing import TYPE_CHECKING
 
-from workflow_name.jobs.DoSomethingGenericWithBash import echo_statement_to_file
-from workflow_name.jobs.PrintPreviousJobOutputInAPythonJob import print_file_contents
-
-from cpg_utils.config import config_retrieve
+from cpg_flow.stage import stage
 from cpg_utils.hail_batch import get_batch
-
-from cpg_flow.stage import MultiCohortStage, stage
 
 if TYPE_CHECKING:
     # Path is a classic return type for a Stage, and is a shortcut for [CloudPath | pathlib.Path]
+    from cpg_flow.targets import StageInput, StageOutput
     from cpg_utils import Path
-    from cpg_flow.targets import MultiCohort, StageInput, StageOutput
 from cpg_utils import Path
 from cpg_workflows import get_batch
 from cpg_workflows.jobs import outrider
@@ -47,8 +42,6 @@ from cpg_workflows.workflow import (
     stage,
 )
 
-
-
 """
 Perform outlier gene expression analysis with Outrider.
 """
@@ -57,21 +50,12 @@ Perform outlier gene expression analysis with Outrider.
 Perform aberrant splicing analysis with FRASER.
 """
 
-from cpg_utils import Path
-from cpg_workflows import get_batch
 from cpg_workflows.filetypes import (
     BamPath,
     CramPath,
 )
 from cpg_workflows.jobs import fraser
 from cpg_workflows.stages.trim_align import TrimAlignRNA
-from cpg_workflows.workflow import (
-    Cohort,
-    CohortStage,
-    StageInput,
-    StageOutput,
-    stage,
-)
 
 """
 Align RNA-seq reads to the genome using STAR.
@@ -82,44 +66,17 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from hailtop.batch.job import Job
-
-from cpg_utils import Path
 from cpg_utils.config import get_config
 from cpg_utils.hail_batch import get_batch
-from cpg_workflows.filetypes import BamPath, CramPath, FastqPair, FastqPairs
-from cpg_workflows.jobs import align_rna, trim
-from cpg_workflows.targets import SequencingGroup
-from cpg_workflows.workflow import (
-    SequencingGroupStage,
-    StageInput,
-    StageOutput,
-    stage,
-)
-
-
-import logging
-
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
-
-from cpg_utils import Path
-from cpg_utils.config import get_config
 from cpg_workflows import get_batch
-from cpg_workflows.filetypes import (
-    BamPath,
-    CramPath,
-)
-from cpg_workflows.jobs import bam_to_cram, count
-from cpg_workflows.stages.trim_align import TrimAlignRNA
-from cpg_workflows.utils import can_reuse
+from cpg_workflows.filetypes import FastqPair, FastqPairs
+from cpg_workflows.jobs import align_rna, count, trim
+from cpg_workflows.targets import SequencingGroup
 from cpg_workflows.workflow import (
     SequencingGroup,
     SequencingGroupStage,
-    StageInput,
-    StageOutput,
-    stage,
 )
+from hailtop.batch.job import Job
 
 
 def get_trim_inputs(sequencing_group: SequencingGroup) -> FastqPairs | None:
@@ -272,6 +229,7 @@ class TrimAlignRNA(SequencingGroupStage):
         # Create outputs and return jobs
         return self.make_outputs(sequencing_group, data=aligned_cram_dict, jobs=jobs)
 
+
 """
 Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
@@ -383,8 +341,6 @@ class Fraser(CohortStage):
         return self.make_outputs(cohort, data=self.expected_outputs(cohort), jobs=j)
 
 
-
-
 @stage(required_stages=Count)
 class Outrider(CohortStage):
     """
@@ -414,5 +370,3 @@ class Outrider(CohortStage):
             overwrite=cohort.forced,
         )
         return self.make_outputs(cohort, data=self.expected_outputs(cohort), jobs=j)
-
-

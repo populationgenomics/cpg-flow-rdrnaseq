@@ -6,13 +6,12 @@ from os.path import basename
 from textwrap import dedent
 
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command
 from cpg_workflows.resources import STANDARD
 from cpg_workflows.utils import can_reuse
+from hailtop.batch.job import Job
 
 
 class Outrider:
@@ -34,7 +33,7 @@ class Outrider:
             self.input_counts,
             list,
         ), f'input_counts must be a list, instead got {type(self.input_counts)}: {self.input_counts}'
-        self.input_counts_r_str = ', '.join([f'"{str(f)}"' for f in self.input_counts])
+        self.input_counts_r_str = ', '.join([f'"{f!s}"' for f in self.input_counts])
         self.gtf_file_path = str(gtf_file)
         self.output = output
         self.nthreads = nthreads
@@ -57,9 +56,9 @@ class Outrider:
         """
         self.command += f"""
         # Set significance values
-        pval_cutoff <- {str(self.pval_cutoff)}
-        z_cutoff <- {str(self.z_cutoff)}
-        n_parallel_workers <- {str(self.nthreads - 1)}
+        pval_cutoff <- {self.pval_cutoff!s}
+        z_cutoff <- {self.z_cutoff!s}
+        n_parallel_workers <- {self.nthreads - 1!s}
 
         input_counts_files <- c({self.input_counts_r_str})
         """
@@ -306,7 +305,7 @@ def outrider(
     assert all([isinstance(f, (str, Path)) for f in input_counts])
     infiles = {basename(str(f)).replace('.count', ''): str(f) for f in input_counts}
     infiles_rg = b.read_input_group(**infiles)
-    infiles_localised = [str(infiles_rg[key]) for key in infiles.keys()]
+    infiles_localised = [str(infiles_rg[key]) for key in infiles]
     gtf_file = get_config()['references']['star'].get('gtf')
     gtf_file = to_path(gtf_file)
     gtf_file_rg = b.read_input_group(gtf=str(gtf_file))

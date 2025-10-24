@@ -9,8 +9,6 @@ from textwrap import dedent
 from typing import cast
 
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, fasta_res_group
@@ -24,13 +22,13 @@ from cpg_workflows.filetypes import (
 from cpg_workflows.resources import HIGHMEM, STANDARD
 from cpg_workflows.targets import SequencingGroup
 from cpg_workflows.utils import can_reuse
+from hailtop.batch.job import Job
 
 from . import picard
 
 BWA_INDEX_EXTS = ['sa', 'amb', 'bwt', 'ann', 'pac', 'alt']
 BWAMEM2_INDEX_EXTS = ['0123', 'amb', 'bwt.2bit.64', 'ann', 'pac', 'alt']
 DRAGMAP_INDEX_FILES = ['hash_table.cfg.bin', 'hash_table.cmp', 'reference.bin']
-
 
 
 class Aligner(Enum):
@@ -71,7 +69,6 @@ def _get_cram_reference_from_version(cram_version) -> str:
 class MissingAlignmentInputException(Exception):
     """Raise if alignment input is missing"""
 
-    pass
 
 
 def _get_alignment_input(sequencing_group: SequencingGroup) -> AlignmentInput:
@@ -211,7 +208,7 @@ def align(
     else:  # Aligning in parallel and merging afterwards
         if sharded_fq:  # Aligning each lane separately, merging after
             # running alignment for each fastq pair in parallel
-            fastq_pairs = cast(FastqPairs, alignment_input)
+            fastq_pairs = cast('FastqPairs', alignment_input)
             for pair in fastq_pairs:
                 # bwa-mem or dragmap command, but without sorting and deduplication:
                 j, cmd = _align_one(
@@ -383,9 +380,9 @@ def _align_one(
         bazam_ref_cmd = ''
         samtools_ref_cmd = ''
         if isinstance(alignment_input, CramPath):
-            assert (
-                alignment_input.reference_assembly
-            ), f'The reference input for the alignment input "{alignment_input.path}" was not set'
+            assert alignment_input.reference_assembly, (
+                f'The reference input for the alignment input "{alignment_input.path}" was not set'
+            )
             reference_inp = b.read_input_group(
                 base=str(alignment_input.reference_assembly),
                 fai=str(alignment_input.reference_assembly) + '.fai',
@@ -508,7 +505,7 @@ def _align_one(
             for fname, cmd in fifo_commands.items()
         ]
 
-        _fifo_waits = ' && '.join(f'wait $pid_{fname}' for fname in fifo_commands.keys())
+        _fifo_waits = ' && '.join(f'wait $pid_{fname}' for fname in fifo_commands)
         fifo_post = dedent(
             f"""
             if {_fifo_waits}
@@ -616,7 +613,7 @@ def finalise_alignment(
         -Ocram -o {j.output_cram.cram}
 
         samtools index -@{nthreads - 1} {j.output_cram.cram} \\
-        {j.output_cram["cram.crai"]}
+        {j.output_cram['cram.crai']}
         """.strip()
         md_j = j
     else:

@@ -3,8 +3,6 @@ Create Hail Batch jobs to run Picard tools (marking duplicates, QC).
 """
 
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path
 from cpg_utils.config import get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, fasta_res_group
@@ -16,6 +14,7 @@ from cpg_workflows.resources import (
     storage_for_joint_vcf,
 )
 from cpg_workflows.utils import can_reuse, exists
+from hailtop.batch.job import Job
 
 
 def get_intervals(
@@ -245,7 +244,7 @@ def vcf_qc(
     DBSNP={dbsnp_vcf['base']} \
     SEQUENCE_DICTIONARY={reference['dict']} \
     TARGET_INTERVALS={intervals_file} \
-    GVCF_INPUT={"true" if is_gvcf else "false"}
+    GVCF_INPUT={'true' if is_gvcf else 'false'}
 
     cp $BATCH_TMPDIR/prefix.variant_calling_summary_metrics {j.summary}
     cp $BATCH_TMPDIR/prefix.variant_calling_detail_metrics {j.detail}
@@ -303,8 +302,8 @@ def picard_collect_metrics(
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}
 
     # Retrying copying to avoid google bandwidth limits
-    retry_gs_cp {str(cram_path.path)} $CRAM
-    retry_gs_cp {str(cram_path.index_path)} $CRAI
+    retry_gs_cp {cram_path.path!s} $CRAM
+    retry_gs_cp {cram_path.index_path!s} $CRAI
 
     picard {res.java_mem_options()} \\
       CollectMultipleMetrics \\
@@ -373,8 +372,8 @@ def picard_hs_metrics(
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}
 
     # Retrying copying to avoid google bandwidth limits
-    retry_gs_cp {str(cram_path.path)} $CRAM
-    retry_gs_cp {str(cram_path.index_path)} $CRAI
+    retry_gs_cp {cram_path.path!s} $CRAM
+    retry_gs_cp {cram_path.index_path!s} $CRAI
 
     # Picard is strict about the interval-list file header - contigs md5s, etc. - and
     # if md5s do not match the ref.dict file, picard would crash. So fixing the header
@@ -440,8 +439,8 @@ def picard_wgs_metrics(
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}
 
     # Retrying copying to avoid google bandwidth limits
-    retry_gs_cp {str(cram_path.path)} $CRAM
-    retry_gs_cp {str(cram_path.index_path)} $CRAI
+    retry_gs_cp {cram_path.path!s} $CRAM
+    retry_gs_cp {cram_path.index_path!s} $CRAI
 
     picard {res.java_mem_options()} \\
       CollectWgsMetrics \\

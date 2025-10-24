@@ -5,8 +5,6 @@ Perform aberrant splicing analysis with FRASER.
 from textwrap import dedent
 
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command
@@ -17,9 +15,7 @@ from cpg_workflows.filetypes import (
 from cpg_workflows.jobs.bam_to_cram import cram_to_bam
 from cpg_workflows.resources import STANDARD
 from cpg_workflows.utils import can_reuse
-from cpg_workflows.workflow import (
-    SequencingGroup,
-)
+from hailtop.batch.job import Job
 
 
 class Fraser:
@@ -73,7 +69,7 @@ class Fraser:
         minDeltaPsi <- {self.min_delta_psi}
         deltaPsi_cutoff <- {self.delta_psi_cutoff}
         min_count <- {self.min_count}
-        n_parallel_workers <- {str(self.nthreads - 1)}
+        n_parallel_workers <- {self.nthreads - 1!s}
 
         # Load FDS (pre-counted)
         fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_name}")
@@ -452,7 +448,7 @@ def fraser_init(
             name = "{cohort_name}"
         )
 
-        n_parallel_workers <- {str(res.get_nthreads() - 1)}
+        n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
@@ -513,7 +509,7 @@ def fraser_count_split_reads_one_sample(
 
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
 
-        n_parallel_workers <- {str(res.get_nthreads() - 1)}
+        n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
@@ -609,7 +605,7 @@ def fraser_merge_split_reads(
         library(FRASER)
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
 
-        n_parallel_workers <- {str(res.get_nthreads() - 1)}
+        n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
@@ -689,7 +685,7 @@ def fraser_count_non_split_reads_one_sample(
         library(FRASER)
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
 
-        n_parallel_workers <- {str(res.get_nthreads() - 1)}
+        n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
@@ -786,7 +782,7 @@ def fraser_merge_non_split_reads(
 
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
 
-        n_parallel_workers <- {str(res.get_nthreads() - 1)}
+        n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
