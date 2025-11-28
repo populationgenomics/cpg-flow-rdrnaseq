@@ -1,11 +1,11 @@
 """
-Trim raw FASTQ reads using cutadapt
+Trim raw FASTQ reads using fastp or cutadapt
 """
 
 from dataclasses import dataclass
 from enum import Enum
 
-from cpg_utils.config import get_config, image_path
+from cpg_utils import config
 from cpg_utils.hail_batch import Batch, command
 from cpg_workflows.filetypes import FastqPair
 from cpg_workflows.resources import STANDARD
@@ -13,6 +13,12 @@ from cpg_workflows.utils import can_reuse
 from cpg_workflows.workflow import SequencingGroup
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
+
+# Default configuration constants
+DEFAULT_MIN_LENGTH = 50
+DEFAULT_STORAGE_GB = 50
+DEFAULT_NTHREADS = 8
+DEFAULT_QUALITY_TRIM = 20
 
 
 class MissingFastqInputException(Exception):
@@ -24,8 +30,7 @@ class InvalidSequencingTypeException(Exception):
     """Raise if alignment type is not 'rna'"""
 
 
-
-@dataclass
+@dataclass(frozen=True)
 class AdapterSequence:
     """
     A class to represent an adapter sequence.
@@ -35,7 +40,7 @@ class AdapterSequence:
     name: str | None = None
 
 
-@dataclass
+@dataclass(frozen=True)
 class AdapterPair:
     """
     A class to represent a pair of adapter sequences.
@@ -61,6 +66,17 @@ class AdapterPairs(Enum):
         ),
     )
 
+    ILLUMINA_NEXTERA = AdapterPair(
+        r1=AdapterSequence(
+            sequence='CTGTCTCTTATACACATCT',
+            name='Nextera Adapter Index 1',
+        ),
+        r2=AdapterSequence(
+            sequence='CTGTCTCTTATACACATCT',
+            name='Nextera Adapter Index 2',
+        ),
+    )
+
 
 class Cutadapt:
     """
@@ -76,12 +92,13 @@ class Cutadapt:
         min_length: int = 50,
         two_colour: bool = True,
         polyA: bool = False,
-        quality_trim: int | None = None,  # TODO: determine default
+        quality_trim: int | None = None,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
-        except AttributeError:
+        except KeyError:
             raise ValueError(f'Invalid adapter type: {adapter_type}')
+
         self.command = [
             'cutadapt',
             *('-o', str(output_fastq_pair.r1)),
@@ -94,15 +111,19 @@ class Cutadapt:
                     *('-A', adapters.r2.sequence),
                 ],
             )
-        if quality_trim:
+
+        # FIX: Check for None to allow 0 as a valid value
+        if quality_trim is not None:
             if two_colour:
                 self.command.append(f'--nextseq-trim={quality_trim}')
             else:
                 self.command.append(f'-q {quality_trim}')
+
         if min_length:
             self.command.append(f'--minimum-length={min_length}')
         if polyA:
             self.command.append('--poly-a')
+
         self.command.append(str(input_fastq_pair.r1))
         if paired:
             self.command.append(str(input_fastq_pair.r2))
@@ -132,8 +153,9 @@ class Fastp:
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
-        except AttributeError:
+        except KeyError:
             raise ValueError(f'Invalid adapter type: {adapter_type}')
+
         self.command = [
             'fastp',
             *('--in1', str(input_fastq_pair.r1)),
@@ -173,8 +195,12 @@ def trim(
     requested_nthreads: int | None = None,
 ) -> tuple[Job | None, FastqPair]:
     """
-    Takes an input FastqPair object, and creates a job to trim the FASTQs using cutadapt.
+    Takes an input FastqPair object, and creates a job to trim the FASTQs using fastp.
     """
+    # Validate inputs
+    if not input_fq_pair.r1 or not input_fq_pair.r2:
+        raise MissingFastqInputException("Both R1 and R2 FASTQ files must be provided")
+
     # Don't run if all output files exist and can be reused
     if output_fq_pair and can_reuse(output_fq_pair.r1, overwrite) and can_reuse(output_fq_pair.r2, overwrite):
         return None, output_fq_pair.as_resources(b)
@@ -183,30 +209,35 @@ def trim(
     if extra_label:
         base_job_name += f' {extra_label}'
 
-    if not get_config()['workflow']['sequencing_type'] == 'transcriptome':
+    if not config.config_retrieve(['workflow']['sequencing_type']) == 'transcriptome':
         raise InvalidSequencingTypeException(
-            f"Invalid sequencing type '{get_config()['workflow']['sequencing_type']}'"
+            f"Invalid sequencing type '{config.config_retrieve(['workflow']['sequencing_type'])}'"
              f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
         )
 
-    try:
-        adapter_type = get_config()['trim']['adapter_type']
-    except KeyError:
+    # Get configuration with defaults
+    trim_config = config.config_retrieve('trim', {})
+    adapter_type = trim_config.get('adapter_type')
+    if not adapter_type:
         raise ValueError('No adapter type specified in config file')
 
-    trim_tool = 'fastp'
+    min_length = trim_config.get('min_length', DEFAULT_MIN_LENGTH)
+    storage_gb = trim_config.get('storage_gb', DEFAULT_STORAGE_GB)
+    quality_trim = trim_config.get('quality_trim', DEFAULT_QUALITY_TRIM)
+
+    trim_tool = trim_config.get('tool', 'fastp')
 
     trim_j_name = base_job_name
     trim_j_attrs = (job_attrs or {}) | dict(label=base_job_name, tool=trim_tool)
     trim_j = b.new_job(trim_j_name, trim_j_attrs)
-    trim_j.image(image_path('fastp'))
+    trim_j.image(image_path(trim_tool))
 
-    # Set resource requirements
-    nthreads = requested_nthreads or 8
+    # Set resource requirements with configurable values
+    nthreads = requested_nthreads or trim_config.get('nthreads', DEFAULT_NTHREADS)
     res = STANDARD.set_resources(
         trim_j,
         ncpu=nthreads,
-        storage_gb=50,  # TODO: make configurable
+        storage_gb=storage_gb,
     )
 
     fastq_pair = input_fq_pair.as_resources(b)
@@ -220,16 +251,29 @@ def trim(
         r2=trim_j.output_r2['fastq.gz'],
     )
 
-    trim_cmd = Fastp(
-        input_fastq_pair=fastq_pair,
-        output_fastq_pair=out_fqs,
-        adapter_type=adapter_type,
-        paired=True,
-        min_length=50,
-        nthreads=res.get_nthreads(),
-        polyG=True,
-        polyX=True,
-    )
+    # Create appropriate trimming command based on tool selection
+    if trim_tool == 'cutadapt':
+        trim_cmd = Cutadapt(
+            input_fastq_pair=fastq_pair,
+            output_fastq_pair=out_fqs,
+            adapter_type=adapter_type,
+            paired=True,
+            min_length=min_length,
+            quality_trim=quality_trim,
+            two_colour=trim_config.get('two_colour', True),
+            polyA=trim_config.get('polyA', False),
+        )
+    else:  # Default to fastp
+        trim_cmd = Fastp(
+            input_fastq_pair=fastq_pair,
+            output_fastq_pair=out_fqs,
+            adapter_type=adapter_type,
+            paired=True,
+            min_length=min_length,
+            nthreads=res.get_nthreads(), # uses actual threads allocated
+            polyG=trim_config.get('polyG', True),
+            polyX=trim_config.get('polyX', False),
+        )
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 
     # Write output to file
