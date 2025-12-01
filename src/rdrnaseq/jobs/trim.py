@@ -7,10 +7,18 @@ from enum import Enum
 
 from cpg_utils import config
 from cpg_utils.hail_batch import Batch, command
-from cpg_workflows.filetypes import FastqPair
-from cpg_workflows.resources import STANDARD
-from cpg_workflows.utils import can_reuse
-from cpg_workflows.workflow import SequencingGroup
+
+from cpg_flow.filetypes import FastqPair
+from cpg_flow import stage, targets
+
+from cpg_flow.targets import SequencingGroup
+from cpg_flow.resources import STANDARD
+
+
+from cpg_utils.config import image_path
+from rdrnaseq.utils import can_reuse
+
+
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
 
@@ -23,7 +31,6 @@ DEFAULT_QUALITY_TRIM = 20
 
 class MissingFastqInputException(Exception):
     """Raise if alignment input is missing"""
-
 
 
 class InvalidSequencingTypeException(Exception):
@@ -199,7 +206,7 @@ def trim(
     """
     # Validate inputs
     if not input_fq_pair.r1 or not input_fq_pair.r2:
-        raise MissingFastqInputException("Both R1 and R2 FASTQ files must be provided")
+        raise MissingFastqInputException('Both R1 and R2 FASTQ files must be provided')
 
     # Don't run if all output files exist and can be reused
     if output_fq_pair and can_reuse(output_fq_pair.r1, overwrite) and can_reuse(output_fq_pair.r2, overwrite):
@@ -212,7 +219,7 @@ def trim(
     if not config.config_retrieve(['workflow']['sequencing_type']) == 'transcriptome':
         raise InvalidSequencingTypeException(
             f"Invalid sequencing type '{config.config_retrieve(['workflow']['sequencing_type'])}'"
-             f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
+            f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
         )
 
     # Get configuration with defaults
@@ -270,7 +277,7 @@ def trim(
             adapter_type=adapter_type,
             paired=True,
             min_length=min_length,
-            nthreads=res.get_nthreads(), # uses actual threads allocated
+            nthreads=res.get_nthreads(),  # uses actual threads allocated
             polyG=trim_config.get('polyG', True),
             polyX=trim_config.get('polyX', False),
         )

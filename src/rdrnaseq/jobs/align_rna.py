@@ -14,16 +14,18 @@ from hailtop.batch.job import Job
 from cpg_utils import Path, to_path
 from cpg_utils.config import image_path, reference_path
 from cpg_utils.hail_batch import Batch, command
-from cpg_workflows.filetypes import (
+from cpg_flow.filetypes import (
     BamPath,
     CramPath,
     FastqPair,
     FastqPairs,
 )
-from cpg_workflows.jobs.bam_to_cram import bam_to_cram
-from cpg_workflows.jobs.markdups import markdup
-from cpg_workflows.resources import HIGHMEM, STANDARD
-from cpg_workflows.utils import can_reuse
+
+
+from cpg_flow.resources import HIGHMEM, STANDARD
+from rdrnaseq.utils import can_reuse
+from rdrnaseq.jobs.bam_to_cram import bam_to_cram
+from rdrnaseq.jobs.markdups import markdup
 
 
 class STAR:
@@ -73,14 +75,23 @@ class STAR:
         # casting to str gives their container path.
         self.command_parts = [
             'STAR',
-            '--runThreadN', str(self.nthreads),
-            '--genomeDir', str(genome.genome.dirname),
-            '--outSAMtype', self.outSAMtype,
-            '--outStd', self.outStd,
-            '--outFileNamePrefix', 'Aligned.',
-            '--outSAMattrRGline', self.read_group_line,
-            '--readFilesCommand', 'zcat',
-            '--readFilesIn', str(input_fastq_pair.r1), str(input_fastq_pair.r2),
+            '--runThreadN',
+            str(self.nthreads),
+            '--genomeDir',
+            str(genome.genome.dirname),
+            '--outSAMtype',
+            self.outSAMtype,
+            '--outStd',
+            self.outStd,
+            '--outFileNamePrefix',
+            'Aligned.',
+            '--outSAMattrRGline',
+            self.read_group_line,
+            '--readFilesCommand',
+            'zcat',
+            '--readFilesIn',
+            str(input_fastq_pair.r1),
+            str(input_fastq_pair.r2),
         ]
 
     def __str__(self):
@@ -255,11 +266,11 @@ def align_fq_pair(
     b: Batch,
     fastq_pair: FastqPair,
     sample_name: str,
-    star_ref: GCPStarReference, # Received as argument
+    star_ref: GCPStarReference,  # Received as argument
     extra_label: str | None = None,
     job_attrs: dict | None = None,
     requested_nthreads: int | None = None,
-    genome_prefix: str | Path | None = None, # kept for backward compat, unused
+    genome_prefix: str | Path | None = None,  # kept for backward compat, unused
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Takes an input FastqPair object, and creates a job to align it using STAR.
@@ -286,7 +297,7 @@ def align_fq_pair(
         genome=star_ref.genome_res_group,
         nthreads=star_nthreads,
         bamout=True,
-        sort=True, # STAR will coordinate-sort
+        sort=True,  # STAR will coordinate-sort
     )
 
     # Atomic move is safer

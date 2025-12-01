@@ -20,7 +20,7 @@ classifiers=[
 ]
 
 dependencies=[
-    'cpg-flow>=v0.3.2',
+    'cpg-flow>=1.0.0',
     'hatchling',
 ]
 

@@ -2,12 +2,11 @@
 # demonstrating some of the common options used in cpg-flow
 [workflow]
 
-# TODO(you): update this to reflect the workflow's name
-name = 'workflow_name'
+
+name = 'rdrnaseq'
 
 # mandatory fields for cpg-flow, not populated by analysis-runner
-# TODO(you): update this to contain a real cohort for the given sequencing type
-input_cohorts = []
+
 sequencing_type = 'genome'
 
 # used to make sure we don't repeat previously completed stages
