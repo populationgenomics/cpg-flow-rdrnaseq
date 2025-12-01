@@ -15,8 +15,8 @@ on:
 permissions: {}
 
 env:
-  VERSION: 0.1.0
-  IMAGE_NAME: cpg-flow-rdrnaseq
+  VERSION: 0.2.0
+  IMAGE_NAME: NAME HERE
   DOCKER_DEV: australia-southeast1-docker.pkg.dev/cpg-common/images-dev
   DOCKER_MAIN: australia-southeast1-docker.pkg.dev/cpg-common/images
 
@@ -90,8 +90,6 @@ jobs:
       CLOUDSDK_CORE_DISABLE_PROMPTS: 1
     steps:
       - uses: actions/checkout@v4
-        with:
-          lfs: 'true'
 
       - id: 'google-cloud-auth'
         name: 'Authenticate to Google Cloud'
