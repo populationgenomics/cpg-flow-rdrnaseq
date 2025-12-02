@@ -2,14 +2,13 @@
 Mark duplicates in BAM files using sambamba markdup
 """
 
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
-
+from cpg_flow.filetypes import BamPath
+from cpg_flow.resources import STANDARD
+from cpg_flow.utils import Path
 from cpg_utils.config import image_path
 from cpg_utils.hail_batch import Batch, command
-from cpg_flow.resources import STANDARD
-from cpg_flow.filetypes import BamPath
-from cpg_flow.utils import Path
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
 
 
 class Markdup:

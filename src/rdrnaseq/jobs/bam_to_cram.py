@@ -2,13 +2,12 @@
 Convert BAM to CRAM.
 """
 
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
-
+from cpg_flow.resources import STANDARD
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, image_path
 from cpg_utils.hail_batch import Batch, command
-from cpg_flow.resources import STANDARD
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
 
 
 def bam_to_cram(

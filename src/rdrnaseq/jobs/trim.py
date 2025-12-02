@@ -5,22 +5,16 @@ Trim raw FASTQ reads using fastp or cutadapt
 from dataclasses import dataclass
 from enum import Enum
 
-from cpg_utils import config
-from cpg_utils.hail_batch import Batch, command
-
 from cpg_flow.filetypes import FastqPair
-from cpg_flow import stage, targets
-
-from cpg_flow.targets import SequencingGroup
 from cpg_flow.resources import STANDARD
-
-
+from cpg_flow.targets import SequencingGroup
+from cpg_utils import config
 from cpg_utils.config import image_path
-from rdrnaseq.utils import can_reuse
-
-
+from cpg_utils.hail_batch import Batch, command
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
+
+from rdrnaseq.utils import can_reuse
 
 # Default configuration constants
 DEFAULT_MIN_LENGTH = 50
@@ -216,9 +210,9 @@ def trim(
     if extra_label:
         base_job_name += f' {extra_label}'
 
-    if not config.config_retrieve(['workflow']['sequencing_type']) == 'transcriptome':
+    if config.config_retrieve('workflow')['sequencing_type'] != 'transcriptome':
         raise InvalidSequencingTypeException(
-            f"Invalid sequencing type '{config.config_retrieve(['workflow']['sequencing_type'])}'"
+            f"Invalid sequencing type '{config.config_retrieve('workflow')['sequencing_type']}'"
             f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
         )
 
@@ -257,7 +251,7 @@ def trim(
         r1=trim_j.output_r1['fastq.gz'],
         r2=trim_j.output_r2['fastq.gz'],
     )
-
+    trim_cmd: object
     # Create appropriate trimming command based on tool selection
     if trim_tool == 'cutadapt':
         trim_cmd = Cutadapt(

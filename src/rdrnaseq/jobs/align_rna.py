@@ -5,27 +5,22 @@ This module provides functions and classes to run the STAR aligner
 within a Hail Batch workflow.
 """
 
-import re
-from typing import cast
-
 import hailtop.batch as hb
-from hailtop.batch.job import Job
-
-from cpg_utils import Path, to_path
-from cpg_utils.config import image_path, reference_path
-from cpg_utils.hail_batch import Batch, command
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
     FastqPair,
     FastqPairs,
 )
-
-
 from cpg_flow.resources import HIGHMEM, STANDARD
-from rdrnaseq.utils import can_reuse
+from cpg_utils import Path, to_path
+from cpg_utils.config import image_path, reference_path
+from cpg_utils.hail_batch import Batch, command
+from hailtop.batch.job import Job
+
 from rdrnaseq.jobs.bam_to_cram import bam_to_cram
 from rdrnaseq.jobs.markdups import markdup
+from rdrnaseq.utils import can_reuse
 
 
 class STAR:
@@ -301,7 +296,7 @@ def align_fq_pair(
     )
 
     # Atomic move is safer
-    cmd = command(f'{str(star)} && mv {star.output_filename} {j.output_bam}', monitor_space=True)
+    cmd = command(f'{star!s} && mv {star.output_filename} {j.output_bam}', monitor_space=True)
     j.command(cmd)
 
     return j, j.output_bam
