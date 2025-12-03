@@ -1,2 +1,3 @@
 def test_example():
-    print(1 + 1 == 2)
+    if 1 + 1 != 2:
+        raise AssertionError("1 + 1 should equal 2")
