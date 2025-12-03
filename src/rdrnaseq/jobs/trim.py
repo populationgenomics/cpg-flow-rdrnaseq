@@ -7,7 +7,6 @@ from enum import Enum
 
 from cpg_flow.filetypes import FastqPair
 from cpg_flow.resources import STANDARD
-from cpg_flow.targets import SequencingGroup
 from cpg_utils import config
 from cpg_utils.config import image_path
 from cpg_utils.hail_batch import Batch, command
@@ -23,11 +22,11 @@ DEFAULT_NTHREADS = 8
 DEFAULT_QUALITY_TRIM = 20
 
 
-class MissingFastqInputException(Exception):
+class MissingFastqInputError(Exception):
     """Raise if alignment input is missing"""
 
 
-class InvalidSequencingTypeException(Exception):
+class InvalidSequencingTypeError(Exception):
     """Raise if alignment type is not 'rna'"""
 
 
@@ -92,13 +91,13 @@ class Cutadapt:
         paired: bool = True,
         min_length: int = 50,
         two_colour: bool = True,
-        polyA: bool = False,
+        polya: bool = False,
         quality_trim: int | None = None,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
-        except KeyError:
-            raise ValueError(f'Invalid adapter type: {adapter_type}')
+        except KeyError as e:
+            raise ValueError(f'Invalid adapter type: {adapter_type}') from e
 
         self.command = [
             'cutadapt',
@@ -122,7 +121,7 @@ class Cutadapt:
 
         if min_length:
             self.command.append(f'--minimum-length={min_length}')
-        if polyA:
+        if polya:
             self.command.append('--poly-a')
 
         self.command.append(str(input_fastq_pair.r1))
@@ -149,13 +148,14 @@ class Fastp:
         paired: bool = True,
         min_length: int = 50,
         nthreads: int = 3,
-        polyG: bool = True,
-        polyX: bool = False,
+        polyg: bool = True,
+        polyx: bool = False,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
-        except KeyError:
-            raise ValueError(f'Invalid adapter type: {adapter_type}')
+        except KeyError as e:
+            raise ValueError(f'Invalid adapter type: {adapter_type}') from e
+            # ...
 
         self.command = [
             'fastp',
@@ -173,9 +173,9 @@ class Fastp:
                     *('--adapter_sequence_r2', adapters.r2.sequence),
                 ],
             )
-        if not polyG:
+        if not polyg:
             self.command.append('--disable_trim_poly_g')
-        if polyX:
+        if polyx:
             self.command.append('--trim_poly_x')
 
     def __str__(self) -> str:
@@ -187,7 +187,6 @@ class Fastp:
 
 def trim(
     b: Batch,
-    sequencing_group: SequencingGroup,
     input_fq_pair: FastqPair,
     output_fq_pair: FastqPair | None = None,
     job_attrs: dict | None = None,
@@ -200,7 +199,7 @@ def trim(
     """
     # Validate inputs
     if not input_fq_pair.r1 or not input_fq_pair.r2:
-        raise MissingFastqInputException('Both R1 and R2 FASTQ files must be provided')
+        raise MissingFastqInputError('Both R1 and R2 FASTQ files must be provided')
 
     # Don't run if all output files exist and can be reused
     if output_fq_pair and can_reuse(output_fq_pair.r1, overwrite) and can_reuse(output_fq_pair.r2, overwrite):
@@ -211,7 +210,7 @@ def trim(
         base_job_name += f' {extra_label}'
 
     if config.config_retrieve('workflow')['sequencing_type'] != 'transcriptome':
-        raise InvalidSequencingTypeException(
+        raise InvalidSequencingTypeError(
             f"Invalid sequencing type '{config.config_retrieve('workflow')['sequencing_type']}'"
             f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
         )
@@ -245,8 +244,12 @@ def trim(
 
     trim_j.declare_resource_group(output_r1={'fastq.gz': '{root}.fastq.gz'})
     trim_j.declare_resource_group(output_r2={'fastq.gz': '{root}.fastq.gz'})
-    assert isinstance(trim_j.output_r1, ResourceGroup)
-    assert isinstance(trim_j.output_r2, ResourceGroup)
+    if not isinstance(trim_j.output_r1, ResourceGroup):
+        raise AssertionError(f"Expected trim_j.output_r1 to be a ResourceGroup, "
+                             f"but got {type(trim_j.output_r1).__name__}")
+    if not isinstance(trim_j.output_r2, ResourceGroup):
+        raise AssertionError(f"Expected trim_j.output_r2 to be a ResourceGroup, "
+                             f"but got {type(trim_j.output_r2).__name__}")
     out_fqs = FastqPair(
         r1=trim_j.output_r1['fastq.gz'],
         r2=trim_j.output_r2['fastq.gz'],
@@ -262,7 +265,7 @@ def trim(
             min_length=min_length,
             quality_trim=quality_trim,
             two_colour=trim_config.get('two_colour', True),
-            polyA=trim_config.get('polyA', False),
+            polya=trim_config.get('polyA', False),
         )
     else:  # Default to fastp
         trim_cmd = Fastp(
@@ -272,8 +275,8 @@ def trim(
             paired=True,
             min_length=min_length,
             nthreads=res.get_nthreads(),  # uses actual threads allocated
-            polyG=trim_config.get('polyG', True),
-            polyX=trim_config.get('polyX', False),
+            polyg=trim_config.get('polyG', True),
+            polyx=trim_config.get('polyX', False),
         )
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 

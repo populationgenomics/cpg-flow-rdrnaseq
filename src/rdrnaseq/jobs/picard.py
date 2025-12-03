@@ -48,7 +48,8 @@ def get_intervals(
     handle that, but Hail Batch is not dynamic and expects a certain number
     of output files.
     """
-    assert scatter_count > 0, scatter_count
+    if not (scatter_count > 0):
+        raise ValueError(f'scatter_count must be > 0, but got {scatter_count}')
     sequencing_type = get_config()['workflow']['sequencing_type']
     source_intervals_path = str(
         source_intervals_path or reference_path(f'broad/{sequencing_type}_calling_interval_lists'),
@@ -120,7 +121,8 @@ def get_intervals(
     intervals: list[hb.ResourceFile] = []
     for idx in range(scatter_count):
         interval = j[f'{idx + 1}.interval_list']
-        assert isinstance(interval, hb.ResourceFile)
+        if not isinstance(interval, hb.ResourceFile):
+            raise TypeError('Interval must be an instance of hb.ResourceFile.')
         intervals.append(interval)
     return j, intervals
 
@@ -148,14 +150,15 @@ def markdup(
     # check for a memory override for impossible sequencing groups
     # if RAM is overridden, update the memory resource setting
     memory_override = get_config()['resource_overrides'].get('picard_mem_gb')
-    assert isinstance(memory_override, int | type(None))
+    if not isinstance(memory_override, int | type(None)):
+        raise TypeError('picard_mem_gb must be an integer or None.')
 
     resource = HIGHMEM.request_resources(ncpu=4, mem_gb=memory_override)
 
     # check for a storage override for unreasonably large sequencing groups
     if (storage_override := get_config()['resource_overrides'].get('picard_storage_gb')) is not None:
-        assert isinstance(storage_override, int)
-        resource.attach_disk_storage_gb = storage_override
+        if not isinstance(storage_override, int):
+            raise TypeError('picard_storage_gb must be an integer.')
     else:
         # enough for input BAM and output CRAM
         resource.attach_disk_storage_gb = 250
@@ -172,7 +175,9 @@ def markdup(
     if fasta_reference is None:
         fasta_reference = fasta_res_group(b)
 
-    assert isinstance(j.output_cram, hb.ResourceGroup)
+    if not isinstance(j.output_cram, hb.ResourceGroup):
+        raise TypeError('Job output_cram must be an instance of hb.ResourceGroup.')
+
     cmd = f"""
     picard {resource.java_mem_options()} MarkDuplicates \\
     I={sorted_bam} O={j.temp_bam} M={j.markdup_metrics} \\
@@ -293,7 +298,8 @@ def picard_collect_metrics(
     # define variable for whether picard output is sorted or not
     sorted_output = get_config()['cramqc']['assume_sorted']
 
-    assert cram_path.index_path
+    if not cram_path.index_path:
+        raise RuntimeError('CRAM path must have an index path defined for this operation.')
     cmd = f"""\
     CRAM=$BATCH_TMPDIR/{cram_path.path.name}
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}
@@ -356,14 +362,16 @@ def picard_hs_metrics(
     j = b.new_job('Picard CollectHsMetrics', job_attrs)
     j.image(image_path('picard'))
     sequencing_type = get_config()['workflow']['sequencing_type']
-    assert sequencing_type == 'exome'
+    if sequencing_type != 'exome':
+        raise ValueError(f'Expected sequencing type "exome", got "{sequencing_type}"')
     res = STANDARD.request_resources(ncpu=2)
     res.attach_disk_storage_gb = storage_for_cram_qc_job()
     res.set_to_job(j)
     reference = fasta_res_group(b)
     interval_file = b.read_input(reference_path('broad/exome_evaluation_interval_lists'))
 
-    assert cram_path.index_path
+    if not cram_path.index_path:
+        raise ValueError('cram_path must have an index_path defined.')
     cmd = f"""\
     CRAM=$BATCH_TMPDIR/{cram_path.path.name}
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}
@@ -423,14 +431,16 @@ def picard_wgs_metrics(
 
     j.image(image_path('picard'))
     sequencing_type = get_config()['workflow']['sequencing_type']
-    assert sequencing_type == 'genome'
+    if sequencing_type != 'genome':
+        raise ValueError(f'Expected sequencing type "genome", got "{sequencing_type}"')
     res = STANDARD.request_resources(ncpu=2)
     res.attach_disk_storage_gb = storage_for_cram_qc_job()
     res.set_to_job(j)
     reference = fasta_res_group(b)
     interval_file = b.read_input(reference_path('broad/genome_coverage_interval_list'))
 
-    assert cram_path.index_path
+    if not cram_path.index_path:
+        raise ValueError('cram_path must have an index_path defined.')
     cmd = f"""\
     CRAM=$BATCH_TMPDIR/{cram_path.path.name}
     CRAI=$BATCH_TMPDIR/{cram_path.index_path.name}

@@ -265,7 +265,7 @@ def align_fq_pair(
     extra_label: str | None = None,
     job_attrs: dict | None = None,
     requested_nthreads: int | None = None,
-    genome_prefix: str | Path | None = None,  # kept for backward compat, unused
+    genome_prefix: str | Path | None = None,  # kept for backward compat, unused #noqa:ARG001
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Takes an input FastqPair object, and creates a job to align it using STAR.

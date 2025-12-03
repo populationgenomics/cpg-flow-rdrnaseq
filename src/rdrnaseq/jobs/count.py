@@ -159,7 +159,8 @@ def count(
     else:
         raise ValueError(f'Invalid alignment input: "{input_cram_or_bam!s}", expected BAM or CRAM file.')
 
-    assert isinstance(input_bam_reads, hb.ResourceGroup)
+    if not isinstance(input_bam_reads, hb.ResourceGroup):
+        raise TypeError(f'Expected input_bam_reads to be a ResourceGroup, but got {type(input_bam_reads).__name__}')
 
     counting_reference = count_res_group(b)
 

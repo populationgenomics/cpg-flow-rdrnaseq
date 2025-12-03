@@ -36,7 +36,8 @@ class Fraser:
         min_count: int = 5,
     ) -> None:
         self.fds_tar = fds_tar
-        assert isinstance(self.fds_tar, hb.ResourceFile), f'fds_tar must be a resource file, instead got {self.fds_tar}'
+        if not isinstance(self.fds_tar, hb.ResourceFile):
+            raise TypeError(f'fds_tar must be a resource file, instead got {self.fds_tar}')
         self.cohort_name = cohort_name
         self.output = output
         self.nthreads = nthreads
@@ -114,7 +115,8 @@ class Fraser:
 
         # Plot sample correlation
         for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
+            png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"),
+            width = 4000, height = 4000, res = 600)
             print(plotCountCorHeatmap(fds_filtered, type = psi_type, logit = TRUE, normalized = FALSE))
             dev.off()
         }
@@ -138,7 +140,8 @@ class Fraser:
 
         # Plot sample correlation post-correction
         for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
+            png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"),
+            width = 4000, height = 4000, res = 600)
             print(plotCountCorHeatmap(fds_filtered_fit, type = psi_type, logit = TRUE, normalized = TRUE))
             dev.off()
         }
@@ -149,12 +152,14 @@ class Fraser:
         fds_filtered_fit <- annotateRangesWithTxDb(fds_filtered_fit, txdb = txdb, orgDb = orgDb)
 
         # Get results
-        res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff, zScoreCutoff = z_cutoff, minCount = min_count)
+        res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff,
+        zScoreCutoff = z_cutoff, minCount = min_count)
         res_all <- results(fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
         write_csv(
             data.frame(res),
             file = paste0(
-                "results/results.significant.p_", pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
+                "results/results.significant.p_",
+                pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
             )
         )
         write_csv(data.frame(res_all), file = "results/results.all.csv")
@@ -177,11 +182,16 @@ class Fraser:
         EOF
         """
         # Tar up outputs
-        self.command += f"""\
+        self.command += f"""
         tar -czvf {self.output['heatmaps.tar.gz']} -C plots/heatmaps .
         tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
         tar -czvf {self.output['misc_plots.tar.gz']} -C plots/misc .
-        cp results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.min_count_{self.min_count}.csv {self.output['results.csv']}
+
+        # Copy significant results file
+        cp results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.\
+        min_count_{self.min_count}.csv {self.output['results.csv']}
+
+        # Copy all results and tar saved objects
         cp results/results.all.csv {self.output['results.all.csv']}
         tar -czvf {self.output['fds.tar.gz']} savedObjects/
         """
@@ -236,7 +246,9 @@ def fraser(
             sample_id = input_bam_or_cram.path.name.replace('.bam', '')
             # Localise BAM
             input_bams_localised[sample_id] = input_bam_or_cram.resource_group(b).bam
-    assert all(isinstance(f, hb.ResourceFile) for f in list(input_bams_localised.values()))
+    # Use a generator to find the first element that is NOT a ResourceFile
+    if any(not isinstance(f, hb.ResourceFile) for f in input_bams_localised.values()):
+        raise TypeError('All elements in input_bams_localised must be instances of hb.ResourceFile.')
 
     # Create FRASER job
     job_name = f'fraser_{cohort_id}' if cohort_id else 'fraser'

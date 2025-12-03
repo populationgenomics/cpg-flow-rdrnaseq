@@ -22,7 +22,8 @@ def bam_to_cram(
     Convert a BAM file to a CRAM file.
     """
 
-    assert isinstance(input_bam, ResourceGroup)
+    if not isinstance(input_bam, ResourceGroup):
+        raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
 
     job_name = 'bam_to_cram'
     if extra_label:
@@ -54,7 +55,9 @@ def bam_to_cram(
         },
     )
 
-    cmd = f'samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} | tee {j.sorted_cram["cram"]} | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram["cram.crai"]}'
+    cmd = f'samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} \
+        | tee {j.sorted_cram["cram"]} \
+        | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram["cram.crai"]}'
     j.command(command(cmd, monitor_space=True))
 
     return j, j.sorted_cram
@@ -72,7 +75,8 @@ def cram_to_bam(
     Convert a CRAM file to a BAM file.
     """
 
-    assert isinstance(input_cram, ResourceGroup)
+    if not isinstance(input_cram, ResourceGroup):
+        raise TypeError(f'Expected input_cram to be a ResourceGroup, but got {type(input_cram).__name__}')
 
     job_name = 'cram_to_bam'
     if extra_label:
@@ -98,7 +102,9 @@ def cram_to_bam(
         },
     )
 
-    cmd = f'samtools view -@ {res.get_nthreads() - 1} -b {input_cram.cram} | tee {j.sorted_bam["bam"]} | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_bam["bam.bai"]}'
+    cmd = f'samtools view -@ {res.get_nthreads() - 1} -b {input_cram.cram} \
+        | tee {j.sorted_bam["bam"]} \
+        | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_bam["bam.bai"]}'
     j.command(command(cmd, monitor_space=True))
 
     # Write BAM if requested

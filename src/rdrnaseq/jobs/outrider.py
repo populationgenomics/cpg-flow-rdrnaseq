@@ -29,10 +29,10 @@ class Outrider:
         z_cutoff: float = 0.0,
     ) -> None:
         self.input_counts = input_counts
-        assert isinstance(
-            self.input_counts,
-            list,
-        ), f'input_counts must be a list, instead got {type(self.input_counts)}: {self.input_counts}'
+        if not isinstance(self.input_counts, list):
+            raise TypeError(
+                f'input_counts must be a list, instead got {type(self.input_counts).__name__}: {self.input_counts}'
+            )
         self.input_counts_r_str = ', '.join([f'"{f!s}"' for f in self.input_counts])
         self.gtf_file_path = str(gtf_file)
         self.output = output
@@ -153,7 +153,8 @@ class Outrider:
 
         # Use the autoencoder method to control for confounders
         n_iter <- 15
-        ods <- controlForConfounders(ods, q = optimal_q, iterations = n_iter, BPPARAM=MulticoreParam(workers = n_parallel_workers))
+        ods <- controlForConfounders(ods, q = optimal_q, iterations = n_iter,
+        BPPARAM=MulticoreParam(workers = n_parallel_workers))
 
         # Plotting - normalized heatmaps
         png(file = "plots/heatmaps/sample_cor_heatmap_normalized.png", width = 4000, height = 4000, res = 600)
@@ -183,7 +184,8 @@ class Outrider:
         ods_controlled <- ods
 
         # p-value calculation
-        ods <- computePvalues(ods, alternative = "two.sided", method="BY", BPPARAM=MulticoreParam(workers = n_parallel_workers))
+        ods <- computePvalues(ods, alternative = "two.sided", method="BY",
+        BPPARAM=MulticoreParam(workers = n_parallel_workers))
 
         # Z-score calculation
         ods <- computeZscores(ods)
@@ -229,7 +231,8 @@ class Outrider:
         # Gene-level plots
         sig_genes <- unique(res\\$geneID)
         for (sig_gene in sig_genes) {
-            png(file = paste0("plots/sig_genes/expression_rank.", sig_gene, ".png"), width = 4000, height = 4000, res = 600)
+            png(file = paste0("plots/sig_genes/expression_rank.", sig_gene, ".png"),
+            width = 4000, height = 4000, res = 600)
             p <- plotExpressionRank(ods, sig_gene, basePlot = TRUE)
             print(p)
             dev.off()
@@ -237,7 +240,8 @@ class Outrider:
             p <- plotQQ(ods, sig_gene)
             print(p)
             dev.off()
-            png(file = paste0("plots/sig_genes/expected_vs_observed_counts.", sig_gene, ".png"), width = 4000, height = 4000, res = 600)
+            png(file = paste0("plots/sig_genes/expected_vs_observed_counts.", sig_gene, ".png"),
+             width = 4000, height = 4000, res = 600)
             p <- plotExpectedVsObservedCounts(ods, sig_gene, basePlot = TRUE)
             print(p)
             dev.off()
@@ -302,7 +306,8 @@ def outrider(
         return None
 
     # Localise input files
-    assert all(isinstance(f, str | Path) for f in input_counts)
+    if not all(isinstance(f, str | Path) for f in input_counts):
+        raise TypeError('All input counts must be of type str or Path.')
     infiles = {basename(str(f)).replace('.count', ''): str(f) for f in input_counts}
     infiles_rg = b.read_input_group(**infiles)
     infiles_localised = [str(infiles_rg[key]) for key in infiles]

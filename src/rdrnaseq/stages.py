@@ -1,3 +1,22 @@
+import logging
+import re
+from dataclasses import dataclass
+from os.path import basename
+
+from cpg_flow import stage, targets
+from cpg_flow.filetypes import (
+    BamPath,
+    CramPath,
+    FastqPair,
+    FastqPairs,
+)
+from cpg_utils import Path
+from cpg_utils.config import get_config
+from cpg_utils.hail_batch import get_batch
+from hailtop.batch.job import Job
+
+from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
+
 """
 This file exists to define all the Stages for the workflow.
 The logic for each stage can be contained here (if it is not too complex),
@@ -19,31 +38,9 @@ Each Stage should be a Class, and should inherit from one of
   - CohortStage
   - MultiCohortStage
 """
-
-import logging
-import re
-from dataclasses import dataclass
-from os.path import basename
-
-from cpg_flow import stage, targets
-from cpg_flow.filetypes import (
-    BamPath,
-    CramPath,
-    FastqPair,
-    FastqPairs,
-)
-from cpg_utils import Path
-from hailtop.batch.job import Job
-
 """
 Align RNA-seq reads to the genome using STAR.
 """
-
-from cpg_utils.config import get_config
-from cpg_utils.hail_batch import get_batch
-
-from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
-
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
     """
@@ -100,7 +97,7 @@ def get_input_output_pairs(sequencing_group: targets.SequencingGroup) -> list[In
     return input_output_pairs
 
 
-@stage
+@stage.stage()
 class TrimAlignRNA(stage.SequencingGroupStage):
     """
     Trim and align RNA-seq FASTQ reads with fastp and STAR
@@ -135,7 +132,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         return expected_outs
 
     def queue_jobs(
-        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
+        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput #noqa:ARG002
     ) -> stage.StageOutput | None:
         """
         Queue a job to align the input FASTQ files to the genome using STAR
@@ -198,7 +195,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 jobs.extend(align_jobs)
         except Exception as e:
             logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
-            raise Exception(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
+            raise RuntimeError(f'Error aligning RNA-seq reads for {sequencing_group}') from e
 
         # Create outputs and return jobs
         return self.make_outputs(sequencing_group, data=aligned_cram_dict, jobs=jobs)
@@ -209,7 +206,7 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 
-@stage(
+@stage.stage(
     required_stages=[TrimAlignRNA],
 )
 class Count(stage.SequencingGroupStage):
@@ -264,7 +261,7 @@ class Count(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=self.expected_outputs(sequencing_group), jobs=jobs)
 
 
-@stage(
+@stage.stage(
     required_stages=TrimAlignRNA,
 )
 class Fraser(stage.CohortStage):
@@ -317,7 +314,7 @@ class Fraser(stage.CohortStage):
         return self.make_outputs(cohort, data=self.expected_outputs(cohort), jobs=j)
 
 
-@stage(required_stages=Count)
+@stage.stage(required_stages=Count)
 class Outrider(stage.CohortStage):
     """
     Perform outlier gene expression analysis with Outrider.

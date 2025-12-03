@@ -1,7 +1,6 @@
 """
 Mark duplicates in BAM files using sambamba markdup
 """
-
 from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import Path
@@ -44,7 +43,8 @@ def markdup(
     Takes an input BAM file and creates a job to mark duplicates with sambamba markdup.
     """
 
-    assert isinstance(input_bam, ResourceGroup)
+    if not isinstance(input_bam, ResourceGroup):
+        raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
 
     base_job_name = 'sambamba_markdup'
     if extra_label:
@@ -67,7 +67,8 @@ def markdup(
             'bam.bai': '{root}.bam.bai',
         },
     )
-    assert isinstance(j.output_bam, ResourceGroup)
+    if not isinstance(j.output_bam, ResourceGroup):
+        raise TypeError(f'Expected j.output_bam to be a ResourceGroup, but got {type(j.output_bam).__name__}')
 
     cmd = Markdup(
         input_bam=input_bam.bam,
