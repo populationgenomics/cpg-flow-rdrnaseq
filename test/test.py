@@ -1,3 +1,13 @@
-def test_example():
-    if 1 + 1 != 2:
-        raise AssertionError('1 + 1 should equal 2 not 3')
+"""
+add relevant tests to this directory
+"""
+
+import pytest
+
+
+def test_something():
+    """
+    add a test here
+    """
+    with pytest.raises(ZeroDivisionError):
+        _ = 1 / 0
