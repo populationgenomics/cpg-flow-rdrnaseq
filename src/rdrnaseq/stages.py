@@ -42,6 +42,7 @@ Each Stage should be a Class, and should inherit from one of
 Align RNA-seq reads to the genome using STAR.
 """
 
+
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
     """
     Get the input FASTQ file pairs for trimming
@@ -132,7 +133,9 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         return expected_outs
 
     def queue_jobs(
-        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput #noqa:ARG002
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,  # noqa:ARG002
     ) -> stage.StageOutput | None:
         """
         Queue a job to align the input FASTQ files to the genome using STAR

@@ -187,6 +187,7 @@ class Fastp:
 
 def trim(
     b: Batch,
+    sequencing_group: str,  # currently unused, but may be useful for future extensions #noqa:ARG001
     input_fq_pair: FastqPair,
     output_fq_pair: FastqPair | None = None,
     job_attrs: dict | None = None,
@@ -245,11 +246,13 @@ def trim(
     trim_j.declare_resource_group(output_r1={'fastq.gz': '{root}.fastq.gz'})
     trim_j.declare_resource_group(output_r2={'fastq.gz': '{root}.fastq.gz'})
     if not isinstance(trim_j.output_r1, ResourceGroup):
-        raise AssertionError(f"Expected trim_j.output_r1 to be a ResourceGroup, "
-                             f"but got {type(trim_j.output_r1).__name__}")
+        raise AssertionError(
+            f'Expected trim_j.output_r1 to be a ResourceGroup, but got {type(trim_j.output_r1).__name__}'
+        )
     if not isinstance(trim_j.output_r2, ResourceGroup):
-        raise AssertionError(f"Expected trim_j.output_r2 to be a ResourceGroup, "
-                             f"but got {type(trim_j.output_r2).__name__}")
+        raise AssertionError(
+            f'Expected trim_j.output_r2 to be a ResourceGroup, but got {type(trim_j.output_r2).__name__}'
+        )
     out_fqs = FastqPair(
         r1=trim_j.output_r1['fastq.gz'],
         r2=trim_j.output_r2['fastq.gz'],

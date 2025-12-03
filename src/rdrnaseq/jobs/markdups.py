@@ -1,6 +1,7 @@
 """
 Mark duplicates in BAM files using sambamba markdup
 """
+
 from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import Path
