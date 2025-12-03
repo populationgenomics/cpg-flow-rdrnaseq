@@ -20,8 +20,7 @@ classifiers=[
 ]
 
 dependencies=[
-    'cpg-flow>=1.0.0',
-    'hatchling',
+    'cpg-flow~=1.1.1',
 ]
 
 [project.urls]
@@ -114,6 +113,6 @@ search = "{current_version}"
 replace = "{new_version}"
 
 [[tool.bumpversion.files]]
-filename = ".github/workflows/docker.yaml"
-search = "VERSION: {current_version}"
-replace = "VERSION: {new_version}"
+filename = "Dockerfile"
+search = "{current_version}"
+replace = "{new_version}"
