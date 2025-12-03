@@ -164,7 +164,7 @@ def count(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,  # TODO: make configurable
     )

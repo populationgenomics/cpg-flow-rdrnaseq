@@ -272,7 +272,7 @@ def align_fq_pair(
     nthreads = requested_nthreads or 8
     # Optimize storage: 200GB is generous.
     # If possible, could check fastq size, but keeping safe default.
-    res = HIGHMEM.set_resources(j, ncpu=nthreads, storage_gb=200)
+    res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=200)
 
     # Use resources N-1 for STAR, leaving 1 for system overhead/zcat
     star_nthreads = max(1, res.get_nthreads() - 1)
@@ -313,7 +313,7 @@ def merge_bams(
     j.image(image_path('samtools'))
 
     nthreads = requested_nthreads or 8
-    res = STANDARD.set_resources(j, ncpu=nthreads, storage_gb=50)
+    res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     # Samtools merge preserves input sort order.
     # Added -c -p usually helps with large merges to combine headers and comments properly.
@@ -344,7 +344,7 @@ def sort_index_bam(
     j.image(image_path('samtools'))
 
     nthreads = requested_nthreads or 8
-    res = STANDARD.set_resources(j, ncpu=nthreads, storage_gb=50)
+    res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     j.declare_resource_group(
         sorted_bam={

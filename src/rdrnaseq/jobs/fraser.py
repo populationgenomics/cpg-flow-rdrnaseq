@@ -249,7 +249,7 @@ def fraser(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )
@@ -408,7 +408,7 @@ def fraser_init(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )
@@ -485,7 +485,7 @@ def fraser_count_split_reads_one_sample(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )
@@ -551,7 +551,7 @@ def fraser_merge_split_reads(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )
@@ -657,7 +657,7 @@ def fraser_count_non_split_reads_one_sample(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )
@@ -732,7 +732,7 @@ def fraser_merge_non_split_reads(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,
     )

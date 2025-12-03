@@ -321,7 +321,7 @@ def outrider(
 
     # Set resource requirements
     nthreads = requested_nthreads or 8
-    res = STANDARD.set_resources(j, ncpu=nthreads, storage_gb=50)
+    res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     j.declare_resource_group(
         output={

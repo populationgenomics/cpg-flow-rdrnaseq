@@ -44,7 +44,7 @@ def bam_to_cram(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=config_retrieve(['resource_overrides', 'bam_to_cram', 'storage_gb'], 50),
     )
@@ -91,7 +91,7 @@ def cram_to_bam(
     # Set resource requirements
     nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
-        j,
+        j=j,
         ncpu=nthreads,
         storage_gb=50,  # TODO: make configurable
     )

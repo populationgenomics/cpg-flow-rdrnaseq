@@ -171,7 +171,7 @@ def trim(
     # Set resource requirements with configurable values
     nthreads = requested_nthreads or trim_config.get('nthreads', DEFAULT_NTHREADS)
     res = STANDARD.set_resources(
-        trim_j,
+        j=trim_j,
         ncpu=nthreads,
         storage_gb=storage_gb,
     )

@@ -74,7 +74,7 @@ def get_intervals(
         attributes=(job_attrs or {}) | {'tool': 'picard IntervalListTools'},
     )
     j.image(image_path('picard'))
-    STANDARD.set_resources(j, storage_gb=16, mem_gb=2)
+    STANDARD.set_resources(j=j, storage_gb=16, mem_gb=2)
 
     break_bands_at_multiples_of = {
         'genome': 100000,
@@ -227,7 +227,7 @@ def vcf_qc(
     j = b.new_job('CollectVariantCallingMetrics', job_attrs)
     j.image(image_path('picard'))
     storage_gb = 20 if is_gvcf else storage_for_joint_vcf(sequencing_group_count, site_only=False)
-    res = STANDARD.set_resources(j, storage_gb=storage_gb, mem_gb=3)
+    res = STANDARD.set_resources(j=j, storage_gb=storage_gb, mem_gb=3)
     reference = fasta_res_group(b)
     dbsnp_vcf = b.read_input_group(
         base=reference_path('broad/dbsnp_vcf'),
