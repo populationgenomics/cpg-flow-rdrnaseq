@@ -53,7 +53,7 @@ def markdup(
     tool = 'sambamba'
 
     j_name = base_job_name
-    j_attrs = (job_attrs or {}) | dict(label=base_job_name, tool=tool)
+    j_attrs = (job_attrs or {}) | {'label': base_job_name, 'tool': tool}
     j = b.new_job(j_name, j_attrs)
     j.image(image_path('sambamba'))
 

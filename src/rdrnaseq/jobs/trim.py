@@ -229,7 +229,7 @@ def trim(
     trim_tool = trim_config.get('tool', 'fastp')
 
     trim_j_name = base_job_name
-    trim_j_attrs = (job_attrs or {}) | dict(label=base_job_name, tool=trim_tool)
+    trim_j_attrs = (job_attrs or {}) | {'label': base_job_name, 'tool': trim_tool}
     trim_j = b.new_job(trim_j_name, trim_j_attrs)
     trim_j.image(image_path(trim_tool))
 

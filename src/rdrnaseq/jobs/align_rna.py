@@ -274,7 +274,7 @@ def align_fq_pair(
     if extra_label:
         job_name += f' {extra_label}'
 
-    j_attrs = (job_attrs or {}) | dict(label=job_name, tool='STAR')
+    j_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'STAR'}
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('star'))
 
@@ -316,7 +316,7 @@ def merge_bams(
     if extra_label:
         job_name += f' {extra_label}'
 
-    j_attrs = (job_attrs or {}) | dict(label=job_name, tool='samtools')
+    j_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'samtools'}
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 
@@ -346,7 +346,7 @@ def sort_index_bam(
     if extra_label:
         job_name += f' {extra_label}'
 
-    j_attrs = (job_attrs or {}) | dict(label=job_name, tool='samtools')
+    j_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'samtools'}
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 

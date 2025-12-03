@@ -70,7 +70,7 @@ def get_intervals(
 
     j = b.new_job(
         f'Make {scatter_count} intervals for {sequencing_type}',
-        attributes=(job_attrs or {}) | dict(tool='picard IntervalListTools'),
+        attributes=(job_attrs or {}) | {'tool': 'picard IntervalListTools'},
     )
     j.image(image_path('picard'))
     STANDARD.set_resources(j, storage_gb=16, mem_gb=2)
@@ -137,7 +137,7 @@ def markdup(
     """
     Make job that runs Picard MarkDuplicates and converts the result to CRAM.
     """
-    job_attrs = (job_attrs or {}) | dict(tool='picard_MarkDuplicates')
+    job_attrs = (job_attrs or {}) | {'tool': 'picard_MarkDuplicates'}
     job_name = 'MarkDuplicates' + (' mito' if 'mito' in str(output_path) else '')
     j = b.new_job(job_name, job_attrs)
     if can_reuse(output_path, overwrite):
@@ -231,10 +231,7 @@ def vcf_qc(
     sequencing_type = get_config()['workflow']['sequencing_type']
     intervals_file = b.read_input(reference_path(f'broad/{sequencing_type}_evaluation_interval_lists'))
 
-    if is_gvcf:
-        input_file = vcf_or_gvcf['g.vcf.gz']
-    else:
-        input_file = vcf_or_gvcf['vcf.gz']
+    input_file = vcf_or_gvcf['g.vcf.gz'] if is_gvcf else vcf_or_gvcf['vcf.gz']
 
     cmd = f"""\
     picard {res.java_mem_options()} \

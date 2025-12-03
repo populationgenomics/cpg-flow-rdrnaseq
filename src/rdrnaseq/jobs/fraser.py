@@ -240,7 +240,7 @@ def fraser(
 
     # Create FRASER job
     job_name = f'fraser_{cohort_id}' if cohort_id else 'fraser'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 
@@ -406,7 +406,7 @@ def fraser_init(
     """
     # Create FRASER job
     job_name = 'fraser_init'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 
@@ -484,7 +484,7 @@ def fraser_count_split_reads_one_sample(
 
     # Create FRASER job
     job_name = 'fraser_count_split'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 
@@ -551,7 +551,7 @@ def fraser_merge_split_reads(
     """
     # Create FRASER job
     job_name = 'fraser_merge_split'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 
@@ -658,7 +658,7 @@ def fraser_count_non_split_reads_one_sample(
 
     # Create FRASER job
     job_name = 'fraser_count_non_split'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 
@@ -733,7 +733,7 @@ def fraser_merge_non_split_reads(
     """
     # Create FRASER job
     job_name = 'fraser_merge_non_split'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='fraser')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'fraser'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('fraser'))
 

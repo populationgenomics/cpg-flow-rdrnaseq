@@ -316,7 +316,7 @@ def outrider(
 
     # Create job
     job_name = f'outrider_{cohort_id}' if cohort_id else 'count'
-    _job_attrs = (job_attrs or {}) | dict(label=job_name, tool='outrider')
+    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'outrider'}
     j = b.new_job(job_name, _job_attrs)
     j.image(image_path('outrider'))
 
