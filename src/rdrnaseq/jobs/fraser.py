@@ -339,7 +339,7 @@ def fraser_count(
             fds=fds,
             sample_id=sample_id,
             bam=input_bams_localised[sample_id],
-            cohort_name=cohort_id,
+            cohort_id=cohort_id,
             output_counts_path=output_counts_path,
             job_attrs=job_attrs,
             requested_nthreads=requested_nthreads,
@@ -350,7 +350,7 @@ def fraser_count(
 
     j, split_counts_rg = fraser_merge_split_reads(
         fds=fds,
-        cohort_name=cohort_id,
+        cohort_id=cohort_id,
         split_counts_dict=split_counts_dict,
         bams=list(input_bams_localised.values()),
         job_attrs=job_attrs,
@@ -464,7 +464,7 @@ def fraser_count_split_reads_one_sample(
     fds: hb.ResourceFile,
     sample_id: str,
     bam: hb.ResourceFile,
-    cohort_name: str,
+    cohort_id: str,
     output_counts_path: Path,
     job_attrs: dict[str, str],
     requested_nthreads: int | None = None,
@@ -493,15 +493,15 @@ def fraser_count_split_reads_one_sample(
     cmd = dedent(
         f"""\
         # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_name}
-        ln -s {fds} output/savedObjects/{cohort_name}/fds-object.RDS
+        mkdir -p output/savedObjects/{cohort_id}
+        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
         # ls BAM file to ensure it is localised
         ls {bam}
 
         R --vanilla <<EOF
         library(FRASER)
 
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
+        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
         n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
@@ -533,7 +533,7 @@ def fraser_count_split_reads_one_sample(
 
 def fraser_merge_split_reads(
     fds: hb.ResourceFile,
-    cohort_name: str,
+    cohort_id: str,
     split_counts_dict: dict[str, hb.ResourceFile],
     bams: list[hb.ResourceFile],
     job_attrs: dict[str, str],
@@ -567,9 +567,9 @@ def fraser_merge_split_reads(
 
     # Create resource group for outputs
     split_counts_rg = {
-        'raw_counts_j_h5': f'output/savedObjects/{cohort_name}/rawCountsJ.h5',
-        'split_counts_assays': f'output/savedObjects/{cohort_name}/splitCounts/assays.h5',
-        'split_counts_se': f'output/savedObjects/{cohort_name}/splitCounts/se.rds',
+        'raw_counts_j_h5': f'output/savedObjects/{cohort_id}/rawCountsJ.h5',
+        'split_counts_assays': f'output/savedObjects/{cohort_id}/splitCounts/assays.h5',
+        'split_counts_se': f'output/savedObjects/{cohort_id}/splitCounts/se.rds',
         'g_ranges_split_counts': 'rds/g_ranges_split_counts.RDS',
         'g_ranges_non_split_counts': 'rds/g_ranges_non_split_counts.RDS',
         'splice_site_coords': 'rds/splice_site_coords.RDS',
@@ -585,8 +585,8 @@ def fraser_merge_split_reads(
     cmd = dedent(
         f"""\
         # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_name}
-        ln -s {fds} output/savedObjects/{cohort_name}/fds-object.RDS
+        mkdir -p output/savedObjects/{cohort_id}
+        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
         # Symlink split counts
         {link_counts_cmd}
         # ls BAM files to ensure they are localised
@@ -596,7 +596,7 @@ def fraser_merge_split_reads(
 
         R --vanilla <<EOF
         library(FRASER)
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_name}")
+        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
         n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
