@@ -1,5 +1,5 @@
 """
-Trim raw FASTQ reads using fastp or cutadapt
+Trim raw FASTQ reads using fastp
 """
 
 from dataclasses import dataclass
@@ -18,7 +18,6 @@ from hailtop.batch.job import Job
 DEFAULT_MIN_LENGTH = 50
 DEFAULT_STORAGE_GB = 50
 DEFAULT_NTHREADS = 8
-DEFAULT_QUALITY_TRIM = 20
 
 
 class MissingFastqInputError(Exception):
@@ -75,63 +74,6 @@ class AdapterPairs(Enum):
             name='Nextera Adapter Index 2',
         ),
     )
-
-
-class Cutadapt:
-    """
-    Construct a cutadapt command for trimming FASTQs.
-    """
-
-    def __init__(
-        self,
-        input_fastq_pair: FastqPair,
-        output_fastq_pair: FastqPair,
-        adapter_type: str,
-        paired: bool = True,
-        min_length: int = 50,
-        two_colour: bool = True,
-        polya: bool = False,
-        quality_trim: int | None = None,
-    ):
-        try:
-            adapters: AdapterPair = AdapterPairs[adapter_type].value
-        except KeyError as e:
-            raise ValueError(f'Invalid adapter type: {adapter_type}') from e
-
-        self.command = [
-            'cutadapt',
-            *('-o', str(output_fastq_pair.r1)),
-            *('-a', adapters.r1.sequence),
-        ]
-        if paired:
-            self.command.extend(
-                [
-                    *('-p', str(output_fastq_pair.r2)),
-                    *('-A', adapters.r2.sequence),
-                ],
-            )
-
-        # FIX: Check for None to allow 0 as a valid value
-        if quality_trim is not None:
-            if two_colour:
-                self.command.append(f'--nextseq-trim={quality_trim}')
-            else:
-                self.command.append(f'-q {quality_trim}')
-
-        if min_length:
-            self.command.append(f'--minimum-length={min_length}')
-        if polya:
-            self.command.append('--poly-a')
-
-        self.command.append(str(input_fastq_pair.r1))
-        if paired:
-            self.command.append(str(input_fastq_pair.r2))
-
-    def __str__(self) -> str:
-        return ' '.join(self.command)
-
-    def __repr__(self) -> str:
-        return str(self)
 
 
 class Fastp:
@@ -223,9 +165,8 @@ def trim(
 
     min_length = trim_config.get('min_length', DEFAULT_MIN_LENGTH)
     storage_gb = trim_config.get('storage_gb', DEFAULT_STORAGE_GB)
-    quality_trim = trim_config.get('quality_trim', DEFAULT_QUALITY_TRIM)
 
-    trim_tool = trim_config.get('tool', 'fastp')
+    trim_tool = 'fastp'
 
     trim_j_name = base_job_name
     trim_j_attrs = (job_attrs or {}) | {'label': base_job_name, 'tool': trim_tool}
@@ -257,29 +198,16 @@ def trim(
         r2=trim_j.output_r2['fastq.gz'],
     )
     trim_cmd: object
-    # Create appropriate trimming command based on tool selection
-    if trim_tool == 'cutadapt':
-        trim_cmd = Cutadapt(
-            input_fastq_pair=fastq_pair,
-            output_fastq_pair=out_fqs,
-            adapter_type=adapter_type,
-            paired=True,
-            min_length=min_length,
-            quality_trim=quality_trim,
-            two_colour=trim_config.get('two_colour', True),
-            polya=trim_config.get('polyA', False),
-        )
-    else:  # Default to fastp
-        trim_cmd = Fastp(
-            input_fastq_pair=fastq_pair,
-            output_fastq_pair=out_fqs,
-            adapter_type=adapter_type,
-            paired=True,
-            min_length=min_length,
-            nthreads=res.get_nthreads(),  # uses actual threads allocated
-            polyg=trim_config.get('polyG', True),
-            polyx=trim_config.get('polyX', False),
-        )
+    trim_cmd = Fastp(
+        input_fastq_pair=fastq_pair,
+        output_fastq_pair=out_fqs,
+        adapter_type=adapter_type,
+        paired=True,
+        min_length=min_length,
+        nthreads=res.get_nthreads(),  # uses actual threads allocated
+        polyg=trim_config.get('polyG', True),
+        polyx=trim_config.get('polyX', False),
+    )
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 
     # Write output to file
