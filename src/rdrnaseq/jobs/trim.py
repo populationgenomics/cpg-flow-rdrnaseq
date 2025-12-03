@@ -13,7 +13,7 @@ from cpg_utils.hail_batch import Batch, command
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
 
-from rdrnaseq.utils import can_reuse
+from cpg_flow.utils import can_reuse
 
 # Default configuration constants
 DEFAULT_MIN_LENGTH = 50

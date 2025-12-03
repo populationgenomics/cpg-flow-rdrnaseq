@@ -6,14 +6,14 @@ import hailtop.batch as hb
 from cpg_utils import Path
 from cpg_utils.config import get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, fasta_res_group
-from cpg_workflows.filetypes import CramPath
-from cpg_workflows.resources import (
+from cpg_flow.filetypes import CramPath
+from cpg_flow.resources import (
     HIGHMEM,
     STANDARD,
     storage_for_cram_qc_job,
     storage_for_joint_vcf,
 )
-from cpg_workflows.utils import can_reuse, exists
+from cpg_flow.utils import can_reuse, exists
 from hailtop.batch.job import Job
 
 

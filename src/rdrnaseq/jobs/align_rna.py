@@ -20,7 +20,7 @@ from hailtop.batch.job import Job
 
 from rdrnaseq.jobs.bam_to_cram import bam_to_cram
 from rdrnaseq.jobs.markdups import markdup
-from rdrnaseq.utils import can_reuse
+from cpg_flow.utils import can_reuse
 
 
 class STAR:

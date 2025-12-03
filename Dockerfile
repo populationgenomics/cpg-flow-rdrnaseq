@@ -9,11 +9,3 @@ COPY LICENSE pyproject.toml README.md ./
 
 # pip install but don't retain the cache files
 RUN pip install --no-cache-dir .
-RUN micromamba install -y -c bioconda -c conda-forge \
-    # 2. List all required bioinformatics tools
-    star samtools sambamba fastp cutadapt \
-    outrider fraser \
-    picard \
-    # 3. List general utilities (optional but recommended)
-    less wget curl \
-    && micromamba clean --all --force-pkgs
