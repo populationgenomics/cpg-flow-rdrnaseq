@@ -5,10 +5,9 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 import hailtop.batch as hb
 from cpg_flow.filetypes import BamPath, CramPath
 from cpg_flow.resources import STANDARD
-from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
-from cpg_utils.hail_batch import command
+from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
 from rdrnaseq.jobs.bam_to_cram import cram_to_bam
@@ -108,22 +107,19 @@ class FeatureCounts:
 
 
 def count(
-    b: hb.Batch,
     input_cram_or_bam: BamPath | CramPath,
-    output_path: str | Path,
-    summary_path: str | Path,
+    output_path: Path,
+    summary_path: Path,
+    job_attrs: dict[str, str],
+    sg_id: str,
     cram_to_bam_path: Path | None = None,
-    sample_name: str | None = None,
-    job_attrs: dict[str, str] | None = None,
-    overwrite: bool = False,
     requested_nthreads: int | None = None,
 ) -> list[Job]:
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
     """
-    # Reuse existing output if possible
-    if output_path and summary_path and can_reuse(output_path, overwrite) and can_reuse(summary_path, overwrite):
-        return []
+
+    b = get_batch()
 
     jobs: list[Job] = []
 
@@ -146,7 +142,6 @@ def count(
         )
         # Convert CRAM to BAM
         j, input_bam_reads = cram_to_bam(
-            b=b,
             input_cram=input_cram_reads,
             output_bam=cram_to_bam_path,
             job_attrs=job_attrs,
@@ -163,9 +158,7 @@ def count(
     counting_reference = count_res_group(b)
 
     # Create job
-    job_name = f'count_{sample_name}' if sample_name else 'count'
-    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'featureCounts'}
-    j = b.new_job(job_name, _job_attrs)
+    j = b.new_bash_job(f'count_{sg_id}', attributes=job_attrs | {'tool': 'featureCounts'})
     j.image(image_path('subread'))
 
     # Set resource requirements
@@ -211,9 +204,7 @@ def count(
     jobs.append(j)
 
     # Write output to file
-    if output_path:
-        b.write_output(j.count_output['count'], str(output_path))
-    if summary_path:
-        b.write_output(j.count_output['count.summary'], str(summary_path))
+    b.write_output(j.count_output['count'], str(output_path))
+    b.write_output(j.count_output['count.summary'], str(summary_path))
 
     return jobs

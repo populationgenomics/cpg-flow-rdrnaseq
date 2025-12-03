@@ -7,10 +7,9 @@ from textwrap import dedent
 
 import hailtop.batch as hb
 from cpg_flow.resources import STANDARD
-from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
-from cpg_utils.hail_batch import command
+from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
 
@@ -290,20 +289,17 @@ class Outrider:
 
 
 def outrider(
-    b: hb.Batch,
     input_counts: list[str | Path],
+    job_attrs: dict[str, str],
     output_rdata_path: str | Path | None = None,
     cohort_id: str | None = None,
-    job_attrs: dict[str, str] | None = None,
-    overwrite: bool = False,
     requested_nthreads: int | None = None,
 ) -> Job | None:
     """
     Run Outrider.
     """
-    # Reuse existing output if possible
-    if output_rdata_path and can_reuse(output_rdata_path, overwrite):
-        return None
+
+    b = get_batch()
 
     # Localise input files
     if not all(isinstance(f, str | Path) for f in input_counts):
@@ -320,9 +316,7 @@ def outrider(
     z_cutoff = get_config().get('outrider', {}).get('z_cutoff', 0.0)
 
     # Create job
-    job_name = f'outrider_{cohort_id}' if cohort_id else 'count'
-    _job_attrs = (job_attrs or {}) | {'label': job_name, 'tool': 'outrider'}
-    j = b.new_job(job_name, _job_attrs)
+    j = b.new_job(f'outrider_{cohort_id}', attributes=job_attrs | {'tool': 'outrider'})
     j.image(image_path('outrider'))
 
     # Set resource requirements

@@ -5,13 +5,12 @@ Convert BAM to CRAM.
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, image_path
-from cpg_utils.hail_batch import Batch, command
+from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
 
 
 def bam_to_cram(
-    b: Batch,
     input_bam: ResourceGroup,
     extra_label: str | None = None,
     job_attrs: dict | None = None,
@@ -21,6 +20,8 @@ def bam_to_cram(
     """
     Convert a BAM file to a CRAM file.
     """
+
+    b = get_batch()
 
     if not isinstance(input_bam, ResourceGroup):
         raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
@@ -64,7 +65,6 @@ def bam_to_cram(
 
 
 def cram_to_bam(
-    b: Batch,
     input_cram: ResourceGroup,
     output_bam: Path | None = None,
     extra_label: str | None = None,
@@ -74,6 +74,7 @@ def cram_to_bam(
     """
     Convert a CRAM file to a BAM file.
     """
+    b = get_batch()
 
     if not isinstance(input_cram, ResourceGroup):
         raise TypeError(f'Expected input_cram to be a ResourceGroup, but got {type(input_cram).__name__}')

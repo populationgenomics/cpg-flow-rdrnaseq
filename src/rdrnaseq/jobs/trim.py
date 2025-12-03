@@ -10,7 +10,7 @@ from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import config
 from cpg_utils.config import image_path
-from cpg_utils.hail_batch import Batch, command
+from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
 
@@ -127,34 +127,30 @@ class Fastp:
 
 
 def trim(
-    b: Batch,
-    sequencing_group: str,  # currently unused, but may be useful for future extensions #noqa:ARG001
     input_fq_pair: FastqPair,
+    job_attrs: dict[str, str],
     output_fq_pair: FastqPair | None = None,
-    job_attrs: dict | None = None,
-    extra_label: str | None = None,
-    overwrite: bool = False,
     requested_nthreads: int | None = None,
 ) -> tuple[Job | None, FastqPair]:
     """
     Takes an input FastqPair object, and creates a job to trim the FASTQs using fastp.
     """
+    b = get_batch()
+
     # Validate inputs
     if not input_fq_pair.r1 or not input_fq_pair.r2:
         raise MissingFastqInputError('Both R1 and R2 FASTQ files must be provided')
 
     # Don't run if all output files exist and can be reused
-    if output_fq_pair and can_reuse(output_fq_pair.r1, overwrite) and can_reuse(output_fq_pair.r2, overwrite):
+    if output_fq_pair and can_reuse(output_fq_pair.r1) and can_reuse(output_fq_pair.r2):
         return None, output_fq_pair.as_resources(b)
 
-    base_job_name = 'TrimFastqs'
-    if extra_label:
-        base_job_name += f' {extra_label}'
+    job_name = 'TrimFastqs'
 
     if config.config_retrieve('workflow')['sequencing_type'] != 'transcriptome':
         raise InvalidSequencingTypeError(
             f"Invalid sequencing type '{config.config_retrieve('workflow')['sequencing_type']}'"
-            f" for job type '{base_job_name}'; sequencing type must be 'transcriptome'",
+            f" for job type '{job_name}'; sequencing type must be 'transcriptome'",
         )
 
     # Get configuration with defaults
@@ -168,9 +164,8 @@ def trim(
 
     trim_tool = 'fastp'
 
-    trim_j_name = base_job_name
-    trim_j_attrs = (job_attrs or {}) | {'label': base_job_name, 'tool': trim_tool}
-    trim_j = b.new_job(trim_j_name, trim_j_attrs)
+    trim_j_attrs = job_attrs | {'tool': trim_tool}
+    trim_j = b.new_bash_job(job_name, trim_j_attrs)
     trim_j.image(image_path(trim_tool))
 
     # Set resource requirements with configurable values

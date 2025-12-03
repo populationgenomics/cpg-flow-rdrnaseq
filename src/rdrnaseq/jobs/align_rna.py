@@ -13,10 +13,9 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import image_path, reference_path
-from cpg_utils.hail_batch import Batch, command
+from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
 from rdrnaseq.jobs.bam_to_cram import bam_to_cram
@@ -109,7 +108,7 @@ class STAR:
 
 
 class GCPStarReference:
-    def __init__(self, b: Batch, genome_prefix: str | Path):
+    def __init__(self, genome_prefix: str | Path):
         # Ensure it's a string, strip trailing slash
         gp = str(genome_prefix).rstrip('/')
 
@@ -135,11 +134,10 @@ class GCPStarReference:
 
         # Prepend prefix
         self.genome_files = {k: f'{gp}/{v}' for k, v in files.items()}
-        self.genome_res_group = b.read_input_group(**self.genome_files)
+        self.genome_res_group = get_batch().read_input_group(**self.genome_files)
 
 
 def align(
-    b: Batch,
     fastq_pairs: FastqPairs,
     sample_name: str,
     genome_prefix: str | Path,
@@ -148,7 +146,6 @@ def align(
     output_cram: CramPath | None = None,
     extra_label: str | None = None,
     job_attrs: dict | None = None,
-    overwrite: bool = False,
     requested_nthreads: int | None = None,
 ) -> list[Job] | None:
     """
@@ -156,10 +153,8 @@ def align(
     merge the resulting BAMs (if necessary),
     then sort and index the resulting BAM.
     """
-    if output_cram and can_reuse(output_cram, overwrite):
-        return None
-    if not output_cram and output_bam and can_reuse(output_bam, overwrite):
-        return None
+
+    b = get_batch()
 
     if not isinstance(fastq_pairs, FastqPairs):
         raise TypeError(f'fastq_pairs must be a FastqPairs object, not {type(fastq_pairs)}')
@@ -167,7 +162,7 @@ def align(
         raise ValueError('fastq_pairs must contain at least one FastqPair')
 
     # Optimization: Instantiate Reference object once here, pass it down
-    star_ref = GCPStarReference(b=b, genome_prefix=genome_prefix)
+    star_ref = GCPStarReference(genome_prefix=genome_prefix)
 
     merge = len(fastq_pairs) > 1
     jobs = []
@@ -178,7 +173,6 @@ def align(
             raise TypeError(f'fastq_pairs must contain FastqPair objects, not {type(fq_pair)}')
         label = f'{extra_label} {job_idx}' if extra_label else f'{job_idx}'
         j, bam = align_fq_pair(
-            b=b,
             fastq_pair=fq_pair,
             sample_name=sample_name,
             star_ref=star_ref,  # Pass the instantiated ref
@@ -196,7 +190,6 @@ def align(
 
     if merge:
         j, merged_bam = merge_bams(
-            b=b,
             input_bams=aligned_bams,
             extra_label=extra_label,
             job_attrs=job_attrs,
@@ -210,7 +203,6 @@ def align(
     # Optimization: Skip heavy re-sorting if we know STAR/Merge kept it sorted.
     # We pass 'assume_sorted=True' because STAR output is sorted and Merge preserves it.
     j, sorted_bam_group = sort_index_bam(
-        b=b,
         input_bam=aligned_bam,
         extra_label=extra_label,
         job_attrs=job_attrs,
@@ -225,7 +217,6 @@ def align(
 
     if mark_duplicates:
         j, mkdup_bam = markdup(
-            b=b,
             input_bam=sorted_bam_file,
             extra_label=extra_label,
             job_attrs=job_attrs,
@@ -243,7 +234,6 @@ def align(
 
     if output_cram:
         j, out_cram = bam_to_cram(
-            b=b,
             input_bam=out_bam,
             extra_label=extra_label,
             job_attrs=job_attrs,
@@ -258,7 +248,6 @@ def align(
 
 
 def align_fq_pair(
-    b: Batch,
     fastq_pair: FastqPair,
     sample_name: str,
     star_ref: GCPStarReference,  # Received as argument
@@ -270,6 +259,8 @@ def align_fq_pair(
     """
     Takes an input FastqPair object, and creates a job to align it using STAR.
     """
+    b = get_batch()
+
     job_name = 'align_rna'
     if extra_label:
         job_name += f' {extra_label}'
@@ -303,7 +294,6 @@ def align_fq_pair(
 
 
 def merge_bams(
-    b: Batch,
     input_bams: list[str | BamPath | Path],
     extra_label: str | None = None,
     job_attrs: dict | None = None,
@@ -312,6 +302,8 @@ def merge_bams(
     """
     Merge a list of BAM files into a single BAM file.
     """
+    b = get_batch()
+
     job_name = 'merge_bams'
     if extra_label:
         job_name += f' {extra_label}'
@@ -331,7 +323,6 @@ def merge_bams(
 
 
 def sort_index_bam(
-    b: Batch,
     input_bam: str | BamPath | Path,
     extra_label: str | None = None,
     job_attrs: dict | None = None,
@@ -342,6 +333,8 @@ def sort_index_bam(
     Sort and index a BAM file.
     If assume_sorted is True, it skips sorting and only indexes.
     """
+    b = get_batch()
+
     job_name = 'sort_index_bam'
     if extra_label:
         job_name += f' {extra_label}'

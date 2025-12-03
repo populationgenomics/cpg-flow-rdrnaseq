@@ -7,16 +7,14 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from cpg_flow import stage, targets
+from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
     FastqPair,
     FastqPairs,
 )
-from cpg_utils import Path
-from cpg_utils.config import get_config
-from cpg_utils.hail_batch import get_batch
+from cpg_utils import Path, config
 from hailtop.batch.job import Job
 
 from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
@@ -27,11 +25,7 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
     Get the input FASTQ file pairs for trimming
     """
     alignment_input = sequencing_group.alignment_input
-    if (
-        not alignment_input
-        or (get_config()['workflow'].get('check_inputs', True) and not alignment_input.exists())
-        or not isinstance(alignment_input, FastqPair | FastqPairs)
-    ):
+    if not alignment_input or not alignment_input.exists() or not isinstance(alignment_input, FastqPair | FastqPairs):
         return None
     if isinstance(alignment_input, FastqPair):
         alignment_input = FastqPairs([alignment_input])
@@ -83,33 +77,14 @@ class TrimAlignRNA(stage.SequencingGroupStage):
     Trim and align RNA-seq FASTQ reads with fastp and STAR
     """
 
-    def expected_tmp_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
-        """
-        Expect a pair of BAM and BAI files, one per set of input FASTQ files
-        """
-        return {
-            suffix: sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.{extension}'
-            for suffix, extension in [
-                ('bam', 'bam'),
-                ('bai', 'bam.bai'),
-            ]
-        }
-
-    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path | str]:
         """
         Expect a pair of CRAM and CRAI files, one per set of input FASTQ files
         """
-        expected_outs = {
-            suffix: sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.{extension}'
-            for suffix, extension in [
-                ('cram', 'cram'),
-                ('crai', 'cram.crai'),
-            ]
+        return {
+            'cram': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram',
+            'bam': str(sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam'),
         }
-        # Also include the temporary BAM and BAI files, but only if the CRAM and CRAI files don't exist
-        if not (expected_outs['cram'].exists() and expected_outs['crai'].exists()):
-            expected_outs.update(self.expected_tmp_outputs(sequencing_group))
-        return expected_outs
 
     def queue_jobs(
         self,
@@ -119,6 +94,10 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         """
         Queue a job to align the input FASTQ files to the genome using STAR
         """
+
+        outputs = self.expected_outputs(sequencing_group)
+        attributes = self.get_job_attrs(sequencing_group)
+
         jobs = []
 
         # Run trim
@@ -130,11 +109,8 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
-                b=get_batch(),
-                sequencing_group=sequencing_group,
                 input_fq_pair=fq_pair,
-                job_attrs=self.get_job_attrs(sequencing_group),
-                overwrite=sequencing_group.forced,
+                job_attrs=attributes,
             )
             if j:
                 if not isinstance(j, Job):
@@ -146,27 +122,24 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         # Run alignment
         trimmed_fastq_pairs = FastqPairs(trimmed_fastq_pairs)
-        aligned_bam_dict = self.expected_tmp_outputs(sequencing_group)
+
         aligned_bam = BamPath(
-            path=aligned_bam_dict['bam'],
-            index_path=aligned_bam_dict['bai'],
+            path=outputs['bam'],
+            index_path=f'{outputs["bam"]}.bai',
         )
-        aligned_cram_dict = self.expected_outputs(sequencing_group)
         aligned_cram = CramPath(
-            path=aligned_cram_dict['cram'],
-            index_path=aligned_cram_dict['crai'],
+            path=outputs['cram'],
+            index_path=f'{outputs["cram"]!s}.crai',
         )
         try:
             align_jobs = align_rna.align(
-                b=get_batch(),
                 fastq_pairs=trimmed_fastq_pairs,
                 sample_name=sequencing_group.id,
-                genome_prefix=get_config()['references']['star'].get('ref_dir'),
+                genome_prefix=config.config_retrieve(['references', 'star', 'ref_dir']),
                 mark_duplicates=True,
                 output_bam=aligned_bam,
                 output_cram=aligned_cram,
-                job_attrs=self.get_job_attrs(sequencing_group),
-                overwrite=sequencing_group.forced,
+                job_attrs=attributes,
             )
             if align_jobs:
                 if not isinstance(align_jobs, list):
@@ -180,20 +153,13 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             raise RuntimeError(f'Error aligning RNA-seq reads for {sequencing_group}') from e
 
         # Create outputs and return jobs
-        return self.make_outputs(sequencing_group, data=aligned_cram_dict, jobs=jobs)
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-"""
-Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
-"""
-
-
-@stage.stage(
-    required_stages=[TrimAlignRNA],
-)
+@stage.stage(required_stages=TrimAlignRNA)
 class Count(stage.SequencingGroupStage):
     """
-    Count reads with featureCounts.
+    Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
@@ -211,89 +177,64 @@ class Count(stage.SequencingGroupStage):
         """
         Queue a job to count the reads with featureCounts.
         """
-        cram_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'cram')
-        crai_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'crai')
-        potential_bam_path = sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam'
-        potential_bai_path = sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam.bai'
-        input_cram_or_bam: BamPath | CramPath | None = None
-        try:
-            bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-            bai_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bai')
-            input_cram_or_bam = BamPath(bam_path, bai_path)
-        except KeyError:
-            if potential_bam_path.exists() and potential_bai_path.exists():
-                input_cram_or_bam = BamPath(potential_bam_path, potential_bai_path)
-            else:
-                input_cram_or_bam = CramPath(cram_path, crai_path)
+        outputs = self.expected_outputs(sequencing_group)
 
-        output_path = self.expected_outputs(sequencing_group)['count']
-        summary_path = self.expected_outputs(sequencing_group)['summary']
+        cram_path = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        input_cram_or_bam: BamPath | CramPath = CramPath(cram_path, f'{cram_path!s}.crai')
+
+        bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
+        if utils.exists(bam_path):
+            input_cram_or_bam = BamPath(bam_path, index_path=f'{bam_path!s}.bai')
 
         jobs = count.count(
-            b=get_batch(),
             input_cram_or_bam=input_cram_or_bam,
-            cram_to_bam_path=potential_bam_path,
-            output_path=output_path,
-            summary_path=summary_path,
-            sample_name=sequencing_group.id,
+            cram_to_bam_path=bam_path,
+            output_path=outputs['count'],
+            summary_path=outputs['summary'],
+            sg_id=sequencing_group.id,
             job_attrs=self.get_job_attrs(sequencing_group),
-            overwrite=sequencing_group.forced,
         )
 
-        return self.make_outputs(sequencing_group, data=self.expected_outputs(sequencing_group), jobs=jobs)
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=TrimAlignRNA,
-)
+@stage.stage(required_stages=TrimAlignRNA)
 class Fraser(stage.CohortStage):
     """
     Perform aberrant splicing analysis with FRASER.
     """
 
-    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+    def expected_outputs(self, cohort: targets.Cohort) -> Path:
         """
         Generate FRASER outputs.
         """
-        dataset_prefix = cohort.get_sequencing_groups()[0].dataset.prefix()
-        return {cohort.id: dataset_prefix / 'fraser' / f'{cohort.id}.fds.tar.gz'}
+        return cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         Queue a job to run FRASER.
         """
+
+        output = self.expected_outputs(cohort)
+
         sequencing_groups = cohort.get_sequencing_groups()
 
-        bam_or_cram_inputs: list[tuple[BamPath, None] | tuple[CramPath, Path]] = []
+        bam_or_cram_inputs: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]] = []
         for sequencing_group in sequencing_groups:
             cram_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'cram')
-            crai_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'crai')
-            input_bam_or_cram: BamPath | CramPath | None = None
-            try:
-                bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-                bai_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bai')
-                input_bam_or_cram = BamPath(bam_path, bai_path)
-            except KeyError:
-                potential_bam_path = sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam'
-                potential_bai_path = sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam.bai'
-                if potential_bam_path.exists() and potential_bai_path.exists():
-                    input_bam_or_cram = BamPath(potential_bam_path, potential_bai_path)
-                else:
-                    input_bam_or_cram = CramPath(cram_path, crai_path)
-            if isinstance(input_bam_or_cram, (BamPath)):
-                bam_or_cram_inputs.append((input_bam_or_cram, None))
-            elif isinstance(input_bam_or_cram, (CramPath)):
-                bam_or_cram_inputs.append((input_bam_or_cram, potential_bam_path))
+            bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
+            if utils.exists(bam_path):
+                bam_or_cram_inputs.append((sequencing_group.id, BamPath(bam_path, f'{bam_path}.bai'), None))
+            else:
+                bam_or_cram_inputs.append((sequencing_group.id, CramPath(cram_path, f'{cram_path!s}.crai'), bam_path))
 
         j = fraser.fraser(
-            b=get_batch(),
             input_bams_or_crams=bam_or_cram_inputs,
-            output_fds_path=next(iter(self.expected_outputs(cohort).values())),
+            output_fds_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
-            overwrite=cohort.forced,
         )
-        return self.make_outputs(cohort, data=self.expected_outputs(cohort), jobs=j)
+        return self.make_outputs(cohort, data=output, jobs=j)
 
 
 @stage.stage(required_stages=Count)
@@ -302,26 +243,24 @@ class Outrider(stage.CohortStage):
     Perform outlier gene expression analysis with Outrider.
     """
 
-    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+    def expected_outputs(self, cohort: targets.Cohort) -> Path:
         """
         Generate outrider outputs.
         """
-        dataset_prefix = cohort.get_sequencing_groups()[0].dataset.prefix()
-        return {cohort.id: dataset_prefix / 'outrider' / f'{cohort.id}.outrider.RData'}
+        return cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData'
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
         Queue a job to run outrider.
         """
+        output = self.expected_outputs(cohort)
         count_inputs = [
             inputs.as_path(sequencing_group, Count, 'count') for sequencing_group in cohort.get_sequencing_groups()
         ]
         j = outrider.outrider(
-            b=get_batch(),
             input_counts=count_inputs,
-            output_rdata_path=next(iter(self.expected_outputs(cohort).values())),
+            output_rdata_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
-            overwrite=cohort.forced,
         )
-        return self.make_outputs(cohort, data=self.expected_outputs(cohort), jobs=j)
+        return self.make_outputs(cohort, data=output, jobs=j)

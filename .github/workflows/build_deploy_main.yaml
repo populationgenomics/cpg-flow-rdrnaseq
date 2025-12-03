@@ -83,7 +83,7 @@ jobs:
 
       - name: 'build image'
         run: |
-          docker build . -f src/clinvarbitration/cpg_internal/Dockerfile \
+          docker build . -f Dockerfile \
           --build-arg VERSION=${{ matrix.tag }} \
           --tag ${{ env.IMAGES_PREFIX }}/${{ matrix.name }}:${{ matrix.tag }}
 
