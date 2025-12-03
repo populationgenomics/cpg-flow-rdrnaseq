@@ -135,8 +135,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             align_jobs = align_rna.align(
                 fastq_pairs=trimmed_fastq_pairs,
                 sample_name=sequencing_group.id,
-                genome_prefix=config.config_retrieve(['references', 'star', 'ref_dir']),
-                mark_duplicates=True,
                 output_bam=aligned_bam,
                 output_cram=aligned_cram,
                 job_attrs=attributes,

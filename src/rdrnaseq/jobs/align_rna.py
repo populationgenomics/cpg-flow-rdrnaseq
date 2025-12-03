@@ -13,7 +13,7 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_utils import Path, to_path
+from cpg_utils import Path, to_path, config
 from cpg_utils.config import image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
@@ -65,14 +65,14 @@ class STAR:
         self.read_group_line = self._create_read_group_line()
 
         # Build Command
-        # Note: input_fastq_pair.r1/r2 are typically typically Hail ResourceFiles,
+        # Note: input_fastq_pair.r1/r2 are typically Hail ResourceFiles,
         # casting to str gives their container path.
         self.command_parts = [
             'STAR',
             '--runThreadN',
             str(self.nthreads),
             '--genomeDir',
-            str(genome.genome.dirname),
+            f'$(dirname {str(genome.genome)})',
             '--outSAMtype',
             self.outSAMtype,
             '--outStd',
@@ -108,7 +108,10 @@ class STAR:
 
 
 class GCPStarReference:
-    def __init__(self, genome_prefix: str | Path):
+    def __init__(self):
+
+        genome_prefix = config.config_retrieve(['references', 'star', 'ref_dir'])
+
         # Ensure it's a string, strip trailing slash
         gp = str(genome_prefix).rstrip('/')
 
@@ -140,8 +143,6 @@ class GCPStarReference:
 def align(
     fastq_pairs: FastqPairs,
     sample_name: str,
-    genome_prefix: str | Path,
-    mark_duplicates: bool = True,
     output_bam: BamPath | None = None,
     output_cram: CramPath | None = None,
     extra_label: str | None = None,
@@ -162,7 +163,7 @@ def align(
         raise ValueError('fastq_pairs must contain at least one FastqPair')
 
     # Optimization: Instantiate Reference object once here, pass it down
-    star_ref = GCPStarReference(genome_prefix=genome_prefix)
+    star_ref = GCPStarReference()
 
     merge = len(fastq_pairs) > 1
     jobs = []
@@ -215,17 +216,14 @@ def align(
     # We extract the bam file for the next step.
     sorted_bam_file = sorted_bam_group['bam']
 
-    if mark_duplicates:
-        j, mkdup_bam = markdup(
-            input_bam=sorted_bam_file,
-            extra_label=extra_label,
-            job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
-        )
-        jobs.append(j)
-        out_bam = mkdup_bam
-    else:
-        out_bam = sorted_bam_file
+    j, mkdup_bam = markdup(
+        input_bam=sorted_bam_file,
+        extra_label=extra_label,
+        job_attrs=job_attrs,
+        requested_nthreads=requested_nthreads,
+    )
+    jobs.append(j)
+    out_bam = mkdup_bam
 
     # Output writing
     if output_bam:

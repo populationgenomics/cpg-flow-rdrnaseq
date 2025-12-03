@@ -15,7 +15,7 @@ def bam_to_cram(
     extra_label: str | None = None,
     job_attrs: dict | None = None,
     requested_nthreads: int | None = None,
-    reference_fasta_path: Path | None = None,
+    reference_fasta_path: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
     """
     Convert a BAM file to a CRAM file.
