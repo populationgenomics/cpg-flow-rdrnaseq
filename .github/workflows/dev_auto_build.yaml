@@ -32,7 +32,7 @@ env:
 jobs:
   get_next_version:
     runs-on: ubuntu-latest
-    environment: production
+    environment: development
     if: ${{ github.event_name == 'push' }}
     outputs:
       matrix: ${{ steps.get_next_version.outputs.next_version }}
@@ -69,7 +69,7 @@ jobs:
 
   deploy_image_auto:
     runs-on: ubuntu-latest
-    environment: production
+    environment: development
     needs:
       - get_next_version
     if: ${{ needs.get_next_version.outputs.matrix != '{"include":[]}' && needs.get_next_version.outputs.matrix != '' && github.event_name == 'push' }}
