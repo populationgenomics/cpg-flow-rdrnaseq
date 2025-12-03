@@ -1,3 +1,7 @@
+"""
+Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
+"""
+
 import logging
 import re
 from dataclasses import dataclass
@@ -16,31 +20,6 @@ from cpg_utils.hail_batch import get_batch
 from hailtop.batch.job import Job
 
 from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
-
-"""
-This file exists to define all the Stages for the workflow.
-The logic for each stage can be contained here (if it is not too complex),
-or can be delegated to a separate file in jobs.
-
-Naming conventions for Stages are not enforced, but a series of recommendations have been made here:
-
-https://cpg-populationanalysis.atlassian.net/wiki/spaces/ST/pages/185597962/Pipeline+Naming+Convention+Specification
-
-A suggested naming convention for a stages is:
-  - PascalCase (each word capitalized, no hyphens or underscores)
-  - If the phrase contains an initialism (e.g. VCF), only the first character should be capitalised
-  e.g. AlignShortReadsWithBowtie2, or MakeSitesOnlyVcfWithBcftools
-  - This becomes self-explanatory when reading the code and output folders
-
-Each Stage should be a Class, and should inherit from one of
-  - SequencingGroupStage
-  - DatasetStage
-  - CohortStage
-  - MultiCohortStage
-"""
-"""
-Align RNA-seq reads to the genome using STAR.
-"""
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -135,7 +114,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
     def queue_jobs(
         self,
         sequencing_group: targets.SequencingGroup,
-        inputs: stage.StageInput,  # noqa:ARG002
+        inputs: stage.StageInput,
     ) -> stage.StageOutput | None:
         """
         Queue a job to align the input FASTQ files to the genome using STAR

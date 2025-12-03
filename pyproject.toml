@@ -63,7 +63,7 @@ indent-style = 'space'
 quote-style = "single"
 
 [tool.ruff.lint.per-file-ignores]
-"src/workflow_name/stages.py" = ["ARG002"]
+"src/rdrnaseq/stages.py" = ["ARG002"]
 
 [tool.ruff.lint]
 # ignore pydocstyle, flake8-boolean-trap (FBT)
