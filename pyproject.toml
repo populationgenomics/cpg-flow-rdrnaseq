@@ -46,7 +46,7 @@ packages = ["src/rdrnaseq"]
 include_package_data = true
 
 [options.package_data]
-'cpg-flow-rdrnaseq'=  ['config_template.toml']
+'rdrnaseq'=  ['config_template.toml']
 
 [tool.mypy]
 ignore_missing_imports = true
