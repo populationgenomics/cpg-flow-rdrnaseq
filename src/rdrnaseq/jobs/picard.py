@@ -3,9 +3,6 @@ Create Hail Batch jobs to run Picard tools (marking duplicates, QC).
 """
 
 import hailtop.batch as hb
-from cpg_utils import Path
-from cpg_utils.config import get_config, image_path, reference_path
-from cpg_utils.hail_batch import command, fasta_res_group
 from cpg_flow.filetypes import CramPath
 from cpg_flow.resources import (
     HIGHMEM,
@@ -14,6 +11,9 @@ from cpg_flow.resources import (
     storage_for_joint_vcf,
 )
 from cpg_flow.utils import can_reuse, exists
+from cpg_utils import Path
+from cpg_utils.config import get_config, image_path, reference_path
+from cpg_utils.hail_batch import command, fasta_res_group
 from hailtop.batch.job import Job
 
 

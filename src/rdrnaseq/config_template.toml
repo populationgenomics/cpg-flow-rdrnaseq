@@ -14,3 +14,13 @@ check_expected_outputs = true
 
 # the method to register outputs, can be missing - will not generate metamist analysis entries
 status_reporter = 'metamist'
+
+[images]
+star = "australia-southeast1-docker.pkg.dev/cpg-common/images/star:2.7.10b"
+fastp = "australia-southeast1-docker.pkg.dev/cpg-common/images/fastp:1.0.1-1"
+fraser = "australia-southeast1-docker.pkg.dev/cpg-common/images/fraser:1.12.1"
+outrider = "australia-southeast1-docker.pkg.dev/cpg-common/images/outrider:1.18.1"
+picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:2.27.4"
+sambamba = "australia-southeast1-docker.pkg.dev/cpg-common/images/sambamba:1.0.1"
+samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0.1.26-1"
+samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"

@@ -13,6 +13,7 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
+from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import image_path, reference_path
 from cpg_utils.hail_batch import Batch, command
@@ -20,7 +21,6 @@ from hailtop.batch.job import Job
 
 from rdrnaseq.jobs.bam_to_cram import bam_to_cram
 from rdrnaseq.jobs.markdups import markdup
-from cpg_flow.utils import can_reuse
 
 
 class STAR:

@@ -7,13 +7,12 @@ from enum import Enum
 
 from cpg_flow.filetypes import FastqPair
 from cpg_flow.resources import STANDARD
+from cpg_flow.utils import can_reuse
 from cpg_utils import config
 from cpg_utils.config import image_path
 from cpg_utils.hail_batch import Batch, command
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
-
-from cpg_flow.utils import can_reuse
 
 # Default configuration constants
 DEFAULT_MIN_LENGTH = 50

@@ -3,17 +3,15 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 import hailtop.batch as hb
+from cpg_flow.filetypes import BamPath, CramPath
+from cpg_flow.resources import STANDARD
+from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command
-from cpg_workflows.filetypes import (
-    BamPath,
-    CramPath,
-)
-from cpg_workflows.jobs.bam_to_cram import cram_to_bam
-from cpg_workflows.resources import STANDARD
-from cpg_workflows.utils import can_reuse
 from hailtop.batch.job import Job
+
+from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
 def count_res_group(b: hb.Batch) -> hb.ResourceGroup:
