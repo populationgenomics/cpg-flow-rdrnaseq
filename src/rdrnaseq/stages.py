@@ -53,7 +53,7 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
     if (
         not alignment_input
         or (get_config()['workflow'].get('check_inputs', True) and not alignment_input.exists())
-        or not isinstance(alignment_input, (FastqPair, FastqPairs))
+        or not isinstance(alignment_input, FastqPair | FastqPairs)
     ):
         return None
     if isinstance(alignment_input, FastqPair):
@@ -309,7 +309,7 @@ class Fraser(stage.CohortStage):
         j = fraser.fraser(
             b=get_batch(),
             input_bams_or_crams=bam_or_cram_inputs,
-            output_fds_path=list(self.expected_outputs(cohort).values())[0],
+            output_fds_path=next(iter(self.expected_outputs(cohort).values())),
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
             overwrite=cohort.forced,
@@ -340,7 +340,7 @@ class Outrider(stage.CohortStage):
         j = outrider.outrider(
             b=get_batch(),
             input_counts=count_inputs,
-            output_rdata_path=list(self.expected_outputs(cohort).values())[0],
+            output_rdata_path=next(iter(self.expected_outputs(cohort).values())),
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
             overwrite=cohort.forced,

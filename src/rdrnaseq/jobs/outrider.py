@@ -302,7 +302,7 @@ def outrider(
         return None
 
     # Localise input files
-    assert all([isinstance(f, (str, Path)) for f in input_counts])
+    assert all(isinstance(f, str | Path) for f in input_counts)
     infiles = {basename(str(f)).replace('.count', ''): str(f) for f in input_counts}
     infiles_rg = b.read_input_group(**infiles)
     infiles_localised = [str(infiles_rg[key]) for key in infiles]

@@ -148,7 +148,7 @@ def markdup(
     # check for a memory override for impossible sequencing groups
     # if RAM is overridden, update the memory resource setting
     memory_override = get_config()['resource_overrides'].get('picard_mem_gb')
-    assert isinstance(memory_override, (int, type(None)))
+    assert isinstance(memory_override, int | type(None))
 
     resource = HIGHMEM.request_resources(ncpu=4, mem_gb=memory_override)
 

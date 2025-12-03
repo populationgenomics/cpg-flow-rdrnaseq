@@ -236,7 +236,7 @@ def fraser(
             sample_id = input_bam_or_cram.path.name.replace('.bam', '')
             # Localise BAM
             input_bams_localised[sample_id] = input_bam_or_cram.resource_group(b).bam
-    assert all([isinstance(f, hb.ResourceFile) for f in list(input_bams_localised.values())])
+    assert all(isinstance(f, hb.ResourceFile) for f in list(input_bams_localised.values()))
 
     # Create FRASER job
     job_name = f'fraser_{cohort_id}' if cohort_id else 'fraser'
