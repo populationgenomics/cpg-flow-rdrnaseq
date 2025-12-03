@@ -101,10 +101,10 @@ class STAR:
         """
         parts = []
         for k, v in self.read_group.items():
-            # Safer quote handling: if it contains space and isn't quoted, quote it.
-            if ' ' in v and not (v.startswith('"') and v.endswith('"')):
-                v = f'"{v}"'
-            parts.append(f'{k}:{v}')
+            # Assign the final value using a conditional expression
+            quoted_v = f'"{v}"' if ' ' in v and not (v.startswith('"') and v.endswith('"')) else v
+
+            parts.append(f'{k}:{quoted_v}')
         return ' '.join(parts)
 
 
