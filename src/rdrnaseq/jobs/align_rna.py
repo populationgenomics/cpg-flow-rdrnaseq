@@ -13,7 +13,7 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_utils import Path, to_path, config
+from cpg_utils import Path, config, to_path
 from cpg_utils.config import image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
@@ -72,7 +72,7 @@ class STAR:
             '--runThreadN',
             str(self.nthreads),
             '--genomeDir',
-            f'$(dirname {str(genome.genome)})',
+            f'$(dirname {genome.genome!s})',
             '--outSAMtype',
             self.outSAMtype,
             '--outStd',
@@ -109,7 +109,6 @@ class STAR:
 
 class GCPStarReference:
     def __init__(self):
-
         genome_prefix = config.config_retrieve(['references', 'star', 'ref_dir'])
 
         # Ensure it's a string, strip trailing slash
