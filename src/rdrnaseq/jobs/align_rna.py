@@ -213,10 +213,9 @@ def align(
 
     # The output of sort_index_bam is a ResourceGroup containing .bam and .bam.bai
     # We extract the bam file for the next step.
-    sorted_bam_file = sorted_bam_group['bam']
 
     j, mkdup_bam = markdup(
-        input_bam=sorted_bam_file,
+        input_bam=sorted_bam_group,
         extra_label=extra_label,
         job_attrs=job_attrs,
         requested_nthreads=requested_nthreads,
