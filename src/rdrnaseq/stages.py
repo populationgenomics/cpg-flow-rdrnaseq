@@ -14,7 +14,7 @@ from cpg_flow.filetypes import (
     FastqPair,
     FastqPairs,
 )
-from cpg_utils import Path, config
+from cpg_utils import Path
 from hailtop.batch.job import Job
 
 from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
