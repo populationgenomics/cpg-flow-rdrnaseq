@@ -18,8 +18,8 @@ from cpg_utils.config import image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs.bam_to_cram import bam_to_cram
-from rdrnaseq.jobs.markdups import markdup
+from .bam_to_cram import bam_to_cram
+from .markdups import markdup
 
 
 class STAR:
@@ -86,6 +86,8 @@ class STAR:
             '--readFilesIn',
             str(input_fastq_pair.r1),
             str(input_fastq_pair.r2),
+            '--outSAMunmapped None',
+            '--quantMode TranscriptomeSAM'
         ]
 
     def __str__(self):
@@ -178,7 +180,7 @@ def align(
             star_ref=star_ref,  # Pass the instantiated ref
             extra_label=label,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
+            requested_nthreads=4,
         )
         jobs.append(j)
         aligned_bams.append(bam)
@@ -193,7 +195,7 @@ def align(
             input_bams=aligned_bams,
             extra_label=extra_label,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
+            requested_nthreads=4,
         )
         jobs.append(j)
         aligned_bam = merged_bam
@@ -206,7 +208,7 @@ def align(
         input_bam=aligned_bam,
         extra_label=extra_label,
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
+        requested_nthreads=4,
         assume_sorted=True,
     )
     jobs.append(j)
@@ -218,7 +220,7 @@ def align(
         input_bam=sorted_bam_group,
         extra_label=extra_label,
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
+        requested_nthreads=4,
     )
     jobs.append(j)
     out_bam = mkdup_bam
@@ -233,7 +235,7 @@ def align(
             input_bam=out_bam,
             extra_label=extra_label,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
+            requested_nthreads=4,
             reference_fasta_path=reference_path('star/fasta'),
         )
         jobs.append(j)
@@ -265,13 +267,13 @@ def align_fq_pair(
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('star'))
 
-    nthreads = requested_nthreads or 8
+    nthreads = 4
     # Optimize storage: 200GB is generous.
     # If possible, could check fastq size, but keeping safe default.
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=200)
 
     # Use resources N-1 for STAR, leaving 1 for system overhead/zcat
-    star_nthreads = max(1, res.get_nthreads() - 1)
+    star_nthreads = 3
 
     star = STAR(
         input_fastq_pair=fastq_pair,
@@ -308,7 +310,7 @@ def merge_bams(
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 
-    nthreads = requested_nthreads or 8
+    nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     # Samtools merge preserves input sort order.
@@ -339,7 +341,7 @@ def sort_index_bam(
     j = b.new_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 
-    nthreads = requested_nthreads or 8
+    nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     j.declare_resource_group(
