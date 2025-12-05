@@ -70,7 +70,7 @@ class STAR:
         self.command_parts = [
             'STAR',
             '--runThreadN',
-            str(self.nthreads),
+            str(1),
             '--genomeDir',
             f'$(dirname {genome.genome!s})',
             '--outSAMtype',
