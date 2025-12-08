@@ -2,6 +2,7 @@
 Perform aberrant splicing analysis with FRASER.
 """
 
+# ruff: noqa: E501
 from textwrap import dedent
 
 import hailtop.batch as hb
@@ -48,14 +49,14 @@ class Fraser:
         self.delta_psi_cutoff = str(delta_psi_cutoff)
         self.min_count = str(min_count)
         self.command = ''
-        self.command += """\
+        self.command += f"""
 # Set significance values and other parameters
 pval_cutoff <- {self.pval_cutoff}
 z_cutoff <- {self.z_cutoff}
 minDeltaPsi <- {self.min_delta_psi}
 deltaPsi_cutoff <- {self.delta_psi_cutoff}
 min_count <- {self.min_count}
-n_parallel_workers <- {self.nthreads - 1!s}
+n_parallel_workers <- {self.nthreads - 1}
 
 # Load FDS (pre-counted)
 fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_id}")
@@ -92,113 +93,108 @@ if(length(missing_samples) > 0) {{
 
 rm(fds)
 
-        fds <- FraserDataSet(
-          colData = sample_table,
-          junctions = raw_counts_junctions,
-          spliceSites = raw_counts_splice_sites,
-          workingDir = "output.cohort.new"
-        )
-        """
-        self.command += """\
-        # Setup parallelisation
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
+fds <- FraserDataSet(
+  colData = sample_table,
+  junctions = raw_counts_junctions,
+  spliceSites = raw_counts_splice_sites,
+  workingDir = "output.cohort.new"
+)
 
-        # Calculate PSI values
-        fds <- calculatePSIValues(fds)
+# Setup parallelisation
+register(MulticoreParam(workers = n_parallel_workers))
+bp <- MulticoreParam(workers = n_parallel_workers)
 
-        # Filter
-        fds <- filterExpressionAndVariability(fds, minDeltaPsi = minDeltaPsi, filter = FALSE)
+# Calculate PSI values
+fds <- calculatePSIValues(fds)
 
-        png(file = "plots/misc/filter_expression.png", width = 4000, height = 4000, res = 600)
-        plotFilterExpression(fds, bins = 100)
-        dev.off()
+# Filter
+fds <- filterExpressionAndVariability(fds, minDeltaPsi = minDeltaPsi, filter = FALSE)
 
-        fds_filtered <- fds[mcols(fds, type = "j")[, "passed"],]
+png(file = "plots/misc/filter_expression.png", width = 4000, height = 4000, res = 600)
+plotFilterExpression(fds, bins = 100)
+dev.off()
 
-        # Plot sample correlation
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"),
-            width = 4000, height = 4000, res = 600)
-            print(plotCountCorHeatmap(fds_filtered, type = psi_type, logit = TRUE, normalized = FALSE))
-            dev.off()
-        }
+fds_filtered <- fds[mcols(fds, type = "j")[, "passed"],]
 
-        # Calculate optimal encoding dimensions (q)
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE)
-            png(file = paste0("plots/misc/optimal_q.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
-            print(plotEncDimSearch(fds_filtered, type = psi_type))
-            dev.off()
-        }
+# Plot sample correlation
+for (psi_type in c("psi5", "psi3", "theta")) {{
+    png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"),
+    width = 4000, height = 4000, res = 600)
+    print(plotCountCorHeatmap(fds_filtered, type = psi_type, logit = TRUE, normalized = FALSE))
+    dev.off()
+}}
 
-        optimal_qs <- c(
-          psi5 = fds_filtered@metadata\\$hyperParams_psi5\\$q,
-          psi3 = fds_filtered@metadata\\$hyperParams_psi3\\$q,
-          theta = fds_filtered@metadata\\$hyperParams_theta\\$q
-        )
+# Calculate optimal encoding dimensions (q)
+for (psi_type in c("psi5", "psi3", "theta")) {{
+    fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE)
+    png(file = paste0("plots/misc/optimal_q.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
+    print(plotEncDimSearch(fds_filtered, type = psi_type))
+    dev.off()
+}}
 
-        # Fit model
-        fds_filtered_fit <- FRASER(fds_filtered, q = optimal_qs, BPPARAM = bp)
+optimal_qs <- c(
+  psi5 = fds_filtered@metadata$hyperParams_psi5$q,
+  psi3 = fds_filtered@metadata$hyperParams_psi3$q,
+  theta = fds_filtered@metadata$hyperParams_theta$q
+)
 
-        # Plot sample correlation post-correction
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"),
-            width = 4000, height = 4000, res = 600)
-            print(plotCountCorHeatmap(fds_filtered_fit, type = psi_type, logit = TRUE, normalized = TRUE))
-            dev.off()
-        }
+# Fit model
+fds_filtered_fit <- FRASER(fds_filtered, q = optimal_qs, BPPARAM = bp)
 
-        # Annotate gene symbols
-        txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
-        orgDb <- org.Hs.eg.db
-        fds_filtered_fit <- annotateRangesWithTxDb(fds_filtered_fit, txdb = txdb, orgDb = orgDb)
+# Plot sample correlation post-correction
+for (psi_type in c("psi5", "psi3", "theta")) {{
+    png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"),
+    width = 4000, height = 4000, res = 600)
+    print(plotCountCorHeatmap(fds_filtered_fit, type = psi_type, logit = TRUE, normalized = TRUE))
+    dev.off()
+}}
 
-        # Get results
-        res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff,
-        zScoreCutoff = z_cutoff, minCount = min_count)
-        res_all <- results(fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
-        write_csv(
-            data.frame(res),
-            file = paste0(
-                "results/results.significant.p_",
-                pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
-            )
-        )
-        write_csv(data.frame(res_all), file = "results/results.all.csv")
+# Annotate gene symbols
+txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
+orgDb <- org.Hs.eg.db
+fds_filtered_fit <- annotateRangesWithTxDb(fds_filtered_fit, txdb = txdb, orgDb = orgDb)
 
-        # Plot results
-        for (sample_id in fds\\$sampleID) {
-            png(file = paste0("plots/volcano/", sample_id, ".psi5.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi5")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".psi3.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi3")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".theta.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "theta")
-            dev.off()
-        }
+# Get results
+res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff,
+zScoreCutoff = z_cutoff, minCount = min_count)
+res_all <- results(fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
+write_csv(
+    data.frame(res),
+    file = paste0(
+        "results/results.significant.p_",
+        pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
+    )
+)
+write_csv(data.frame(res_all), file = "results/results.all.csv")
 
-        # Save
-        saveFraserDataSet(fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
-        EOF
-        """
-        # Tar up outputs
-        self.command += f"""
-        tar -czvf {self.output['heatmaps.tar.gz']} -C plots/heatmaps .
-        tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
-        tar -czvf {self.output['misc_plots.tar.gz']} -C plots/misc .
+# Plot results
+for (sample_id in fds$sampleID) {{
+    png(file = paste0("plots/volcano/", sample_id, ".psi5.png"), width = 4000, height = 4000, res = 600)
+    plotVolcano(fds_filtered_fit, sample_id, type = "psi5")
+    dev.off()
+    png(file = paste0("plots/volcano/", sample_id, ".psi3.png"), width = 4000, height = 4000, res = 600)
+    plotVolcano(fds_filtered_fit, sample_id, type = "psi3")
+    dev.off()
+    png(file = paste0("plots/volcano/", sample_id, ".theta.png"), width = 4000, height = 4000, res = 600)
+    plotVolcano(fds_filtered_fit, sample_id, type = "theta")
+    dev.off()
+}}
 
-        # Copy significant results file
-        cp results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.\
-        min_count_{self.min_count}.csv {self.output['results.csv']}
+# Save
+saveFraserDataSet(fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
 
-        # Copy all results and tar saved objects
-        cp results/results.all.csv {self.output['results.all.csv']}
-        tar -czvf {self.output['fds.tar.gz']} savedObjects/
-        """
-        self.command = dedent(self.command).strip()
+# Tar up outputs
+tar -czvf {self.output['heatmaps.tar.gz']} -C plots/heatmaps .
+tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
+tar -czvf {self.output['misc_plots.tar.gz']} -C plots/misc .
+
+# Copy significant results file
+cp results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.min_count_{self.min_count}.csv {self.output['results.csv']}
+
+# Copy all results and tar saved objects
+cp results/results.all.csv {self.output['results.all.csv']}
+tar -czvf {self.output['fds.tar.gz']} savedObjects/
+"""
 
     def __str__(self):
         return self.command
