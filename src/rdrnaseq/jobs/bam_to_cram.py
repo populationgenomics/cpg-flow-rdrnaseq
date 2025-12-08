@@ -12,8 +12,7 @@ from hailtop.batch.job import Job
 
 def bam_to_cram(
     input_bam: ResourceGroup,
-    extra_label: str | None = None,
-    job_attrs: dict | None = None,
+    job_attrs: dict,
     requested_nthreads: int | None = None,
     reference_fasta_path: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
@@ -26,13 +25,7 @@ def bam_to_cram(
     if not isinstance(input_bam, ResourceGroup):
         raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
 
-    job_name = 'bam_to_cram'
-    if extra_label:
-        job_name += f' {extra_label}'
-
-    convert_tool = 'samtools_view'
-    j_attrs = (job_attrs or {}) | {'label': job_name, 'tool': convert_tool}
-    j = b.new_job(name=job_name, attributes=j_attrs)
+    j = b.new_job(name='bam_to_cram', attributes=job_attrs | {'tool': 'samtools'})
     j.image(image_path('samtools'))
 
     # Get fasta file

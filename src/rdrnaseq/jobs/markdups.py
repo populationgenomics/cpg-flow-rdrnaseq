@@ -35,8 +35,7 @@ class Markdup:
 
 def markdup(
     input_bam: ResourceGroup,
-    job_attrs: dict | None = None,
-    extra_label: str | None = None,
+    job_attrs: dict,
     requested_nthreads: int | None = None,
 ) -> tuple[Job | None, ResourceGroup]:
     """
@@ -48,16 +47,9 @@ def markdup(
     if not isinstance(input_bam, ResourceGroup):
         raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
 
-    base_job_name = 'sambamba_markdup'
-    if extra_label:
-        base_job_name += f' {extra_label}'
-
     tool = 'sambamba'
-
-    j_name = base_job_name
-    j_attrs = (job_attrs or {}) | {'label': base_job_name, 'tool': tool}
-    j = b.new_job(j_name, j_attrs)
-    j.image(image_path('sambamba'))
+    j = b.new_job('sambamba_markdup', job_attrs | {'tool': tool})
+    j.image(image_path(tool))
 
     # Set resource requirements
     nthreads = requested_nthreads or 8
