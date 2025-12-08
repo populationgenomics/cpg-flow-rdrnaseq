@@ -16,7 +16,7 @@ from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
+from .bam_to_cram import cram_to_bam
 
 
 class Fraser:
@@ -47,48 +47,50 @@ class Fraser:
         self.min_delta_psi = str(min_delta_psi)
         self.delta_psi_cutoff = str(delta_psi_cutoff)
         self.min_count = str(min_count)
-
-        # Build OUTRIDER command
-        self.command = f"""\
-        # Create output directories
-        rm -rf plots results output
-        mkdir -p plots/heatmaps plots/volcano plots/misc results
-
-        # Extract FDS data
-        tar -xvf {self.fds_tar}
-        """
+        self.command = ''
         self.command += """\
-        R --vanilla <<EOF
-        library(FRASER)
-        library(tidyverse)
-        library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-        library(org.Hs.eg.db)
-        """
-        self.command += f"""\
-        # Set significance values and other parameters
-        pval_cutoff <- {self.pval_cutoff}
-        z_cutoff <- {self.z_cutoff}
-        minDeltaPsi <- {self.min_delta_psi}
-        deltaPsi_cutoff <- {self.delta_psi_cutoff}
-        min_count <- {self.min_count}
-        n_parallel_workers <- {self.nthreads - 1!s}
+# Set significance values and other parameters
+pval_cutoff <- {self.pval_cutoff}
+z_cutoff <- {self.z_cutoff}
+minDeltaPsi <- {self.min_delta_psi}
+deltaPsi_cutoff <- {self.delta_psi_cutoff}
+min_count <- {self.min_count}
+n_parallel_workers <- {self.nthreads - 1!s}
 
-        # Load FDS (pre-counted)
-        fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_id}")
+# Load FDS (pre-counted)
+fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_id}")
 
-        # Extract count data and build new FDS using the FraserDataSet command
-        sample_table <- fds@colData
-        raw_counts_splice_sites <- cbind(
-          as.data.table(granges(rowRanges(fds, type="ss"))),
-          as.data.table(rowData(fds, type="ss")),
-          as.data.table(counts(fds, type="ss"))
-        )
-        raw_counts_junctions <- cbind(
-          as.data.table(granges(rowRanges(fds, type="j"))),
-          as.data.table(counts(fds, type="j")),
-          as.data.table(rowData(fds, type="j"))
-        )
-        rm(fds)
+# Extract count data and build new FDS using the FraserDataSet command
+sample_table <- fds@colData
+
+prepare_counts_table <- function(fds_obj, type) {{
+    # Extract data as data.tables
+    gr <- as.data.table(granges(rowRanges(fds_obj, type = type)))
+    cnts <- as.data.table(counts(fds_obj, type = type))
+    mdata <- as.data.table(rowData(fds_obj, type = type))
+
+    # Remove metadata columns that duplicate genomic ranges (start, end, etc.)
+    duplicates <- intersect(colnames(mdata), colnames(gr))
+    if(length(duplicates) > 0) {{
+        mdata <- mdata %>% dplyr::select(-all_of(duplicates))
+    }}
+
+    # Bind them together
+    cbind(gr, mdata, cnts)
+}}
+
+# Apply the helper function
+raw_counts_junctions <- prepare_counts_table(fds, "j")
+raw_counts_splice_sites <- prepare_counts_table(fds, "ss")
+
+# Safety Check: Ensure all sample names exist in the new tables
+missing_samples <- setdiff(rownames(sample_table), colnames(raw_counts_junctions))
+if(length(missing_samples) > 0) {{
+  stop("Error: The following samples from colData are missing in the count matrix: ",
+       paste(missing_samples, collapse=", "))
+}}
+
+rm(fds)
 
         fds <- FraserDataSet(
           colData = sample_table,
