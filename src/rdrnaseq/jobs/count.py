@@ -10,7 +10,7 @@ from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
+from .bam_to_cram import cram_to_bam
 
 
 def count_res_group(b: hb.Batch) -> hb.ResourceGroup:
