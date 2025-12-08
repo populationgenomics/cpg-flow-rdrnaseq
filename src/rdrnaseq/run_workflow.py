@@ -14,7 +14,7 @@ from argparse import ArgumentParser
 from cpg_flow.workflow import run_workflow
 
 from rdrnaseq.stages import TrimAlignRNA
-
+from rdrnaseq.stages import Count
 
 def cli_main():
     """
