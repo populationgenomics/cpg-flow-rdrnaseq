@@ -13,8 +13,7 @@ from argparse import ArgumentParser
 
 from cpg_flow.workflow import run_workflow
 
-from rdrnaseq.stages import TrimAlignRNA
-from rdrnaseq.stages import Count
+from rdrnaseq.stages import TrimAlignRNA,Count,Fraser,Outrider
 
 def cli_main():
     """
@@ -30,7 +29,7 @@ def cli_main():
 
     # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
-    stages = [TrimAlignRNA,Count]
+    stages = [TrimAlignRNA,Count,Fraser,Outrider]
     run_workflow(name='rdrnaseq', stages=stages, dry_run=args.dry_run)
 
 
