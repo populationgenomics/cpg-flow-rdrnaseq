@@ -90,28 +90,6 @@ class Fraser:
         )
         rm(fds)
 
-        # Define the definitive set of sample names from your metadata
-        sample_names <- rownames(sample_table)
-
-        cat("--- Samples in Junction Counts but NOT in Sample Table (Should be empty if names match) ---\n")
-        setdiff(colnames(raw_counts_junctions), sample_names)
-
-        cat("--- Samples in Sample Table but NOT in Junction Counts (Should be empty if names match) ---\n")
-        setdiff(sample_names, colnames(raw_counts_junctions))
-
-        # 1. Define the definitive set of sample names (using colData as the source of truth)
-        sample_names <- rownames(sample_table)
-
-        # 2. Harmonize Junction Counts
-        junctions_to_keep <- intersect(colnames(raw_counts_junctions), sample_names)
-        raw_counts_junctions <- raw_counts_junctions[, junctions_to_keep]
-        raw_counts_junctions <- raw_counts_junctions[, sample_names] # Final re-ordering
-
-        # 3. Harmonize Splice Site Counts
-        ss_to_keep <- intersect(colnames(raw_counts_splice_sites), sample_names)
-        raw_counts_splice_sites <- raw_counts_splice_sites[, ss_to_keep]
-        raw_counts_splice_sites <- raw_counts_splice_sites[, sample_names] # Final re-ordering
-
         fds <- FraserDataSet(
           colData = sample_table,
           junctions = raw_counts_junctions,
