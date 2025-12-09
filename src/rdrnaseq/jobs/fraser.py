@@ -188,12 +188,13 @@ class Fraser:
         tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
         tar -czvf {self.output['misc_plots.tar.gz']} -C plots/misc .
 
-        # Copy significant results file
-        cp results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.\
-        min_count_{self.min_count}.csv {self.output['results.csv']}
+       # Python
+# Copy significant results file (quote paths and use `cp --`)
+cp -- "results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.min_count_{self.min_count}.csv" "{self.output['results.csv']}"
 
-        # Copy all results and tar saved objects
-        cp results/results.all.csv {self.output['results.all.csv']}
+# Copy all results (quote paths and use `cp --`)
+cp -- "results/results.all.csv" "{self.output['results.all.csv']}"
+
         tar -czvf {self.output['fds.tar.gz']} savedObjects/
         """
         self.command = dedent(self.command).strip()
