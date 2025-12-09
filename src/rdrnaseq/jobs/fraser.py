@@ -12,7 +12,7 @@ from cpg_flow.filetypes import (
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
-from cpg_utils.config import get_config, image_path
+from cpg_utils.config import get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
@@ -231,6 +231,7 @@ def fraser(
                 output_bam=potential_bam_path,
                 job_attrs=job_attrs,
                 requested_nthreads=requested_nthreads,
+                reference_fasta_path=reference_path('star/fasta'),
             )
             if j and isinstance(j, Job):
                 jobs.append(j)

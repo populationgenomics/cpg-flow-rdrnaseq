@@ -2,6 +2,7 @@
 Convert BAM to CRAM.
 """
 
+# ruff: noqa: E501
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path
 from cpg_utils.config import config_retrieve, image_path
@@ -63,12 +64,18 @@ def cram_to_bam(
     extra_label: str | None = None,
     job_attrs: dict | None = None,
     requested_nthreads: int | None = None,
+    reference_fasta_path: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
     """
     Convert a CRAM file to a BAM file.
     """
     b = get_batch()
 
+    # Get fasta file
+    fasta = b.read_input_group(
+        fasta=reference_fasta_path,
+        fasta_fai=f'{reference_fasta_path}.fai',
+    )
     if not isinstance(input_cram, ResourceGroup):
         raise TypeError(f'Expected input_cram to be a ResourceGroup, but got {type(input_cram).__name__}')
 
@@ -86,7 +93,7 @@ def cram_to_bam(
     res = STANDARD.set_resources(
         j=j,
         ncpu=nthreads,
-        storage_gb=50,  # TODO: make configurable
+        storage_gb=50,
     )
 
     j.declare_resource_group(
@@ -96,9 +103,8 @@ def cram_to_bam(
         },
     )
 
-    cmd = f'samtools view -@ {res.get_nthreads() - 1} -b {input_cram.cram} \
-        | tee {j.sorted_bam["bam"]} \
-        | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_bam["bam.bai"]}'
+    cmd = f"""samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -b {input_cram.cram} > {j.sorted_bam['bam']} && \
+    samtools index -@ {res.get_nthreads() - 1} {j.sorted_bam['bam']} {j.sorted_bam['bam.bai']}"""
     j.command(command(cmd, monitor_space=True))
 
     # Write BAM if requested
