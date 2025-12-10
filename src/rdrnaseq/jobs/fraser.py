@@ -2,6 +2,7 @@
 Perform aberrant splicing analysis with FRASER.
 """
 
+# ruff: noqa: E501
 from textwrap import dedent
 
 import hailtop.batch as hb
