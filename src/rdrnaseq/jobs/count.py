@@ -146,7 +146,7 @@ def count(
             output_bam=cram_to_bam_path,
             job_attrs=job_attrs,
             requested_nthreads=requested_nthreads,
-            reference_fasta_path=reference_path('broad/ref_fasta')
+            reference_fasta_path=reference_path('broad/ref_fasta'),
         )
         if j and isinstance(j, Job):
             jobs.append(j)
