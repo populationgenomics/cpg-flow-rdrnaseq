@@ -233,7 +233,7 @@ def fraser(
                 output_bam=potential_bam_path,
                 job_attrs=job_attrs,
                 requested_nthreads=requested_nthreads,
-                reference_fasta_path=reference_path('star/fasta'),
+                reference_fasta_path=reference_path('broad/ref_fasta'),
             )
             if j and isinstance(j, Job):
                 jobs.append(j)
