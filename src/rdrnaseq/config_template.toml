@@ -19,6 +19,9 @@ status_reporter = 'metamist'
 [trim]
 adapter_type = "ILLUMINA_TRUSEQ"
 
+[references.broad]
+ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
+
 [references.star]
 ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"
 gtf = "gs://cpg-common-main/references/star/hg38/hg38.gtf"

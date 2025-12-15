@@ -138,7 +138,7 @@ def align(
             input_bam=out_bam,
             job_attrs=job_attrs,
             requested_nthreads=4,
-            reference_fasta_path=reference_path('star/fasta'),
+            reference_fasta_path=reference_path('broad/ref_fasta'),
         )
         jobs.append(j)
         out_cram_path = to_path(output_cram.path)
