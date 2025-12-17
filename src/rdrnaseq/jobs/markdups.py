@@ -1,0 +1,74 @@
+"""
+Mark duplicates in BAM files using sambamba markdup
+"""
+
+from cpg_flow.filetypes import BamPath
+from cpg_flow.resources import STANDARD
+from cpg_flow.utils import Path
+from cpg_utils.config import image_path
+from cpg_utils.hail_batch import command, get_batch
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
+
+
+class Markdup:
+    """
+    Construct a sambamba markdup command for marking duplicates
+    """
+
+    def __init__(self, input_bam: BamPath | Path | str, output_bam: Path | str, nthreads: int = 8):
+        self.command = [
+            'sambamba markdup',
+            '-t',
+            str(nthreads),
+            '--tmpdir=$BATCH_TMPDIR/markdup',
+            str(input_bam),
+            str(output_bam),
+        ]
+
+    def __str__(self) -> str:
+        return 'mkdir -p $BATCH_TMPDIR/markdup && ' + ' '.join(self.command)
+
+    def __repr__(self) -> str:
+        return str(self)
+
+
+def markdup(
+    input_bam: ResourceGroup,
+    job_attrs: dict,
+    requested_nthreads: int | None = None,
+) -> tuple[Job | None, ResourceGroup]:
+    """
+    Takes an input BAM file and creates a job to mark duplicates with sambamba markdup.
+    """
+
+    b = get_batch()
+
+    if not isinstance(input_bam, ResourceGroup):
+        raise TypeError(f'Expected input_bam to be a ResourceGroup, but got {type(input_bam).__name__}')
+
+    tool = 'sambamba'
+    j = b.new_job('sambamba_markdup', job_attrs | {'tool': tool})
+    j.image(image_path(tool))
+
+    # Set resource requirements
+    nthreads = requested_nthreads or 8
+    res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
+
+    j.declare_resource_group(
+        output_bam={
+            'bam': '{root}.bam',
+            'bam.bai': '{root}.bam.bai',
+        },
+    )
+    if not isinstance(j.output_bam, ResourceGroup):
+        raise TypeError(f'Expected j.output_bam to be a ResourceGroup, but got {type(j.output_bam).__name__}')
+
+    cmd = Markdup(
+        input_bam=input_bam.bam,
+        output_bam=j.output_bam.bam,
+        nthreads=res.get_nthreads(),
+    )
+    j.command(command(str(cmd), monitor_space=True))
+
+    return j, j.output_bam

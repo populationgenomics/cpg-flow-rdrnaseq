@@ -1,0 +1,39 @@
+# this is a template for the config file
+# demonstrating some of the common options used in cpg-flow
+[workflow]
+
+
+name = 'rdrnaseq'
+
+# mandatory fields for cpg-flow, not populated by analysis-runner
+
+sequencing_type = 'transcriptome'
+
+# used to make sure we don't repeat previously completed stages
+check_expected_outputs = true
+
+# the method to register outputs, can be missing - will not generate metamist analysis entries
+status_reporter = 'metamist'
+
+
+[trim]
+adapter_type = "ILLUMINA_TRUSEQ"
+
+[references.broad]
+ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
+
+[references.star]
+ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"
+gtf = "gs://cpg-common-main/references/star/hg38/hg38.gtf"
+fasta = "gs://cpg-common-main/references/star/hg38/hg38.fa"
+
+[images]
+star = "australia-southeast1-docker.pkg.dev/cpg-common/images/star:2.7.10b"
+fastp = "australia-southeast1-docker.pkg.dev/cpg-common/images/fastp:1.0.1-1"
+fraser = "australia-southeast1-docker.pkg.dev/cpg-common/images/fraser:1.12.1"
+outrider = "australia-southeast1-docker.pkg.dev/cpg-common/images/outrider:1.18.1"
+picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:2.27.4"
+sambamba = "australia-southeast1-docker.pkg.dev/cpg-common/images/sambamba:1.0.1"
+samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0.1.26-1"
+samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
+subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"

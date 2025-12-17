@@ -1,32 +1,29 @@
-# cpg-flow-pipeline-template
-A template repository to use as a base for CPG workflows using the cpg-flow pipeline framework
+## Pipeline Overview
 
-## Purpose
+This pipeline implements a comprehensive RNA-seq workflow with four main stages:
 
-When migrating workflows from production-pipelines, this template respository structure can be used to start with a
-sensible directory structure, and some suggested conventions for naming and placement of files.
+**Per-sample stages:**
+- **TrimAlignRNA**: Trims paired FASTQ files using fastp and aligns reads to the genome with STAR. Outputs a CRAM file with index (`<dataset_prefix>/cram/<sequencing_group_id>.cram` and `.crai`) and temporary BAM file with index (`<tmp_prefix>/bam/<sequencing_group_id>.bam` and `.bai`).
 
-```commandline
-src
-├── workflow_name
-│   ├── __init__.py
-│   ├── config_template.toml
-│   ├── jobs
-│   │   └── LogicForAStage.py
-│   ├── main.py
-│   ├── stages.py
-│   └── utils.py
-```
+- **Count**: Quantifies gene/transcript read counts from aligned reads using featureCounts. Produces count files (`<dataset_prefix>/count/<sequencing_group_id>.count`) and summary statistics (`<dataset_prefix>/count/<sequencing_group_id>.count.summary`).
 
-`workflow_name` occurs in a number of places ([pyproject.toml](pyproject.toml), [src](src), and the workflow name in the
-template config file). It is intended that you remove this generic placeholder name, and replace it with the name of
-your workflow.
+**Cohort-level stages:**
+- **Fraser**: Performs aberrant splicing analysis across samples in a cohort. Consumes BAM files (preferred) or CRAM files and generates an FDS archive (`<dataset_prefix>/fraser/<cohort_id>.fds.tar.gz`).
 
-`stages.py` contains Stages in the workflow, with the actual logic imported from files in `jobs`.
+- **Outrider**: Conducts outlier gene expression analysis using count data from all samples in a cohort. Outputs results as R data files (`<dataset_prefix>/outrider/<cohort_id>.outrider.RData`).
+## Planned Future Improvements
+- Integration of additional QC metrics and visualization tools. (Integrating PICARD.)
+- Updating Fraser to its latest version for improved splicing analysis.
+- Optimization to improve scalability and efficiency.
+## Usage
 
-`stages.py` also links to the Pipeline Naming Conventions document, containing a number of recommendations for naming
-Stages and other elements of the workflow.
-
-`config_template.toml` is a template, indicating the settings which are mandatory for the pipeline to run. In
-production-pipelines, many of these settings were satisfied by the cpg-workflows or per-workflow default TOML files. If
-a pipeline is being migrated from production-pipelines, the previous default config TOML would be a better substitute.
+```bash
+analysis-runner \
+    --dataset seqr \
+    --image australia-southeast1-docker.pkg.dev/cpg-common/images-dev/rdrnaseq:0.2.0-1 \
+    --skip-repo-checkout \
+    --description "RNA-seq analysis" \
+    -o "output-description" \
+    --access-level full \
+    --config src/rdrnaseq/config_template.toml \
+    python3 src/rdrnaseq/run_workflow.py
