@@ -7,7 +7,8 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from cpg_flow import stage, targets, utils as flow_utils
+from cpg_flow import stage, targets
+from cpg_flow import utils as flow_utils
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
@@ -19,7 +20,7 @@ from hailtop.batch.job import Job
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
-
+# set of SG IDs where we need to generate a BAM
 NEEDS_CRAM: set[str] = set()
 
 
