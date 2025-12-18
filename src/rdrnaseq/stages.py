@@ -21,7 +21,7 @@ from hailtop.batch.job import Job
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 # set of SG IDs where we need to generate a BAM
-NEEDS_CRAM: set[str] = set()
+NEEDS_BAM: set[str] = set()
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -105,7 +105,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         jobs = []
 
         # cram exists, we'd only be executing this logic if the BAM didn't - run CRAM -> BAM
-        if flow_utils.check_exists_path(outputs['cram']) and sequencing_group.id in NEEDS_CRAM:
+        if flow_utils.check_exists_path(outputs['cram']) and sequencing_group.id in NEEDS_BAM:
             j, _output_bam = bam_to_cram.cram_to_bam(
                 input_cram_path=outputs['cram'],
                 output_bam=outputs['bam'],
@@ -179,7 +179,7 @@ class Count(stage.SequencingGroupStage):
         }
 
         if not flow_utils.check_exists_path(outputs['count']):
-            NEEDS_CRAM.add(sequencing_group.id)
+            NEEDS_BAM.add(sequencing_group.id)
         return outputs
 
     def queue_jobs(
@@ -215,7 +215,7 @@ class Fraser(stage.CohortStage):
         """
         output = cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
         if not flow_utils.check_exists_path(output):
-            NEEDS_CRAM.update(cohort.get_sequencing_group_ids())
+            NEEDS_BAM.update(cohort.get_sequencing_group_ids())
         return output
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:

@@ -6,7 +6,6 @@ Perform aberrant splicing analysis with FRASER.
 from textwrap import dedent
 
 import hailtop.batch as hb
-from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
