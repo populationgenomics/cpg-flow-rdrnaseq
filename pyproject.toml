@@ -7,7 +7,7 @@ name='rdrnaseq'
 description='Rare Disease RNAseq workflow, implemented in CPG-Flow'
 readme = "README.md"
 requires-python = ">=3.10,<3.11"
-version='0.2.0'
+version="0.2.1"
 license={ "file" = "LICENSE" }
 classifiers=[
     'Environment :: Console',
@@ -95,7 +95,7 @@ cpg = ["cpg-flow", "cpg-utils"]
 hail = ["hail"]
 
 [tool.bumpversion]
-current_version = "0.2.0"
+current_version = "0.2.1"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 commit = true
