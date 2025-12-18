@@ -113,6 +113,9 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             )
             return self.make_outputs(sequencing_group, data=outputs, jobs=j)
 
+        elif flow_utils.check_exists_path(outputs['cram']):
+            return self.make_outputs(sequencing_group, data=outputs)
+
         # do the alignment
         # Run trim
         input_fq_pairs = get_trim_inputs(sequencing_group)
