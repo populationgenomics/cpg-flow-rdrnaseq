@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from cpg_flow import stage, targets, utils
+from cpg_flow import stage, targets
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
@@ -17,7 +17,7 @@ from cpg_flow.filetypes import (
 from cpg_utils import Path
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -77,13 +77,13 @@ class TrimAlignRNA(stage.SequencingGroupStage):
     Trim and align RNA-seq FASTQ reads with fastp and STAR
     """
 
-    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path | str]:
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
         """
         Expect a pair of CRAM and CRAI files, one per set of input FASTQ files
         """
         return {
             'cram': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram',
-            'bam': str(sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam'),
+            'bam': sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam',
         }
 
     def queue_jobs(
@@ -100,6 +100,16 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         jobs = []
 
+        # cram exists, we'd only be executing this logic if the BAM didn't - run CRAM -> BAM
+        if outputs['cram'].exists():
+            j, _output_bam = bam_to_cram.cram_to_bam(
+                input_cram_path=outputs['cram'],
+                output_bam=outputs['bam'],
+                job_attrs=self.get_job_attrs(sequencing_group),
+            )
+            return self.make_outputs(sequencing_group, data=outputs, jobs=j)
+
+        # do the alignment
         # Run trim
         input_fq_pairs = get_trim_inputs(sequencing_group)
         if not input_fq_pairs:
@@ -140,11 +150,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 job_attrs=attributes,
             )
             if align_jobs:
-                if not isinstance(align_jobs, list):
-                    raise TypeError(f'Expected align_jobs to be a list, got {type(align_jobs).__name__}')
-                for j in align_jobs:
-                    if not isinstance(j, Job):
-                        raise TypeError(f'Expected each item in align_jobs to be a Job, got {type(j).__name__}')
                 jobs.extend(align_jobs)
         except Exception as e:
             logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
@@ -177,16 +182,10 @@ class Count(stage.SequencingGroupStage):
         """
         outputs = self.expected_outputs(sequencing_group)
 
-        cram_path = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
-        input_cram_or_bam: BamPath | CramPath = CramPath(cram_path, f'{cram_path!s}.crai')
-
         bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-        if utils.exists(bam_path):
-            input_cram_or_bam = BamPath(bam_path, index_path=f'{bam_path!s}.bai')
 
         jobs = count.count(
-            input_cram_or_bam=input_cram_or_bam,
-            cram_to_bam_path=bam_path,
+            bam_path=bam_path,
             output_path=outputs['count'],
             summary_path=outputs['summary'],
             sg_id=sequencing_group.id,
@@ -217,17 +216,13 @@ class Fraser(stage.CohortStage):
 
         sequencing_groups = cohort.get_sequencing_groups()
 
-        bam_or_cram_inputs: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]] = []
+        bam_inputs: list[tuple[str, BamPath]] = []
         for sequencing_group in sequencing_groups:
-            cram_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'cram')
             bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-            if utils.exists(bam_path):
-                bam_or_cram_inputs.append((sequencing_group.id, BamPath(bam_path, f'{bam_path}.bai'), None))
-            else:
-                bam_or_cram_inputs.append((sequencing_group.id, CramPath(cram_path, f'{cram_path!s}.crai'), bam_path))
+            bam_inputs.append((sequencing_group.id, BamPath(bam_path, f'{bam_path}.bai')))
 
         j = fraser.fraser(
-            input_bams_or_crams=bam_or_cram_inputs,
+            input_bams=bam_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),

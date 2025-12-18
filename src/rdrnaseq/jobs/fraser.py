@@ -6,18 +6,13 @@ Perform aberrant splicing analysis with FRASER.
 from textwrap import dedent
 
 import hailtop.batch as hb
-from cpg_flow.filetypes import (
-    BamPath,
-    CramPath,
-)
+from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
-from cpg_utils.config import get_config, image_path, reference_path
+from cpg_utils.config import config_retrieve, get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
-
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
 class Fraser:
@@ -208,11 +203,10 @@ cp -- "results/results.all.csv" "{self.output['results.all.csv']}"
 
 
 def fraser(
-    input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
+    input_bams: list[tuple[str, BamPath]],
     cohort_id: str,
     job_attrs: dict[str, str],
     output_fds_path: str | Path | None = None,
-    requested_nthreads: int | None = None,
 ) -> list[Job]:
     """
     Run FRASER.
@@ -222,38 +216,24 @@ def fraser(
     jobs: list[Job] = []
 
     # Convert CRAMs to BAMs if necessary
-    input_bams_localised: dict[str, hb.ResourceFile] = {}
-    for input_bam_or_cram_tuple in input_bams_or_crams:
-        sample_id = input_bam_or_cram_tuple[0]
-        input_bam_or_cram = input_bam_or_cram_tuple[1]
-        potential_bam_path = input_bam_or_cram_tuple[2]
-        if isinstance(input_bam_or_cram, CramPath) and isinstance(potential_bam_path, Path):
-            j, output_bam = cram_to_bam(
-                input_cram=input_bam_or_cram.resource_group(b),
-                output_bam=potential_bam_path,
-                job_attrs=job_attrs,
-                requested_nthreads=requested_nthreads,
-                reference_fasta_path=reference_path('broad/ref_fasta'),
-            )
-            if j and isinstance(j, Job):
-                jobs.append(j)
-            input_bams_localised[sample_id] = output_bam.bam
-        elif isinstance(input_bam_or_cram, BamPath):
-            # Localise BAM
-            input_bams_localised[sample_id] = input_bam_or_cram.resource_group(b).bam
-    # Use a generator to find the first element that is NOT a ResourceFile
-    if any(not isinstance(f, hb.ResourceFile) for f in input_bams_localised.values()):
-        raise TypeError('All elements in input_bams_localised must be instances of hb.ResourceFile.')
+    input_bams_localised: dict[str, hb.ResourceFile] = {
+        sample_id: b.read_input_group(
+            **{
+                'bam': str(input_bam),
+                'bam.bai': f'{input_bam}.bai',
+            }
+        ).bam
+        for sample_id, input_bam in input_bams
+    }
 
     # Create FRASER job
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
         storage_gb=50,
     )
 
@@ -275,7 +255,6 @@ def fraser(
         cohort_id=cohort_id,
         output_counts_prefix=output_counts_prefix,
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
     )
     jobs.extend(count_jobs)
 
@@ -320,7 +299,6 @@ def fraser_count(
     cohort_id: str,
     output_counts_prefix: Path,
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[list[Job], hb.ResourceFile]:
     """
     Run FRASER counting.
@@ -331,7 +309,6 @@ def fraser_count(
         input_bams_localised=input_bams_localised,
         cohort_id=cohort_id,
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
     )
     jobs.append(j)
 
@@ -345,7 +322,6 @@ def fraser_count(
             cohort_id=cohort_id,
             output_counts_path=output_counts_path,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
         )
         if sample_j:
             jobs.append(sample_j)
@@ -357,7 +333,6 @@ def fraser_count(
         split_counts_dict=split_counts_dict,
         bams=list(input_bams_localised.values()),
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
     )
     jobs.append(j)
 
@@ -374,7 +349,6 @@ def fraser_count(
             bam=input_bams_localised[sample_id],
             output_counts_path=output_counts_path,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
         )
         jobs.append(sample_j)
         non_spliced_counts_dict[sample_id] = non_spliced_counts
@@ -386,7 +360,6 @@ def fraser_count(
         split_counts=split_counts_rg,
         bams=list(input_bams_localised.values()),
         job_attrs=job_attrs,
-        requested_nthreads=requested_nthreads,
     )
     jobs.append(j)
 
@@ -397,7 +370,6 @@ def fraser_init(
     input_bams_localised: dict[str, hb.ResourceFile],
     cohort_id: str,
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[Job, hb.ResourceFile, list[str]]:
     """
     Run FRASER initialisation.
@@ -409,10 +381,9 @@ def fraser_init(
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_init'], 8),
         storage_gb=50,
     )
 
@@ -470,7 +441,6 @@ def fraser_count_split_reads_one_sample(
     cohort_id: str,
     output_counts_path: Path,
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[Job | None, hb.ResourceFile]:
     """
     Run FRASER split-read counting for a single sample.
@@ -486,10 +456,9 @@ def fraser_count_split_reads_one_sample(
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_split_one_sample'], 8),
         storage_gb=50,
     )
 
@@ -540,7 +509,6 @@ def fraser_merge_split_reads(
     split_counts_dict: dict[str, hb.ResourceFile],
     bams: list[hb.ResourceFile],
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[Job, hb.ResourceGroup]:
     """
     Merge split-read counts.
@@ -552,10 +520,9 @@ def fraser_merge_split_reads(
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
         storage_gb=50,
     )
 
@@ -644,7 +611,6 @@ def fraser_count_non_split_reads_one_sample(
     bam: hb.ResourceFile,
     output_counts_path: Path,
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Run FRASER non-split-read counting for a single sample.
@@ -658,10 +624,9 @@ def fraser_count_non_split_reads_one_sample(
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_nonsplit_one_sample'], 8),
         storage_gb=50,
     )
 
