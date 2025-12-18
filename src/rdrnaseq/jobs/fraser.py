@@ -684,7 +684,6 @@ def fraser_merge_non_split_reads(
     split_counts: hb.ResourceGroup,
     bams: list[hb.ResourceFile],
     job_attrs: dict[str, str],
-    requested_nthreads: int | None = None,
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Merge non-split-read counts.
@@ -697,10 +696,9 @@ def fraser_merge_non_split_reads(
     j.image(image_path('fraser'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'fraser_merge_cpu'], 8),
         storage_gb=50,
     )
 
