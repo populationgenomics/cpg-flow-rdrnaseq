@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from cpg_flow import stage, targets
+from cpg_flow import stage, targets, utils as flow_utils
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
@@ -20,7 +20,7 @@ from hailtop.batch.job import Job
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 
-NEEDS_CRAM: set[str] = {}
+NEEDS_CRAM: set[str] = set()
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -104,7 +104,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         jobs = []
 
         # cram exists, we'd only be executing this logic if the BAM didn't - run CRAM -> BAM
-        if outputs['cram'].exists() and sequencing_group.id in NEEDS_CRAM:
+        if flow_utils.check_exists_path(outputs['cram']) and sequencing_group.id in NEEDS_CRAM:
             j, _output_bam = bam_to_cram.cram_to_bam(
                 input_cram_path=outputs['cram'],
                 output_bam=outputs['bam'],
@@ -177,7 +177,7 @@ class Count(stage.SequencingGroupStage):
             'summary': sequencing_group.dataset.prefix() / 'count' / f'{sequencing_group.id}.count.summary',
         }
 
-        if not outputs['count'].exists():
+        if not flow_utils.check_exists_path(outputs['count']):
             NEEDS_CRAM.add(sequencing_group.id)
         return outputs
 
@@ -212,10 +212,10 @@ class Fraser(stage.CohortStage):
         """
         Generate FRASER outputs.
         """
-        outputs = cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
-        if not outputs.exists():
+        output = cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
+        if not flow_utils.check_exists_path(output):
             NEEDS_CRAM.update(cohort.get_sequencing_group_ids())
-        return outputs
+        return output
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
