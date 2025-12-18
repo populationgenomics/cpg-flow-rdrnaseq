@@ -20,6 +20,9 @@ from hailtop.batch.job import Job
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 
+NEEDS_CRAM: set[str] = {}
+
+
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
     """
     Get the input FASTQ file pairs for trimming
@@ -101,7 +104,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         jobs = []
 
         # cram exists, we'd only be executing this logic if the BAM didn't - run CRAM -> BAM
-        if outputs['cram'].exists():
+        if outputs['cram'].exists() and sequencing_group.id in NEEDS_CRAM:
             j, _output_bam = bam_to_cram.cram_to_bam(
                 input_cram_path=outputs['cram'],
                 output_bam=outputs['bam'],
@@ -169,10 +172,14 @@ class Count(stage.SequencingGroupStage):
         """
         Generate a text file output containing read counts.
         """
-        return {
+        outputs = {
             'count': sequencing_group.dataset.prefix() / 'count' / f'{sequencing_group.id}.count',
             'summary': sequencing_group.dataset.prefix() / 'count' / f'{sequencing_group.id}.count.summary',
         }
+
+        if not outputs['count'].exists():
+            NEEDS_CRAM.add(sequencing_group.id)
+        return outputs
 
     def queue_jobs(
         self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
@@ -205,7 +212,10 @@ class Fraser(stage.CohortStage):
         """
         Generate FRASER outputs.
         """
-        return cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
+        outputs = cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
+        if not outputs.exists():
+            NEEDS_CRAM.update(cohort.get_sequencing_group_ids())
+        return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -216,10 +226,9 @@ class Fraser(stage.CohortStage):
 
         sequencing_groups = cohort.get_sequencing_groups()
 
-        bam_inputs: list[tuple[str, BamPath]] = []
+        bam_inputs: list[tuple[str, Path]] = []
         for sequencing_group in sequencing_groups:
-            bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-            bam_inputs.append((sequencing_group.id, BamPath(bam_path, f'{bam_path}.bai')))
+            bam_inputs.append((sequencing_group.id, inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')))
 
         j = fraser.fraser(
             input_bams=bam_inputs,

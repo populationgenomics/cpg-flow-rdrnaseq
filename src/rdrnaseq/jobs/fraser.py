@@ -203,7 +203,7 @@ cp -- "results/results.all.csv" "{self.output['results.all.csv']}"
 
 
 def fraser(
-    input_bams: list[tuple[str, BamPath]],
+    input_bams: list[tuple[str, Path]],
     cohort_id: str,
     job_attrs: dict[str, str],
     output_fds_path: str | Path | None = None,
