@@ -3,14 +3,12 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 import hailtop.batch as hb
-from cpg_flow.filetypes import BamPath, CramPath
+from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
-from cpg_utils import Path, to_path
-from cpg_utils.config import get_config, image_path, reference_path
+from cpg_utils import Path, config, to_path
+from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
-
-from .bam_to_cram import cram_to_bam
 
 
 def count_res_group(b: hb.Batch) -> hb.ResourceGroup:
@@ -107,13 +105,11 @@ class FeatureCounts:
 
 
 def count(
-    input_cram_or_bam: BamPath | CramPath,
+    bam_path: Path,
     output_path: Path,
     summary_path: Path,
     job_attrs: dict[str, str],
     sg_id: str,
-    cram_to_bam_path: Path | None = None,
-    requested_nthreads: int | None = None,
 ) -> list[Job]:
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
@@ -123,35 +119,12 @@ def count(
 
     jobs: list[Job] = []
 
-    # Determine whether input is a BAM file or a CRAM file
-    if isinstance(input_cram_or_bam, BamPath):
-        # Localise input
-        input_bam_reads = b.read_input_group(
-            **{
-                'bam': str(input_cram_or_bam.path),
-                'bam.bai': str(input_cram_or_bam.index_path),
-            },
-        )
-    elif isinstance(input_cram_or_bam, CramPath):
-        # Localise input
-        input_cram_reads = b.read_input_group(
-            **{
-                'cram': str(input_cram_or_bam.path),
-                'cram.crai': str(input_cram_or_bam.index_path),
-            },
-        )
-        # Convert CRAM to BAM
-        j, input_bam_reads = cram_to_bam(
-            input_cram=input_cram_reads,
-            output_bam=cram_to_bam_path,
-            job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
-            reference_fasta_path=reference_path('broad/ref_fasta'),
-        )
-        if j and isinstance(j, Job):
-            jobs.append(j)
-    else:
-        raise ValueError(f'Invalid alignment input: "{input_cram_or_bam!s}", expected BAM or CRAM file.')
+    input_bam_reads = b.read_input_group(
+        **{
+            'bam': bam_path,
+            'bam.bai': f'{bam_path}.bai',
+        },
+    )
 
     if not isinstance(input_bam_reads, hb.ResourceGroup):
         raise TypeError(f'Expected input_bam_reads to be a ResourceGroup, but got {type(input_bam_reads).__name__}')
@@ -163,10 +136,9 @@ def count(
     j.image(image_path('subread'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config.config_retrieve(['workflow', 'count_cpu'], 8),
         storage_gb=50,  # TODO: make configurable
     )
 
