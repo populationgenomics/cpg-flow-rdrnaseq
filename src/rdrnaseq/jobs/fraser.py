@@ -380,8 +380,10 @@ def fraser_init(
     j.image(image_path('fraser'))
     # Set resource requirements
     num_bams = len(list(input_bams_localised.items()))
-    def_storage= + 50+(num_bams * 10)
-    storage_needed = config_retrieve(['workflow','fraser_init_storage'],def_storage)  # Estimate storage based on number of BAMs
+    def_storage = +50 + (num_bams * 10)
+    storage_needed = config_retrieve(
+        ['workflow', 'fraser_init_storage'], def_storage
+    )  # Estimate storage based on number of BAMs
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_init_cpu'], 8),
