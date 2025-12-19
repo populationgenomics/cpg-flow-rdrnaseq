@@ -5,8 +5,8 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 import hailtop.batch as hb
 from cpg_flow.filetypes import BamPath, CramPath
 from cpg_flow.resources import STANDARD
-from cpg_utils import Path, to_path
-from cpg_utils.config import get_config, image_path, reference_path
+from cpg_utils import Path, config, to_path
+from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
@@ -163,10 +163,9 @@ def count(
     j.image(image_path('subread'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config.config_retrieve(['workflow', 'count_cpu'], 8),
         storage_gb=50,  # TODO: make configurable
     )
 

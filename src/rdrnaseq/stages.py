@@ -140,11 +140,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 job_attrs=attributes,
             )
             if align_jobs:
-                if not isinstance(align_jobs, list):
-                    raise TypeError(f'Expected align_jobs to be a list, got {type(align_jobs).__name__}')
-                for j in align_jobs:
-                    if not isinstance(j, Job):
-                        raise TypeError(f'Expected each item in align_jobs to be a Job, got {type(j).__name__}')
                 jobs.extend(align_jobs)
         except Exception as e:
             logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
