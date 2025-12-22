@@ -5,7 +5,7 @@ Convert BAM to CRAM.
 # ruff: noqa: E501
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path
-from cpg_utils.config import config_retrieve, image_path, reference_path
+from cpg_utils.config import config_retrieve, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch import ResourceGroup
 from hailtop.batch.job import Job
@@ -59,24 +59,16 @@ def bam_to_cram(
 
 
 def cram_to_bam(
-    input_cram_path: Path,
+    input_cram: ResourceGroup,
     output_bam: Path | None = None,
     extra_label: str | None = None,
     job_attrs: dict | None = None,
+    reference_fasta_path: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
     """
     Convert a CRAM file to a BAM file.
     """
     b = get_batch()
-
-    reference_fasta_path = reference_path('broad/ref_fasta')
-
-    input_cram = b.read_input_group(
-        **{
-            'cram': str(input_cram_path),
-            'cram.crai': f'{input_cram_path}.crai',
-        },
-    )
 
     # Get fasta file
     fasta = b.read_input_group(

@@ -13,7 +13,7 @@ from cpg_flow.filetypes import (
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve, get_config, image_path
+from cpg_utils.config import config_retrieve, get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
@@ -231,7 +231,6 @@ def fraser(
                 input_cram=input_bam_or_cram.resource_group(b),
                 output_bam=potential_bam_path,
                 job_attrs=job_attrs,
-                requested_nthreads=requested_nthreads,
                 reference_fasta_path=reference_path('broad/ref_fasta'),
             )
             if j and isinstance(j, Job):
@@ -399,7 +398,7 @@ def fraser_init(
     j.image(image_path('fraser'))
     # Set resource requirements
     num_bams = len(list(input_bams_localised.items()))
-    def_storage = +50 + (num_bams * 10)
+    def_storage = 50 + (num_bams * 10)
     storage_needed = config_retrieve(
         ['workflow', 'fraser_init_storage'], def_storage
     )  # Estimate storage based on number of BAMs

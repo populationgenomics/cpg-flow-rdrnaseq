@@ -129,18 +129,20 @@ def align(
     out_bam = mkdup_bam
 
     # Output writing
-    out_bam_path = to_path(output_bam.path)
-    b.write_output(out_bam, str(out_bam_path.with_suffix('')))
+    if output_bam:
+        out_bam_path = to_path(output_bam.path)
+        b.write_output(out_bam, str(out_bam_path.with_suffix('')))
 
-    j, out_cram = bam_to_cram(
-        input_bam=out_bam,
-        job_attrs=job_attrs,
-        requested_nthreads=4,
-        reference_fasta_path=reference_path('broad/ref_fasta'),
-    )
-    jobs.append(j)
-    out_cram_path = to_path(output_cram.path)
-    b.write_output(out_cram, str(out_cram_path.with_suffix('')))
+    if output_cram:
+        j, out_cram = bam_to_cram(
+            input_bam=out_bam,
+            job_attrs=job_attrs,
+            requested_nthreads=4,
+            reference_fasta_path=reference_path('broad/ref_fasta'),
+        )
+        jobs.append(j)
+        out_cram_path = to_path(output_cram.path)
+        b.write_output(out_cram, str(out_cram_path.with_suffix('')))
 
     return jobs
 

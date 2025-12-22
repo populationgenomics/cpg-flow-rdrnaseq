@@ -6,7 +6,7 @@ import hailtop.batch as hb
 from cpg_flow.filetypes import BamPath, CramPath
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path, config, to_path
-from cpg_utils.config import get_config, image_path
+from cpg_utils.config import get_config, image_path, reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
@@ -113,7 +113,6 @@ def count(
     job_attrs: dict[str, str],
     sg_id: str,
     cram_to_bam_path: Path | None = None,
-    requested_nthreads: int | None = None,
 ) -> list[Job]:
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
@@ -145,7 +144,6 @@ def count(
             input_cram=input_cram_reads,
             output_bam=cram_to_bam_path,
             job_attrs=job_attrs,
-            requested_nthreads=requested_nthreads,
             reference_fasta_path=reference_path('broad/ref_fasta'),
         )
         if j and isinstance(j, Job):
