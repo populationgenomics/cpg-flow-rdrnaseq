@@ -201,7 +201,8 @@ class Fraser(stage.CohortStage):
         """
         Generate FRASER outputs.
         """
-        return cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
+        return {'Rds_data':cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz',
+                'seqr_data':cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv'}
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -240,7 +241,8 @@ class Outrider(stage.CohortStage):
         """
         Generate outrider outputs.
         """
-        return cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData'
+        return {'RData':cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData',
+                'seqr_out':cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.aberrant_genes_per_sample.csv'}
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -252,7 +254,7 @@ class Outrider(stage.CohortStage):
         ]
         j = outrider.outrider(
             input_counts=count_inputs,
-            output_rdata_path=output,
+            output_rdata_path=output['RData'],
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
