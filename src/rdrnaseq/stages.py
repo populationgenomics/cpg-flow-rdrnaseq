@@ -239,7 +239,7 @@ class Outrider(stage.CohortStage):
     Perform outlier gene expression analysis with Outrider.
     """
 
-    def expected_outputs(self, cohort: targets.Cohort) ->  dict[str, Path]:
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         """
         Generate outrider outputs.
         """
