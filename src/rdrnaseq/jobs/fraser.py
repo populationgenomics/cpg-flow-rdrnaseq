@@ -720,7 +720,7 @@ def fraser_merge_non_split_reads(
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_merge_cpu'], 8),
+        ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
         storage_gb=50,
     )
 
