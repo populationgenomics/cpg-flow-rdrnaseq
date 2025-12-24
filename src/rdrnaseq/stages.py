@@ -197,7 +197,7 @@ class Fraser(stage.CohortStage):
     Perform aberrant splicing analysis with FRASER.
     """
 
-    def expected_outputs(self, cohort: targets.Cohort) -> Path:
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         """
         Generate FRASER outputs.
         """
@@ -239,7 +239,7 @@ class Outrider(stage.CohortStage):
     Perform outlier gene expression analysis with Outrider.
     """
 
-    def expected_outputs(self, cohort: targets.Cohort) -> Path:
+    def expected_outputs(self, cohort: targets.Cohort) ->  dict[str, Path]:
         """
         Generate outrider outputs.
         """
