@@ -58,8 +58,8 @@ def align(
     fastq_pairs: FastqPairs,
     sample_name: str,
     job_attrs: dict,
-    output_bam: BamPath | None = None,
-    output_cram: CramPath | None = None,
+    output_bam: BamPath,
+    output_cram: CramPath,
 ) -> list[Job] | None:
     """
     Align (potentially multiple) FASTQ pairs using STAR,

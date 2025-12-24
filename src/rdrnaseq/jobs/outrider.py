@@ -273,10 +273,10 @@ class Outrider:
         tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
         tar -czvf {self.output['gene_plots.tar.gz']} -C plots/sig_genes .
         tar -czvf {self.output['stats_plots.tar.gz']} -C plots/stats .
-        cp results/results.significant.csv {self.output['results.txt']}
-        cp results/results.all.csv {self.output['results.all.txt']}
-        cp results/aberrant_genes_per_sample.csv {self.output['aberrant_genes_per_sample.txt']}
-        cp results/aberrant_samples_per_gene.csv {self.output['aberrant_samples_per_gene.txt']}
+        cp results/results.significant.csv {self.output['results.csv']}
+        cp results/results.all.csv {self.output['results.all.csv']}
+        cp results/aberrant_genes_per_sample.csv {self.output['aberrant_genes_per_sample.csv']}
+        cp results/aberrant_samples_per_gene.csv {self.output['aberrant_samples_per_gene.csv']}
         cp outrider.results.RData {self.output['RData']}
         """
         self.command = dedent(self.command).strip()
@@ -325,10 +325,10 @@ def outrider(
 
     j.declare_resource_group(
         output={
-            'results.txt': '{root}.results.txt',
-            'results.all.txt': '{root}.results.all.txt',
-            'aberrant_genes_per_sample.txt': '{root}.aberrant_genes_per_sample.txt',
-            'aberrant_samples_per_gene.txt': '{root}.aberrant_samples_per_gene.txt',
+            'results.csv': '{root}.results.csv',
+            'results.all.csv': '{root}.results.all.csv',
+            'aberrant_genes_per_sample.csv': '{root}.aberrant_genes_per_sample.csv',
+            'aberrant_samples_per_gene.csv': '{root}.aberrant_samples_per_gene.csv',
             'RData': '{root}.RData',
             'heatmaps.tar.gz': '{root}.heatmaps.tar.gz',
             'volcano_plots.tar.gz': '{root}.volcano_plots.tar.gz',

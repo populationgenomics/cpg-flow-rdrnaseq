@@ -63,7 +63,6 @@ def cram_to_bam(
     output_bam: Path | None = None,
     extra_label: str | None = None,
     job_attrs: dict | None = None,
-    requested_nthreads: int | None = None,
     reference_fasta_path: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
     """
@@ -76,8 +75,6 @@ def cram_to_bam(
         fasta=reference_fasta_path,
         fasta_fai=f'{reference_fasta_path}.fai',
     )
-    if not isinstance(input_cram, ResourceGroup):
-        raise TypeError(f'Expected input_cram to be a ResourceGroup, but got {type(input_cram).__name__}')
 
     job_name = 'cram_to_bam'
     if extra_label:
@@ -85,14 +82,13 @@ def cram_to_bam(
 
     convert_tool = 'samtools_view_cram_to_bam'
     j_attrs = (job_attrs or {}) | {'label': job_name, 'tool': convert_tool}
-    j = b.new_job(name=job_name, attributes=j_attrs)
+    j = b.new_bash_job(name=job_name, attributes=j_attrs)
     j.image(image_path('samtools'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
     res = STANDARD.set_resources(
         j=j,
-        ncpu=nthreads,
+        ncpu=config_retrieve(['workflow', 'cram_to_bam_cpu'], 8),
         storage_gb=50,
     )
 

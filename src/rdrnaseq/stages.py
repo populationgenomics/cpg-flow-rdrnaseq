@@ -140,11 +140,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 job_attrs=attributes,
             )
             if align_jobs:
-                if not isinstance(align_jobs, list):
-                    raise TypeError(f'Expected align_jobs to be a list, got {type(align_jobs).__name__}')
-                for j in align_jobs:
-                    if not isinstance(j, Job):
-                        raise TypeError(f'Expected each item in align_jobs to be a Job, got {type(j).__name__}')
                 jobs.extend(align_jobs)
         except Exception as e:
             logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
@@ -206,7 +201,10 @@ class Fraser(stage.CohortStage):
         """
         Generate FRASER outputs.
         """
-        return cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'
+        return {
+            'Rds_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz',
+            'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv',
+        }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -245,7 +243,10 @@ class Outrider(stage.CohortStage):
         """
         Generate outrider outputs.
         """
-        return cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData'
+        return {
+            'RData': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData',
+            'seqr_out': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.aberrant_genes_per_sample.csv',
+        }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
@@ -257,7 +258,7 @@ class Outrider(stage.CohortStage):
         ]
         j = outrider.outrider(
             input_counts=count_inputs,
-            output_rdata_path=output,
+            output_rdata_path=output['RData'],
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )

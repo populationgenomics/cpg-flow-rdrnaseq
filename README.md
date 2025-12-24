@@ -20,7 +20,7 @@ This pipeline implements a comprehensive RNA-seq workflow with four main stages:
 ```bash
 analysis-runner \
     --dataset seqr \
-    --image australia-southeast1-docker.pkg.dev/cpg-common/images-dev/rdrnaseq:0.2.0-1 \
+    --image australia-southeast1-docker.pkg.dev/cpg-common/images-dev/rdrnaseq:0.2.1-1 \
     --skip-repo-checkout \
     --description "RNA-seq analysis" \
     -o "output-description" \
