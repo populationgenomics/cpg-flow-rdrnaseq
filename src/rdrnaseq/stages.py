@@ -191,7 +191,7 @@ class Count(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=TrimAlignRNA)
+@stage.stage(required_stages=TrimAlignRNA,analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data'])
 class Fraser(stage.CohortStage):
     """
     Perform aberrant splicing analysis with FRASER.
@@ -233,7 +233,7 @@ class Fraser(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=Count)
+@stage.stage(required_stages=Count,analysis_type='outrider', analysis_keys=['RData', 'seqr_out'])
 class Outrider(stage.CohortStage):
     """
     Perform outlier gene expression analysis with Outrider.
