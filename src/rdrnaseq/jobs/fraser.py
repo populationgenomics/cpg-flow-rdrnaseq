@@ -211,7 +211,7 @@ def fraser(
     input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
     cohort_id: str,
     job_attrs: dict[str, str],
-    output_fds_path: str | Path | None = None,
+    output_fds_path: dict[str, Path],
 ) -> list[Job]:
     """
     Run FRASER.
@@ -266,7 +266,7 @@ def fraser(
     )
 
     # Perform counting in parallel jobs
-    output_counts_prefix = to_path(output_fds_path).parent / 'counts'
+    output_counts_prefix = to_path(output_fds_path['Rds_data']).parent / 'counts'
     count_jobs, fds_tar = fraser_count(
         input_bams_localised=input_bams_localised,
         cohort_id=cohort_id,
@@ -305,7 +305,7 @@ def fraser(
         # NOTE: j.output is just a placeholder
         b.write_output(
             j.output,
-            str(to_path(output_fds_path).with_suffix('').with_suffix('').with_suffix('')),
+            str(to_path(output_fds_path['Rds_data']).with_suffix('').with_suffix('').with_suffix('')),
         )  # Remove .fds.tar.gz suffix
 
     return jobs
