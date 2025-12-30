@@ -247,11 +247,18 @@ def fraser(
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
+    num_bams = len(list(input_bams_localised.items()))
+    def_storage = 50 + (num_bams * 10)
+    storage_needed = config_retrieve(
+        ['workflow', 'fraser_main_storage'], def_storage
+    )
+
+
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
-        storage_gb=50,
+        storage_gb=storage_needed,
     )
 
     j.declare_resource_group(
@@ -540,11 +547,17 @@ def fraser_merge_split_reads(
     j = b.new_job('fraser_merge_split', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
+    num_bams = len(bams)
+    def_storage = 50 + (num_bams * 10)
+    storage_needed = config_retrieve(
+        ['workflow', 'fraser_merge_split_storage'], def_storage
+    )
+
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=50,
+        storage_gb=storage_needed,
     )
 
     # Create command to symlink split counts
@@ -717,11 +730,15 @@ def fraser_merge_non_split_reads(
     j = b.new_job('fraser_merge_non_split', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
+    num_bams = len(bams)
+    def_storage = 50 + (num_bams * 10)
+    storage_needed = config_retrieve(['workflow', 'fraser_merge_non_split_storage'], def_storage)
+
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=50,
+        storage_gb=storage_needed,
     )
 
     # Create command to symlink non-spliced counts
