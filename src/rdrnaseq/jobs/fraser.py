@@ -249,10 +249,7 @@ def fraser(
 
     num_bams = len(list(input_bams_localised.items()))
     def_storage = 50 + (num_bams * 10)
-    storage_needed = config_retrieve(
-        ['workflow', 'fraser_main_storage'], def_storage
-    )
-
+    storage_needed = config_retrieve(['workflow', 'fraser_main_storage'], def_storage)
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -549,9 +546,7 @@ def fraser_merge_split_reads(
 
     num_bams = len(bams)
     def_storage = 50 + (num_bams * 10)
-    storage_needed = config_retrieve(
-        ['workflow', 'fraser_merge_split_storage'], def_storage
-    )
+    storage_needed = config_retrieve(['workflow', 'fraser_merge_split_storage'], def_storage)
 
     # Set resource requirements
     res = STANDARD.set_resources(
