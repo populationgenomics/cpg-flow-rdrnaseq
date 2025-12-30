@@ -20,8 +20,8 @@ from hailtop.batch.job import Job
 from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
-def def_storage_needed(num_bams: int) -> int:
-    return 50 + (num_bams * config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10))
+def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
+    return base_storage_gb + num_bams * per_bam_storage_gb
 
 
 class Fraser:
@@ -251,15 +251,17 @@ def fraser(
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
-    num_bams = len(input_bams_localised)
-    def_storage_gb = def_storage_needed(num_bams)
-    storage_needed = config_retrieve(['workflow', 'fraser_main_storage'], def_storage_gb)
+    storage_required_gb = fraser_storage_required_gb(
+        len(input_bams_localised),
+        config_retrieve(['workflow', 'fraser_init_storage'], 50),
+        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    )
 
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
-        storage_gb=storage_needed,
+        storage_gb=storage_required_gb,
     )
 
     j.declare_resource_group(
@@ -405,15 +407,16 @@ def fraser_init(
     j = b.new_bash_job('fraser_init', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
     # Set resource requirements
-    num_bams = len(input_bams_localised)
-    def_storage_gb = def_storage_needed(num_bams)
-    storage_needed = config_retrieve(
-        ['workflow', 'fraser_init_storage'], def_storage_gb
-    )  # Estimate storage based on number of BAMs
+    storage_required_gb = fraser_storage_required_gb(
+        len(input_bams_localised),
+        config_retrieve(['workflow', 'fraser_init_storage'], 50),
+        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    )
+
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_init_cpu'], 8),
-        storage_gb=storage_needed,
+        storage_gb=storage_required_gb,
     )
 
     bam_files_r_str = ''
@@ -548,15 +551,17 @@ def fraser_merge_split_reads(
     j = b.new_job('fraser_merge_split', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
-    num_bams = len(bams)
-    def_storage_gb = def_storage_needed(num_bams)
-    storage_needed = config_retrieve(['workflow', 'fraser_merge_split_storage'], def_storage_gb)
+    storage_required_gb = fraser_storage_required_gb(
+        len(bams),
+        config_retrieve(['workflow', 'fraser_init_storage'], 50),
+        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    )
 
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=storage_needed,
+        storage_gb=storage_required_gb,
     )
 
     # Create command to symlink split counts
@@ -729,15 +734,17 @@ def fraser_merge_non_split_reads(
     j = b.new_job('fraser_merge_non_split', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
-    num_bams = len(bams)
-    def_storage_gb = def_storage_needed(num_bams)
-    storage_needed = config_retrieve(['workflow', 'fraser_merge_non_split_storage'], def_storage_gb)
+    storage_required_gb = fraser_storage_required_gb(
+        len(bams),
+        config_retrieve(['workflow', 'fraser_init_storage'], 50),
+        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    )
 
     # Set resource requirements
     res = STANDARD.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=storage_needed,
+        storage_gb=storage_required_gb,
     )
 
     # Create command to symlink non-spliced counts
