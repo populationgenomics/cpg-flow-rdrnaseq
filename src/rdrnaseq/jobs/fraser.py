@@ -21,7 +21,7 @@ from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
 def def_storage_needed(num_bams: int) -> int:
-    return 50 + (num_bams * config_retrieve(['workflow', 'fraser_bam_storage_requirement'], 10))
+    return 50 + (num_bams * config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10))
 
 
 class Fraser:
