@@ -20,6 +20,10 @@ from hailtop.batch.job import Job
 from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
+def def_storage_needed(num_bams: int) -> int:
+    return 50 + (num_bams * 10)
+
+
 class Fraser:
     """
     Construct a FRASER command for performing aberrant splicing analysis.
@@ -247,9 +251,9 @@ def fraser(
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
 
-    num_bams = len(list(input_bams_localised.items()))
-    def_storage = 50 + (num_bams * 10)
-    storage_needed = config_retrieve(['workflow', 'fraser_main_storage'], def_storage)
+    num_bams = len(input_bams_localised)
+    def_storage_gb = def_storage_needed(num_bams)
+    storage_needed = config_retrieve(['workflow', 'fraser_main_storage'], def_storage_gb)
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -401,10 +405,10 @@ def fraser_init(
     j = b.new_bash_job('fraser_init', attributes=job_attrs | {'tool': 'fraser'})
     j.image(image_path('fraser'))
     # Set resource requirements
-    num_bams = len(list(input_bams_localised.items()))
-    def_storage = 50 + (num_bams * 10)
+    num_bams = len(input_bams_localised)
+    def_storage_gb = def_storage_needed(num_bams)
     storage_needed = config_retrieve(
-        ['workflow', 'fraser_init_storage'], def_storage
+        ['workflow', 'fraser_init_storage'], def_storage_gb
     )  # Estimate storage based on number of BAMs
     res = STANDARD.set_resources(
         j=j,
@@ -545,8 +549,8 @@ def fraser_merge_split_reads(
     j.image(image_path('fraser'))
 
     num_bams = len(bams)
-    def_storage = 50 + (num_bams * 10)
-    storage_needed = config_retrieve(['workflow', 'fraser_merge_split_storage'], def_storage)
+    def_storage_gb = def_storage_needed(num_bams)
+    storage_needed = config_retrieve(['workflow', 'fraser_merge_split_storage'], def_storage_gb)
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -726,8 +730,8 @@ def fraser_merge_non_split_reads(
     j.image(image_path('fraser'))
 
     num_bams = len(bams)
-    def_storage = 50 + (num_bams * 10)
-    storage_needed = config_retrieve(['workflow', 'fraser_merge_non_split_storage'], def_storage)
+    def_storage_gb = def_storage_needed(num_bams)
+    storage_needed = config_retrieve(['workflow', 'fraser_merge_non_split_storage'], def_storage_gb)
 
     # Set resource requirements
     res = STANDARD.set_resources(
