@@ -17,12 +17,176 @@ from cpg_utils.config import config_retrieve, get_config, image_path, reference_
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
+from .bam_to_cram import cram_to_bam
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
     return base_storage_gb + num_bams * per_bam_storage_gb
 
+
+def fraser_merge_batches(
+    batch_results: list[hb.ResourceGroup],
+    cohort_id: str,
+    output_fds_path: dict[str, Path],
+    job_attrs: dict[str, str],
+) -> Job:
+    """
+    Merge FRASER batch results into a single cohort analysis.
+    """
+    b = get_batch()
+    j = b.new_job(f'fraser_merge_batches_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
+    j.image(image_path('fraser'))
+    res = STANDARD.set_resources(
+        j=j,
+        ncpu=config_retrieve(['workflow', 'fraser_cpu'], 4),
+        mem_gb=config_retrieve(['workflow', 'fraser_base_memory'], 50),
+        storage_gb=100,
+    )
+    j.declare_resource_group(
+        output={
+            'results.csv': '{root}.results.csv',
+            'results.all.csv': '{root}.results.all.csv',
+            'heatmaps.tar.gz': '{root}.heatmaps.tar.gz',
+            'volcano_plots.tar.gz': '{root}.volcano_plots.tar.gz',
+            'misc_plots.tar.gz': '{root}.misc_plots.tar.gz',
+            'fds.tar.gz': '{root}.fds.tar.gz',
+        },
+    )
+    extract_batches_cmd = ""
+    for i, batch_result in enumerate(batch_results):
+        extract_batches_cmd += f"""
+mkdir -p batch_{i}
+tar -xf {batch_result['fds.tar.gz']} -C batch_{i}/
+"""
+    cmd = f"""
+{extract_batches_cmd}
+R --vanilla <<EOF
+library(FRASER)
+library(tidyverse)
+# Load all batch FDS objects
+batch_fds_list <- list()
+batch_dirs <- list.dirs(".", recursive = FALSE, full.names = TRUE)
+batch_dirs <- batch_dirs[grepl("batch_", batch_dirs)]
+for (i in seq_along(batch_dirs)) {{
+    batch_dir <- batch_dirs[i]
+    saved_obj_dir <- file.path(batch_dir, "savedObjects")
+    cohort_dirs <- list.dirs(saved_obj_dir, recursive = FALSE, full.names = FALSE)
+    if (length(cohort_dirs) > 0) {{
+        fds_path <- file.path(saved_obj_dir, cohort_dirs[1], "fds-object.RDS")
+        if (file.exists(fds_path)) {{
+            batch_fds_list[[i]] <- readRDS(fds_path)
+        }}
+    }}
+}}
+# Merge FDS objects
+merged_fds <- batch_fds_list[[1]]
+if (length(batch_fds_list) > 1) {{
+    for (i in 2:length(batch_fds_list)) {{
+        merged_fds <- cbind(merged_fds, batch_fds_list[[i]])
+    }}
+}}
+metadata(merged_fds)$name <- "{cohort_id}"
+dir.create("output_merged", recursive = TRUE)
+merged_fds@workingDir <- "output_merged"
+merged_fds <- saveFraserDataSet(merged_fds, dir = "output_merged", name = "{cohort_id}")
+register(SerialParam())
+merged_fds <- calculatePSIValues(merged_fds)
+merged_fds <- filterExpressionAndVariability(merged_fds, minDeltaPsi = 0.0, filter = FALSE)
+merged_fds_filtered <- merged_fds[mcols(merged_fds, type = "j")[, "passed"],]
+for (psi_type in c("psi5", "psi3", "theta")) {{
+    merged_fds_filtered <- optimHyperParams(merged_fds_filtered, type = psi_type, plot = FALSE)
+}}
+optimal_qs <- c(
+    psi5 = merged_fds_filtered@metadata$hyperParams_psi5$q,
+    psi3 = merged_fds_filtered@metadata$hyperParams_psi3$q,
+    theta = merged_fds_filtered@metadata$hyperParams_theta$q
+)
+merged_fds_filtered_fit <- FRASER(merged_fds_filtered, q = optimal_qs, BPPARAM = SerialParam())
+res <- results(merged_fds_filtered_fit, padjCutoff = 0.05, deltaPsiCutoff = 0.3, minCount = 5)
+res_all <- results(merged_fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
+dir.create("results", recursive = TRUE)
+dir.create("plots/heatmaps", recursive = TRUE)
+dir.create("plots/volcano", recursive = TRUE)
+dir.create("plots/misc", recursive = TRUE)
+write_csv(data.frame(res), file = "results/results.significant.csv")
+write_csv(data.frame(res_all), file = "results/results.all.csv")
+saveFraserDataSet(merged_fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
+EOF
+tar -czvf {j.output['heatmaps.tar.gz']} -C plots/heatmaps . || echo "No heatmaps to archive"
+tar -czvf {j.output['volcano_plots.tar.gz']} -C plots/volcano . || echo "No volcano plots to archive"  
+tar -czvf {j.output['misc_plots.tar.gz']} -C plots/misc . || echo "No misc plots to archive"
+cp results/results.significant.csv {j.output['results.csv']}
+cp results/results.all.csv {j.output['results.all.csv']}
+tar -czvf {j.output['fds.tar.gz']} savedObjects/
+"""
+    j.command(command(cmd, monitor_space=True))
+    if output_fds_path:
+        b.write_output(
+            j.output,
+            str(to_path(output_fds_path['Rds_data']).with_suffix('').with_suffix('').with_suffix(''))
+        )
+    return j
+
+def fraser_batch_workflow(
+    input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
+    cohort_id: str,
+    job_attrs: dict[str, str],
+    output_fds_path: dict[str, Path],
+    max_batch_size: int = 8,
+) -> list[Job]:
+    """
+    Run FRASER in batches for large cohorts that exceed memory limits.
+    """
+    if len(input_bams_or_crams) <= max_batch_size:
+        # Small cohort, run normally
+        return fraser(input_bams_or_crams, cohort_id, job_attrs, output_fds_path)
+    b = get_batch()
+    jobs = []
+    batch_results = []
+    for i in range(0, len(input_bams_or_crams), max_batch_size):
+        batch_samples = input_bams_or_crams[i:i + max_batch_size]
+        batch_cohort_id = f"{cohort_id}_batch_{i // max_batch_size}"
+        batch_output_path = {
+            'Rds_data': output_fds_path['Rds_data'].parent / f'batch_{i // max_batch_size}.fds.tar.gz'
+        }
+        batch_jobs = fraser(
+            input_bams_or_crams=batch_samples,
+            cohort_id=batch_cohort_id,
+            job_attrs=job_attrs,
+            output_fds_path=batch_output_path,
+        )
+        jobs.extend(batch_jobs)
+        batch_results.append(batch_jobs[-1].output)
+    merge_job = fraser_merge_batches(
+        batch_results=batch_results,
+        cohort_id=cohort_id,
+        output_fds_path=output_fds_path,
+        job_attrs=job_attrs,
+    )
+    jobs.append(merge_job)
+    return jobs
+
+def fraser_auto_batch(
+    input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
+    cohort_id: str,
+    job_attrs: dict[str, str],
+    output_fds_path: dict[str, Path],
+    max_cohort_size: int = 8,
+) -> list[Job]:
+    """
+    Automatically determine whether to use batch processing based on cohort size.
+    """
+    cohort_size = len(input_bams_or_crams)
+    if cohort_size <= max_cohort_size:
+        return fraser(input_bams_or_crams, cohort_id, job_attrs, output_fds_path)
+    else:
+        return fraser_batch_workflow(
+            input_bams_or_crams,
+            cohort_id,
+            job_attrs,
+            output_fds_path,
+            max_batch_size=max_cohort_size
+        )
 
 class Fraser:
     """
@@ -180,7 +344,7 @@ class Fraser:
             dev.off()
             png(file = paste0("plots/volcano/", sample_id, ".theta.png"), width = 4000, height = 4000, res = 600)
             plotVolcano(fds_filtered_fit, sample_id, type = "theta")
-            dev.off()
+            dev.off();
         }
 
         # Save
