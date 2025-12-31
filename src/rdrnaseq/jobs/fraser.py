@@ -256,11 +256,15 @@ def fraser(
         config_retrieve(['workflow', 'fraser_init_storage'], 50),
         config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
     )
+    base_memory_gb = config_retrieve(['workflow', 'fraser_base_memory'], 50)
+    memory_per_sample_gb = config_retrieve(['workflow', 'fraser_memory_per_sample'], 8)
+    total_memory_gb = base_memory_gb + (len(input_bams_localised) * memory_per_sample_gb)
 
-    # Set resource requirements
+    # Set resource requirements with explicit memory allocation
     res = STANDARD.set_resources(
         j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
+        ncpu=config_retrieve(['workflow', 'fraser_cpu'], 4),  # Reduce CPU count
+        mem_gb=total_memory_gb,  # Explicit memory allocation
         storage_gb=storage_required_gb,
     )
 
