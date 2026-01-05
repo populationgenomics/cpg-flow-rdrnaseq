@@ -10,7 +10,7 @@ from cpg_flow.filetypes import (
     BamPath,
     CramPath,
 )
-from cpg_flow.resources import STANDARD
+from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config, image_path, reference_path
@@ -257,8 +257,7 @@ def fraser(
         config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
     )
 
-    # Set resource requirements
-    res = STANDARD.set_resources(
+    res = HIGHMEM.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
         storage_gb=storage_required_gb,
