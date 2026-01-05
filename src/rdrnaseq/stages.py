@@ -17,7 +17,7 @@ from cpg_flow.filetypes import (
 from cpg_utils import Path
 from hailtop.batch.job import Job
 
-from .jobs import align_rna, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -224,7 +224,7 @@ class Fraser(stage.CohortStage):
             else:
                 bam_or_cram_inputs.append((sequencing_group.id, CramPath(cram_path, f'{cram_path!s}.crai'), bam_path))
 
-        j = fraser.fraser_auto_batch(
+        j = fraser.fraser(
             input_bams_or_crams=bam_or_cram_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
