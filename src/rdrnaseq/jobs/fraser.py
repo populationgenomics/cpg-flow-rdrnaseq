@@ -10,7 +10,7 @@ from cpg_flow.filetypes import (
     BamPath,
     CramPath,
 )
-from cpg_flow.resources import STANDARD
+from cpg_flow.resources import STANDARD, HIGHMEM
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config, image_path, reference_path
@@ -181,10 +181,10 @@ def fraser_auto_batch(
         return fraser(input_bams_or_crams, cohort_id, job_attrs, output_fds_path)
     else:
         return fraser_batch_workflow(
-            input_bams_or_crams,
-            cohort_id,
-            job_attrs,
-            output_fds_path,
+            input_bams_or_crams, 
+            cohort_id, 
+            job_attrs, 
+            output_fds_path, 
             max_batch_size=max_cohort_size
         )
 
@@ -420,15 +420,10 @@ def fraser(
         config_retrieve(['workflow', 'fraser_init_storage'], 50),
         config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
     )
-    base_memory_gb = config_retrieve(['workflow', 'fraser_base_memory'], 50)
-    memory_per_sample_gb = config_retrieve(['workflow', 'fraser_memory_per_sample'], 8)
-    total_memory_gb = base_memory_gb + (len(input_bams_localised) * memory_per_sample_gb)
 
-    # Set resource requirements with explicit memory allocation
-    res = STANDARD.set_resources(
+    res = HIGHMEM.set_resources(
         j=j,
         ncpu=config_retrieve(['workflow', 'fraser_cpu'], 4),  # Reduce CPU count
-        mem_gb=total_memory_gb,  # Explicit memory allocation
         storage_gb=storage_required_gb,
     )
 
