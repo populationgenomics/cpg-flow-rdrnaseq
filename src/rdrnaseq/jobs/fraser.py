@@ -388,9 +388,9 @@ def fraser_init(
         config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
     )
 
-    res = STANDARD.set_resources(
+    res = HIGHMEM.set_resources(
         j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_init_cpu'], 8),
+        ncpu=config_retrieve(['workflow', 'fraser_init_cpu'], 10),
         storage_gb=storage_required_gb,
     )
 
