@@ -53,7 +53,7 @@ class Fraser:
         self.delta_psi_cutoff = str(delta_psi_cutoff)
         self.min_count = str(min_count)
 
-        # Build OUTRIDER command
+        # Build FRASER 2.0 command
         self.command = f"""\
         # Create output directories
         rm -rf plots results output
@@ -81,71 +81,58 @@ class Fraser:
         # Load FDS (pre-counted)
         fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_id}")
 
-        # Extract count data and build new FDS using the FraserDataSet command
-        sample_table <- fds@colData
-        raw_counts_splice_sites <- cbind(
-          as.data.table(granges(rowRanges(fds, type="ss"))),
-          as.data.table(rowData(fds, type="ss")),
-          as.data.table(counts(fds, type="ss"))
-        )
-        raw_counts_junctions <- cbind(
-          as.data.table(granges(rowRanges(fds, type="j"))),
-          as.data.table(counts(fds, type="j")),
-          as.data.table(rowData(fds, type="j"))
-        )
-        rm(fds)
-
-        fds <- FraserDataSet(
-          colData = sample_table,
-          junctions = raw_counts_junctions,
-          spliceSites = raw_counts_splice_sites,
-          workingDir = "output.cohort.new"
-        )
+        # FRASER 2.x update: Re-calculating metrics and filtering
+        # In FRASER 2, we focus on psi5, psi3, and jaccard (replacing theta)
+        fds <- calculatePSIValues(fds)
         """
         self.command += """\
         # Setup parallelisation
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
-        # Calculate PSI values
-        fds <- calculatePSIValues(fds)
-
-        # Filter
+        # Filter: updated to use FRASER 2 standards
         fds <- filterExpressionAndVariability(fds, minDeltaPsi = minDeltaPsi, filter = FALSE)
 
         png(file = "plots/misc/filter_expression.png", width = 4000, height = 4000, res = 600)
         plotFilterExpression(fds, bins = 100)
         dev.off()
 
+        # Keep only passed junctions
         fds_filtered <- fds[mcols(fds, type = "j")[, "passed"],]
 
         # Plot sample correlation
-        for (psi_type in c("psi5", "psi3", "theta")) {
+        # FRASER 2 uses 'jaccard' instead of 'theta' for best results
+        psi_types <- c("psi5", "psi3", "jaccard")
+
+        for (psi_type in psi_types) {
             png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"),
             width = 4000, height = 4000, res = 600)
+            # FRASER 2: normalized=FALSE uses the raw Jaccard/PSI values
             print(plotCountCorHeatmap(fds_filtered, type = psi_type, logit = TRUE, normalized = FALSE))
             dev.off()
         }
 
         # Calculate optimal encoding dimensions (q)
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE)
+        # FRASER 2 introduces better hyperparam handling
+        for (psi_type in psi_types) {
+            fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE, BPPARAM = bp)
             png(file = paste0("plots/misc/optimal_q.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
             print(plotEncDimSearch(fds_filtered, type = psi_type))
             dev.off()
         }
 
+        # Use accessor function instead of @metadata slot
         optimal_qs <- c(
-          psi5 = fds_filtered@metadata\\$hyperParams_psi5\\$q,
-          psi3 = fds_filtered@metadata\\$hyperParams_psi3\\$q,
-          theta = fds_filtered@metadata\\$hyperParams_theta\\$q
+          psi5 = bestQ(fds_filtered, type = "psi5"),
+          psi3 = bestQ(fds_filtered, type = "psi3"),
+          jaccard = bestQ(fds_filtered, type = "jaccard")
         )
 
-        # Fit model
+        # Fit model - FRASER function handles all types in fds_filtered
         fds_filtered_fit <- FRASER(fds_filtered, q = optimal_qs, BPPARAM = bp)
 
         # Plot sample correlation post-correction
-        for (psi_type in c("psi5", "psi3", "theta")) {
+        for (psi_type in psi_types) {
             png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"),
             width = 4000, height = 4000, res = 600)
             print(plotCountCorHeatmap(fds_filtered_fit, type = psi_type, logit = TRUE, normalized = TRUE))
@@ -158,34 +145,23 @@ class Fraser:
         fds_filtered_fit <- annotateRangesWithTxDb(fds_filtered_fit, txdb = txdb, orgDb = orgDb)
 
         # Get results
+        # Note: 'zScoreCutoff' is still supported, but 'deltaPsiCutoff' applies to jaccard as well
         res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff,
         zScoreCutoff = z_cutoff, minCount = min_count)
         res_all <- results(fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
-        write_csv(
-            data.frame(res),
-            file = paste0(
-                "results/results.significant.p_",
-                pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
-            )
-        )
+        write_csv(data.frame(res), file = "results/results.significant.csv")
         write_csv(data.frame(res_all), file = "results/results.all.csv")
-
-        # Plot results
-        for (sample_id in fds\\$sampleID) {
-            png(file = paste0("plots/volcano/", sample_id, ".psi5.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi5")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".psi3.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi3")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".theta.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "theta")
-            dev.off()
+        # Plot results (Volcano)
+        for (sample_id in samples(fds_filtered_fit)) {
+            for (psi_type in psi_types) {
+                png(file = paste0("plots/volcano/", sample_id, ".", psi_type, ".png"), width = 4000, height = 4000, res = 600)
+                print(plotVolcano(fds_filtered_fit, sample_id, type = psi_type))
+                dev.off()
+            }
         }
-
-        # Save
-        saveFraserDataSet(fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
-        EOF
+            # Save
+            saveFraserDataSet(fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
+            EOF
         """
         # Tar up outputs
         self.command += f"""
@@ -249,7 +225,7 @@ def fraser(
 
     # Create FRASER job
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser',version= config_retrieve(['fraser','version'],'2.4.6') ))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
 
     storage_required_gb = fraser_storage_required_gb(
         len(input_bams_localised),
@@ -404,7 +380,7 @@ def fraser_init(
 
     # Create FRASER job
     j = b.new_bash_job('fraser_init', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser',version= config_retrieve(['fraser','version'],'2.4.6') ))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
     # Set resource requirements
     storage_required_gb = fraser_storage_required_gb(
         len(input_bams_localised),
@@ -432,6 +408,7 @@ def fraser_init(
         f"""\
         R --vanilla <<EOF
         library(FRASER)
+        library(BiocParallel)
 
         bam_files <- c({bam_files_r_str})
         sample_ids <- c({sample_ids_r_str})
@@ -451,13 +428,16 @@ def fraser_init(
         n_parallel_workers <- {res.get_nthreads() - 1!s}
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
+        fds <- countRNAData(fds, BPPARAM = bp)
 
         fds <- saveFraserDataSet(fds)
         EOF
 
-        # Move output to resource file
-        mv output/savedObjects/{cohort_id}/fds-object.RDS {j.fds}
-        """,
+# Move output to resource file
+# Note: FRASER 2.x uses a nested structure. Ensure the path matches
+# the 'name' parameter provided in the constructor.
+mv output/savedObjects/{cohort_id}/fds-object.RDS {j.fds}
+""",
     )
 
     j.command(command(cmd, monitor_space=True))
@@ -503,6 +483,7 @@ def fraser_count_split_reads_one_sample(
 
         R --vanilla <<EOF
         library(FRASER)
+        library(BiocParallel)
 
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
@@ -518,6 +499,8 @@ def fraser_count_split_reads_one_sample(
           sampleID = sample_id,
           fds = fds,
           NcpuPerSample = n_parallel_workers,
+          recount = TRUE # Often needed when updating versions to ensure format compatibility
+
         )
         EOF
 
@@ -603,6 +586,8 @@ def fraser_merge_split_reads(
 
         R --vanilla <<EOF
         library(FRASER)
+        library(BiocParallel)
+
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
         n_parallel_workers <- {res.get_nthreads() - 1!s}
@@ -615,18 +600,19 @@ def fraser_merge_split_reads(
         minExpressionInOneSample <- 20
 
         # Read counts from cache
-        split_counts <- getSplitReadCountsForAllSamples(fds = fds, recount = FALSE)
+        fds <- getSplitReadCountsForAllSamples(fds = fds, recount = FALSE)
 
+        split_counts <- asSE(fds, type="j")
         split_count_ranges <- rowRanges(split_counts)
         split_count_ranges <- FRASER:::annotateSpliceSite(split_count_ranges)
         saveRDS(split_count_ranges, "rds/g_ranges_split_counts.RDS")
 
         max_count <- rowMaxs(assay(split_counts, "rawCountsJ"))
         passed <- max_count >= minExpressionInOneSample
-        split_count_ranges <- split_count_ranges[passed, ]
-        saveRDS(split_count_ranges, "rds/g_ranges_non_split_counts.RDS")
+        filtered_ranges <- split_count_ranges[passed, ]
+        saveRDS(filtered_ranges, "rds/g_ranges_non_split_counts.RDS")
 
-        splice_site_coords <- FRASER:::extractSpliceSiteCoordinates(split_count_ranges, fds)
+        splice_site_coords <- FRASER:::extractSpliceSiteCoordinates(filtered_ranges, fds)
         saveRDS(splice_site_coords, "rds/splice_site_coords.RDS")
         EOF
 
@@ -680,6 +666,7 @@ def fraser_count_non_split_reads_one_sample(
 
         R --vanilla <<EOF
         library(FRASER)
+        library(BiocParallel)
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
         n_parallel_workers <- {res.get_nthreads() - 1!s}
@@ -694,17 +681,23 @@ def fraser_count_non_split_reads_one_sample(
         sample_id <- "{sample_id}"
         sample_count <- countNonSplicedReads(
           sampleID = sample_id,
-          splitCountRanges = NULL,
           fds = fds,
+          spliceSiteCoords = splice_site_coords,
+          splitCountRanges = NULL, # Using coords instead of ranges is correct
           minAnchor = 5,
-          NcpuPerSample = n_parallel_workers,
-          spliceSiteCoords = splice_site_coords
-        )
-        EOF
+          NcpuPerSample = n_parallel_workers
+    )
+    EOF
 
         # Move output to resource file
-        mv output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.non_spliced_counts}
-        """,
+        # Note: Ensure j.non_spliced_counts suffix matches (.h5 or .RDS)
+        # FRASER 2 usually outputs .h5 by default for non-spliced counts.
+        if [ -f "output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{{sample_id}}.h5" ]; then
+            mv output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{{sample_id}}.h5 {j.non_spliced_counts}
+        else
+            mv output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{{sample_id}}.RDS {j.non_spliced_counts}
+        fi
+    """,
     )
 
     j.command(command(cmd, monitor_space=True))
@@ -731,7 +724,7 @@ def fraser_merge_non_split_reads(
 
     # Create FRASER job
     j = b.new_job('fraser_merge_non_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
     storage_required_gb = fraser_storage_required_gb(
         len(bams),
         config_retrieve(['workflow', 'fraser_init_storage'], 50),
@@ -774,11 +767,10 @@ def fraser_merge_non_split_reads(
         ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
         # Symlink non-spliced counts, RDS files, and split counts
         {link_counts_cmd}
-        # ls BAM files to ensure they are localised
-        ls {' '.join(bams)}
 
         R --vanilla <<EOF
         library(FRASER)
+        library(BiocParallel)
 
         fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
 
@@ -786,43 +778,33 @@ def fraser_merge_non_split_reads(
         register(MulticoreParam(workers = n_parallel_workers))
         bp <- MulticoreParam(workers = n_parallel_workers)
 
+    # In FRASER 2, we let the package handle the HDF5/RDS merging
+    # via the official getters to ensure Jaccard compatibility.
         options("FRASER.maxSamplesNoHDF5"=0)
         options("FRASER.maxJunctionsNoHDF5"=-1)
 
-        minAnchor <- 5
+    # 1. Merge Split Counts (Junctions)
+    # This automatically finds the cached RDS files symlinked in your dir
+        fds <- getSplitReadCountsForAllSamples(fds, recount = FALSE)
 
+    # 2. Merge Non-Split Counts (Splice Sites)
+    # FRASER 2 needs the ranges to properly cluster junctions for Jaccard
         split_count_ranges <- readRDS("rds/g_ranges_non_split_counts.RDS")
-        non_split_counts <- getNonSplitReadCountsForAllSamples(
-          fds = fds,
-          splitCountRanges = split_count_ranges,
-          minAnchor = minAnchor,
-          recount = FALSE,
-          longRead = FALSE
-        )
 
-        split_count_ranges <- readRDS("rds/g_ranges_split_counts.RDS")
-        splice_site_coords <- readRDS("rds/splice_site_coords.RDS")
+        fds <- getNonSplitReadCountsForAllSamples(
+        fds = fds,
+        splitCountRanges = split_count_ranges,
+        minAnchor = 5,
+        recount = FALSE
+     )
 
-        split_counts_h5 <- HDF5Array::HDF5Array("output/savedObjects/{cohort_id}/rawCountsJ.h5", "rawCountsJ")
-        split_counts_se <- SummarizedExperiment(
-          colData = colData(fds),
-          rowRanges = split_count_ranges,
-          assays = list(rawCountsJ = split_counts_h5)
-        )
+    # 3. FRASER 2 Specific Step: Calculate Jaccard & PSI
+    # This step is vital. It converts the raw counts into the
+    # Intron Jaccard Index used for outlier detection.
+        fds <- calculatePSIValues(fds)
 
-        non_split_counts_h5 <- HDF5Array::HDF5Array("output/savedObjects/{cohort_id}/rawCountsSS.h5", "rawCountsSS")
-        non_split_counts_se <- SummarizedExperiment(
-          colData = colData(fds),
-          rowRanges = splice_site_coords,
-          assays = list(rawCountsSS = non_split_counts_h5)
-        )
-
-        fds <- addCountsToFraserDataSet(
-          fds = fds,
-          splitCounts = split_counts_se,
-          nonSplitCounts = non_split_counts_se
-        )
-
+    # 4. Save
+    # This will update the .h5 files and the .RDS object in output/savedObjects/
         fds <- saveFraserDataSet(fds)
         EOF
 
