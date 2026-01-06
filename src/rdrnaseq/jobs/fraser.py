@@ -225,7 +225,7 @@ def fraser(
 
     # Create FRASER job
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
 
     storage_required_gb = fraser_storage_required_gb(
         len(input_bams_localised),
@@ -380,7 +380,7 @@ def fraser_init(
 
     # Create FRASER job
     j = b.new_bash_job('fraser_init', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
     # Set resource requirements
     storage_required_gb = fraser_storage_required_gb(
         len(input_bams_localised),
@@ -464,7 +464,7 @@ def fraser_count_split_reads_one_sample(
 
     # Create FRASER job
     j = b.new_job('fraser_count_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -531,7 +531,7 @@ def fraser_merge_split_reads(
 
     # Create FRASER job
     j = b.new_job('fraser_merge_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
 
     storage_required_gb = fraser_storage_required_gb(
         len(bams),
@@ -644,7 +644,7 @@ def fraser_count_non_split_reads_one_sample(
 
     # Create FRASER job
     j = b.new_bash_job('fraser_count_non_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6')))
+    j.image(image_path('fraser', version=config_retrieve(['fraser', 'version'], '2.4.6-1')))
 
     # Set resource requirements
     res = STANDARD.set_resources(
