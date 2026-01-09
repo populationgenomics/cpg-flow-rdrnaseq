@@ -3,26 +3,11 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 import hailtop.batch as hb
-from cpg_flow.filetypes import BamPath, CramPath
+from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
-from cpg_utils import Path, config, to_path
-from cpg_utils.config import get_config, image_path, reference_path
-from cpg_utils.hail_batch import command, get_batch
+from cpg_utils import Path, config, to_path, hail_batch
+from cpg_utils.hail_batch import get_batch
 from hailtop.batch.job import Job
-
-from .bam_to_cram import cram_to_bam
-
-
-def count_res_group(b: hb.Batch) -> hb.ResourceGroup:
-    """
-    Define resource group for counting.
-    """
-    gtf_file = get_config()['references']['star'].get('gtf')
-    gtf_file = to_path(gtf_file)
-    g = {
-        'gtf': str(gtf_file),
-    }
-    return b.read_input_group(**g)
 
 
 class FeatureCounts:
@@ -33,7 +18,7 @@ class FeatureCounts:
     def __init__(
         self,
         input_bam: BamPath | str | Path,
-        gtf_file: str | Path,
+        gtf_file: hb.ResourceFile,
         output_path: str | Path,
         summary_path: str | Path,
         paired_end: bool = True,
@@ -107,58 +92,33 @@ class FeatureCounts:
 
 
 def count(
-    input_cram_or_bam: BamPath | CramPath,
+    input_cram_or_bam: BamPath,
     output_path: Path,
     summary_path: Path,
     job_attrs: dict[str, str],
     sg_id: str,
-    cram_to_bam_path: Path | None = None,
 ) -> list[Job]:
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
     """
 
-    b = get_batch()
+    b = hail_batch.get_batch()
 
     jobs: list[Job] = []
 
-    # Determine whether input is a BAM file or a CRAM file
-    if isinstance(input_cram_or_bam, BamPath):
-        # Localise input
-        input_bam_reads = b.read_input_group(
-            **{
-                'bam': str(input_cram_or_bam.path),
-                'bam.bai': str(input_cram_or_bam.index_path),
-            },
-        )
-    elif isinstance(input_cram_or_bam, CramPath):
-        # Localise input
-        input_cram_reads = b.read_input_group(
-            **{
-                'cram': str(input_cram_or_bam.path),
-                'cram.crai': str(input_cram_or_bam.index_path),
-            },
-        )
-        # Convert CRAM to BAM
-        j, input_bam_reads = cram_to_bam(
-            input_cram=input_cram_reads,
-            output_bam=cram_to_bam_path,
-            job_attrs=job_attrs,
-            reference_fasta_path=reference_path('broad/ref_fasta'),
-        )
-        if j and isinstance(j, Job):
-            jobs.append(j)
-    else:
-        raise ValueError(f'Invalid alignment input: "{input_cram_or_bam!s}", expected BAM or CRAM file.')
+    # Localise input
+    input_bam_reads = b.read_input_group(
+        **{
+            'bam': str(input_cram_or_bam.path),
+            'bam.bai': str(input_cram_or_bam.index_path),
+        },
+    )
 
-    if not isinstance(input_bam_reads, hb.ResourceGroup):
-        raise TypeError(f'Expected input_bam_reads to be a ResourceGroup, but got {type(input_bam_reads).__name__}')
-
-    counting_reference = count_res_group(b)
+    counting_reference = b.read_input(config.config_retrieve(['references', 'star', 'gtf']))
 
     # Create job
     j = b.new_bash_job(f'count_{sg_id}', attributes=job_attrs | {'tool': 'featureCounts'})
-    j.image(image_path('subread'))
+    j.image(config.config_retrieve(['images','subread']))
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -178,7 +138,7 @@ def count(
     # Create counting command
     fc = FeatureCounts(
         input_bam=input_bam_reads.bam,
-        gtf_file=counting_reference.gtf,
+        gtf_file=counting_reference,
         output_path=j.count_output['count'],
         summary_path=j.count_output['count.summary'],
         paired_end=True,
@@ -197,7 +157,7 @@ def count(
     cmd = str(fc)
 
     # Add command to job
-    j.command(command(cmd, monitor_space=True))
+    j.command(cmd)
 
     jobs.append(j)
 
