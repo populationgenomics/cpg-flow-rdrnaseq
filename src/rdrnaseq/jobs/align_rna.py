@@ -120,29 +120,25 @@ def align(
     # The output of sort_index_bam is a ResourceGroup containing .bam and .bam.bai
     # We extract the bam file for the next step.
 
-    j, mkdup_bam = markdup(
+    j, out_bam = markdup(
         input_bam=sorted_bam_group,
         job_attrs=job_attrs,
         requested_nthreads=4,
     )
     jobs.append(j)
-    out_bam = mkdup_bam
 
-    # Output writing
-    if output_bam:
-        out_bam_path = to_path(output_bam.path)
-        b.write_output(out_bam, str(out_bam_path.with_suffix('')))
+    # BAM write
+    b.write_output(out_bam, str(output_bam.path.with_suffix('')))
 
-    if output_cram:
-        j, out_cram = bam_to_cram(
-            input_bam=out_bam,
-            job_attrs=job_attrs,
-            requested_nthreads=4,
-            reference_fasta_path=reference_path('broad/ref_fasta'),
-        )
-        jobs.append(j)
-        out_cram_path = to_path(output_cram.path)
-        b.write_output(out_cram, str(out_cram_path.with_suffix('')))
+    # CRAM create and write
+    j, out_cram = bam_to_cram(
+        input_bam=out_bam,
+        job_attrs=job_attrs,
+        requested_nthreads=4,
+        reference_fasta_path=reference_path('broad/ref_fasta'),
+    )
+    jobs.append(j)
+    b.write_output(out_cram, str(output_cram.path.with_suffix('')))
 
     return jobs
 
