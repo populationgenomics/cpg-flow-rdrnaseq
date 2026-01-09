@@ -153,7 +153,7 @@ def count(
     )
 
     # Add command to job
-    j.command(command(str(fc), monitor_space=True))
+    j.command(hail_batch.command(str(fc), monitor_space=True))
 
     # Write output to file
     b.write_output(j.count_output['count'], str(output_path))
