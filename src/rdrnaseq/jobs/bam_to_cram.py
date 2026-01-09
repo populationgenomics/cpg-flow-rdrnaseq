@@ -55,10 +55,9 @@ def bam_to_cram(
 
 
 def cram_to_bam(
-    input_cram: Path,
+    input_cram_path: Path,
     output_bam: Path,
     job_attrs: dict[str, str],
-    extra_label: str | None = None,
 ) -> tuple[Job, ResourceGroup]:
     """
     Convert a CRAM file to a BAM file.
@@ -80,11 +79,7 @@ def cram_to_bam(
         fasta_fai=f'{reference_fasta_path}.fai',
     )
 
-    job_name = 'cram_to_bam'
-    if extra_label:
-        job_name += f' {extra_label}'
-
-    j = b.new_bash_job(name=job_name, attributes=job_attrs | {'tool': 'samtools'})
+    j = b.new_bash_job(name='cram_to_bam', attributes=job_attrs | {'tool': 'samtools'})
     j.image(config.config_retrieve(['images', 'samtools']))
 
     # Set resource requirements

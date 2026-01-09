@@ -13,8 +13,8 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_utils import Path, config, to_path
-from cpg_utils.config import image_path, reference_path
+from cpg_utils import Path, config
+from cpg_utils.config import reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
@@ -60,7 +60,7 @@ def align(
     job_attrs: dict,
     output_bam: BamPath,
     output_cram: CramPath,
-) -> list[Job] | None:
+) -> list[Job]:
     """
     Align (potentially multiple) FASTQ pairs using STAR,
     merge the resulting BAMs (if necessary),
@@ -155,7 +155,7 @@ def align_fq_pair(
     b = get_batch()
 
     j = b.new_job(name='align_rna', attributes=job_attrs | {'tool': 'STAR'})
-    j.image(image_path('star'))
+    j.image(config.config_retrieve(['images', 'star']))
 
     nthreads = 8
 
@@ -187,7 +187,7 @@ def merge_bams(
     b = get_batch()
 
     j = b.new_job(name='merge_bams', attributes=job_attrs | {'tool': 'samtools'})
-    j.image(image_path('samtools'))
+    j.image(config.config_retrieve(['images', 'samtools']))
 
     nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
@@ -211,7 +211,7 @@ def sort_index_bam(
     b = get_batch()
 
     j = b.new_job(name='sort_index_bam', attributes=job_attrs | {'tool': 'samtools'})
-    j.image(image_path('samtools'))
+    j.image(config.config_retrieve(['images', 'samtools']))
 
     nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)

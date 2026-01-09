@@ -5,8 +5,7 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 import hailtop.batch as hb
 from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
-from cpg_utils import Path, config, to_path, hail_batch
-from cpg_utils.hail_batch import get_batch
+from cpg_utils import Path, config, hail_batch
 from hailtop.batch.job import Job
 
 
@@ -92,33 +91,31 @@ class FeatureCounts:
 
 
 def count(
-    input_cram_or_bam: BamPath,
+    input_bam: BamPath,
     output_path: Path,
     summary_path: Path,
     job_attrs: dict[str, str],
     sg_id: str,
-) -> list[Job]:
+) -> Job:
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
     """
 
     b = hail_batch.get_batch()
 
-    jobs: list[Job] = []
-
     # Localise input
     input_bam_reads = b.read_input_group(
         **{
-            'bam': str(input_cram_or_bam.path),
-            'bam.bai': str(input_cram_or_bam.index_path),
-        },
-    )
+            'bam': input_bam,
+            'bam.bai': f'{input_bam}.bai',
+        }
+    ).bam
 
     counting_reference = b.read_input(config.config_retrieve(['references', 'star', 'gtf']))
 
     # Create job
     j = b.new_bash_job(f'count_{sg_id}', attributes=job_attrs | {'tool': 'featureCounts'})
-    j.image(config.config_retrieve(['images','subread']))
+    j.image(config.config_retrieve(['images', 'subread']))
 
     # Set resource requirements
     res = STANDARD.set_resources(
@@ -137,7 +134,7 @@ def count(
 
     # Create counting command
     fc = FeatureCounts(
-        input_bam=input_bam_reads.bam,
+        input_bam=input_bam_reads,
         gtf_file=counting_reference,
         output_path=j.count_output['count'],
         summary_path=j.count_output['count.summary'],
@@ -154,15 +151,12 @@ def count(
         both_ends_same_chr=True,  # TODO: determine default value
         threads=res.get_nthreads(),
     )
-    cmd = str(fc)
 
     # Add command to job
-    j.command(cmd)
-
-    jobs.append(j)
+    j.command(str(fc))
 
     # Write output to file
     b.write_output(j.count_output['count'], str(output_path))
     b.write_output(j.count_output['count.summary'], str(summary_path))
 
-    return jobs
+    return j
