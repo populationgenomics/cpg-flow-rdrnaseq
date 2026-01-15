@@ -45,15 +45,17 @@ def fraser_init(input_bams: dict[str, hb.ResourceFile], cohort_id: str, job_attr
         storage_gb=storage_required_gb,
     )
 
-    bam_files_r_str = ''
-    sample_ids_r_str = ''
+    # collect all the IDs in the loop
+    bam_ids = []
     sample_ids = []
+
     for sample_id, bam_file in input_bams.items():
-        bam_files_r_str += f'"{bam_file}", '
-        sample_ids_r_str += f'"{sample_id}", '
+        bam_ids.append(bam_file)
         sample_ids.append(sample_id)
-    bam_files_r_str = bam_files_r_str[:-2]  # Remove trailing comma and space
-    sample_ids_r_str = sample_ids_r_str[:-2]  # Remove trailing comma and space
+    
+    # generate commaspace-delimited lists of quoted IDs
+    bam_files_r_str = ', '.join(f'"{bam}"' for bam in bam_ids)
+    sample_ids_r_str = ', '.join(f'"{sam}"' for sam in sample_ids)
 
     cmd = f"""
     Rscript {R_INIT} \\
