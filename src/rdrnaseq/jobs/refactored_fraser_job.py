@@ -131,15 +131,10 @@ def fraser_merge_split_reads(
         storage_gb=storage_required_gb,
     )
 
-    setup_cache = '\n'.join(
-        [
-            f'mkdir -p {cache_path} && ln -s {res} {cache_path}/splitCounts-{sid}.RDS'
-            for sid, res in split_counts.items()
-        ]
-    )
+    for sid, res in split_counts.items():
+        j.command(f'mkdir -p {cache_path} && ln -s {res} {cache_path}/splitCounts-{sid}.RDS')
+    
     cmd = f"""
-    {setup_cache}
-
     Rscript {R_MERGE_SPLIT} \\
         --fds_path {fds} \\
         --cohort_id "{cohort_id}" \\
