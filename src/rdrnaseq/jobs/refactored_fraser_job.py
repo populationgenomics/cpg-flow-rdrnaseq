@@ -2,10 +2,7 @@ import hailtop.batch as hb
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch.job import Job, BashJob
-
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
-
+from hailtop.batch.job import Job
 
 # Assuming scripts are in the same directory or available in the container
 R_INIT = 'fraser_init.R'
@@ -52,7 +49,7 @@ def fraser_init(input_bams: dict[str, hb.ResourceFile], cohort_id: str, job_attr
     for sample_id, bam_file in input_bams.items():
         bam_ids.append(bam_file)
         sample_ids.append(sample_id)
-    
+
     # generate commaspace-delimited lists of quoted IDs
     bam_files_r_str = ', '.join(f'"{bam}"' for bam in bam_ids)
     sample_ids_r_str = ', '.join(f'"{sam}"' for sam in sample_ids)
@@ -73,7 +70,6 @@ def fraser_init(input_bams: dict[str, hb.ResourceFile], cohort_id: str, job_attr
 def fraser_count_split_reads(
     fds: hb.ResourceFile,
     sample_id: str,
-    bam: hb.ResourceFile,
     cohort_id: str,
     job_attrs: dict,
 ) -> tuple[Job, hb.ResourceFile]:
@@ -133,7 +129,7 @@ def fraser_merge_split_reads(
 
     for sid, res in split_counts.items():
         j.command(f'mkdir -p {cache_path} && ln -s {res} {cache_path}/splitCounts-{sid}.RDS')
-    
+
     cmd = f"""
     Rscript {R_MERGE_SPLIT} \\
         --fds_path {fds} \\
