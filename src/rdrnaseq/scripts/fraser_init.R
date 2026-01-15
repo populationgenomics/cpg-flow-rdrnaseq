@@ -19,6 +19,8 @@ sample_table <- DataFrame(
   group = seq_len(length(bam_files)),
   pairedEnd = TRUE
 )
+options("FRASER.maxSamplesNoHDF5" = 0)
+options("FRASER.maxJunctionsNoHDF5" = -1)
 
 fds <- FraserDataSet(
   colData = sample_table,
@@ -27,13 +29,13 @@ fds <- FraserDataSet(
 )
 
 #Setup parallel execution
+bp <- MulticoreParam(workers = args$nthreads)
+register(bp)
 
-register(MulticoreParam(workers = args$nthreads))
 
 #Initialize counts and metadata
-
-fds <- countRNAData(fds, BPPARAM = MulticoreParam(workers = args$nthreads))
-fds <- calculatePSIValues(fds, BPPARAM = MulticoreParam(workers = args$nthreads))
+fds <- countRNAData(fds, BPPARAM = bp)
+fds <- calculatePSIValues(fds,BPPARAM = bp)
 fds <- saveFraserDataSet(fds)
 
 #Print location for Python to capture if needed

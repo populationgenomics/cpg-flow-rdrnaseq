@@ -5,6 +5,7 @@ library(FRASER)
 library(tidyverse)
 library(TxDb.Hsapiens.UCSC.hg38.knownGene)
 library(org.Hs.eg.db)
+library(ggplot2)
 
 parser <- ArgumentParser(description = "FRASER 2.0 Statistical Analysis")
 parser$add_argument("--fds_dir", required = TRUE, help = "Directory containing savedObjects")
@@ -16,7 +17,10 @@ parser$add_argument("--min_count", type = "integer", default = 5)
 parser$add_argument("--nthreads", type = "integer", default = 1)
 args <- parser$parse_args()
 
-#Params
+#Force HDF5
+
+options("FRASER.maxSamplesNoHDF5" = 0)
+options("FRASER.maxJunctionsNoHDF5" = -1)
 
 z_cutoff <- if (is.null(args$z_cutoff)) NA else args$z_cutoff
 bp <- MulticoreParam(workers = args$nthreads)
@@ -29,18 +33,14 @@ fds <- loadFraserDataSet(dir = args$fds_dir, name = args$cohort_id)
 #Filter
 
 fds <- filterExpressionAndVariability(fds, minDeltaPsi = 0.0, filter = FALSE)
-png("filter_expression.png", width = 2000, height = 2000, res = 300)
+dir.create("plots/misc", recursive = TRUE, showWarnings = FALSE)
+
+png("plots/misc/filter_expression.png", width = 2000, height = 2000, res = 300)
 plotFilterExpression(fds, bins = 100)
 dev.off()
 
 fds_filtered <- fds[mcols(fds, type = "j")[, "passed"], ]
 psi_types <- c("psi5", "psi3", "jaccard")
-
-#Hyperparams & Fitting
-
-for (psi_type in psi_types) {
-  fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE, BPPARAM = bp)
-}
 
 optimal_qs <- c(
   psi5 = bestQ(fds_filtered, type = "psi5"),

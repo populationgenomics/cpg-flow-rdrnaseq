@@ -11,11 +11,19 @@ parser$add_argument("--working_dir", default = "output", help = "Working directo
 parser$add_argument("--nthreads", type = "integer", default = 1, help = "Number of threads")
 args <- parser$parse_args()
 
-fds <- loadFraserDataSet(dir = args$working_dir, name = args$cohort_id)
-register(MulticoreParam(workers = args$nthreads))
+dir.create(file.path(args$working_dir, "savedObjects", paste0("FRASER_", args$cohort_id)), recursive = TRUE, showWarnings = FALSE)
+file.copy(args$fds_path, file.path(args$working_dir, "savedObjects", paste0("FRASER_", args$cohort_id), "fds-object.RDS"))
 
 options("FRASER.maxSamplesNoHDF5" = 0)
 options("FRASER.maxJunctionsNoHDF5" = -1)
+
+fds <- loadFraserDataSet(dir = args$working_dir, name = args$cohort_id)
+
+bp <- MulticoreParam(workers = args$nthreads)
+register(bp)
+
+
+fds <- countRNAData(fds, BPPARAM = bp)
 
 #Merge split counts
 
@@ -38,3 +46,5 @@ saveRDS(filtered_ranges, "g_ranges_non_split_counts.RDS")
 
 splice_site_coords <- FRASER:::extractSpliceSiteCoordinates(filtered_ranges, fds)
 saveRDS(splice_site_coords, "splice_site_coords.RDS")
+
+saveFraserDataSet(fds)

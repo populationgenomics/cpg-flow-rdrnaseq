@@ -1,3 +1,5 @@
+#!/usr/bin/env Rscript
+
 library(argparse)
 library(FRASER)
 library(BiocParallel)
@@ -12,13 +14,15 @@ args <- parser$parse_args()
 
 #Setup FRASER directory structure
 
-dir.create(file.path(args$working_dir, "savedObjects", args$cohort_id), recursive = TRUE, showWarnings = FALSE)
-file.copy(args$fds_path, file.path(args$working_dir, "savedObjects", args$cohort_id, "fds-object.RDS"))
+dir.create(file.path(args$working_dir, "savedObjects", paste0("FRASER_", args$cohort_id)), recursive = TRUE, showWarnings = FALSE)
+file.copy(args$fds_path, file.path(args$working_dir, "savedObjects", paste0("FRASER_", args$cohort_id), "fds-object.RDS"))
 
-fds <- loadFraserDataSet(dir = args$working_dir, name = args$cohort_id)
+#Force HDF5 to save RAM
 
 options("FRASER.maxSamplesNoHDF5" = 0)
 options("FRASER.maxJunctionsNoHDF5" = -1)
+
+fds <- loadFraserDataSet(dir = args$working_dir, name = args$cohort_id)
 
 fds <- countSplitReads(
   sampleID = args$sample_id,
