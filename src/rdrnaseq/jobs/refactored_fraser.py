@@ -243,7 +243,7 @@ def fraser_merge_split_reads(
     j = get_fraser_job(b, 'fraser_merge_split', job_attrs)
 
     # Prepare resource group for multiple outputs
-    j.BashJob.declare_resource_group(
+    j.declare_resource_group(
         out={
             'g_ranges_split': 'g_ranges_split_counts.RDS',
             'g_ranges_non_split': 'g_ranges_non_split_counts.RDS',
