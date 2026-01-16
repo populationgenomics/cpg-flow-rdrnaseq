@@ -191,7 +191,7 @@ class Count(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data', 'temp_data'])
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data'])
 class Fraser(stage.CohortStage):
     """
     Perform aberrant splicing analysis with FRASER.
