@@ -17,7 +17,7 @@ from cpg_flow.filetypes import (
 from cpg_utils import Path
 from hailtop.batch.job import Job
 
-from rdrnaseq.jobs import align_rna, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, count, outrider, refactored_fraser, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -191,7 +191,7 @@ class Count(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data'])
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data', 'temp_data'])
 class Fraser(stage.CohortStage):
     """
     Perform aberrant splicing analysis with FRASER.
@@ -204,15 +204,14 @@ class Fraser(stage.CohortStage):
         return {
             'Rds_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz',
             'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv',
+            'temp_data': cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fraser_temp_data',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
-        Queue a job to run FRASER.
+        Queue a job to run the refactored FRASER analysis.
         """
-
         output = self.expected_outputs(cohort)
-
         sequencing_groups = cohort.get_sequencing_groups()
 
         bam_or_cram_inputs: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]] = []
@@ -224,7 +223,8 @@ class Fraser(stage.CohortStage):
             else:
                 bam_or_cram_inputs.append((sequencing_group.id, CramPath(cram_path, f'{cram_path!s}.crai'), bam_path))
 
-        j = fraser.fraser(
+        j = refactored_fraser.fraser_pipeline(
+            output_prefix=cohort.dataset.tmp_prefix() / 'fraser',
             input_bams_or_crams=bam_or_cram_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
