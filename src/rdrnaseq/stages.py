@@ -148,7 +148,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_cram=aligned_cram,
                 job_attrs=attributes,
             )
-            logger.info(f'Generating BAM for {sequencing_group.id} (Align stage)')
+            logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
             samples_with_bams[sequencing_group.id] = align_jobs[-1]
