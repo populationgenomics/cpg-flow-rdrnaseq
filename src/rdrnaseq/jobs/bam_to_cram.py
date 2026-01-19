@@ -58,13 +58,13 @@ def cram_to_bam(
     input_cram_path: Path,
     output_bam: str,
     job_attrs: dict[str, str],
-) -> tuple[Job, ResourceGroup]:
+) -> Job:
     """
     Convert a CRAM file to a BAM file.
     """
     b = get_batch()
 
-    reference_fasta_path = config.reference_path('broad/ref_fasta')
+    reference_fasta_path = config.config_retrieve(['references', 'ref_fasta'])
 
     input_cram = b.read_input_group(
         **{
@@ -103,4 +103,4 @@ def cram_to_bam(
     # Write BAM if requested
     b.write_output(j.sorted_bam, output_bam.removesuffix('.bam'))
 
-    return j, j.sorted_bam
+    return j
