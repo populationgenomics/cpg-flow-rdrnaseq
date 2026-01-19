@@ -147,6 +147,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_cram=aligned_cram,
                 job_attrs=attributes,
             )
+            logging.info(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
             samples_with_bams[sequencing_group.id] = align_jobs[-1]
@@ -193,6 +194,7 @@ class Count(stage.SequencingGroupStage):
                 output_bam=cram_and_bam_paths['bam'],
                 job_attrs=self.get_job_attrs(target=sequencing_group),
             )
+            logging.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
             samples_with_bams[sequencing_group.id] = bam_job
             jobs.append(bam_job)
 
@@ -244,6 +246,7 @@ class Fraser(stage.CohortStage):
                     output_bam=cram_and_bam_paths['bam'],
                     job_attrs=self.get_job_attrs(target=sequencing_group),
                 )
+                logging.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
                 samples_with_bams[sequencing_group.id] = bam_job
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
