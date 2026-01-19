@@ -122,7 +122,7 @@ def fraser_init(b: hb.Batch, input_bams: dict, cohort_id: str, job_attrs: dict, 
     j = get_fraser_job(b, 'fraser_init', job_attrs)
     # Dynamic storage for Init
     storage = fraser_storage_required_gb(len(input_bams), base_storage_gb=50, per_bam_storage_gb=10)
-    res = HIGHMEM.set_resources(j, ncpu=10, storage_gb=storage)
+    res = HIGHMEM.set_resources(job=j, ncpu=10, storage_gb=storage)
 
     df = pd.DataFrame([{'sample_id': s, 'bam_path': str(bam)} for s, bam in input_bams.items()])
     tmp_csv = to_path(output_path).parent / 'sample_map.csv'
@@ -148,7 +148,7 @@ def fraser_count_split_reads(b, fds, bam, sample_id, cohort_id, job_attrs, outpu
         return b.read_input(output_path)
 
     j = get_fraser_job(b, f'count_split_{sample_id}', job_attrs)
-    res = STANDARD.set_resources(j, ncpu=4, storage_gb=20)
+    res = STANDARD.set_resources(job=j, ncpu=4, storage_gb=20)
     j.command(
         command(f"""
         mkdir -p /io/work
@@ -171,7 +171,7 @@ def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
 
     storage = fraser_storage_required_gb(len(split_counts), base_storage_gb=50, per_bam_storage_gb=10)
-    res = HIGHMEM.set_resources(j, ncpu=10, storage_gb=storage)
+    res = HIGHMEM.set_resources(job=j, ncpu=10, storage_gb=storage)
 
     cache_path = '/io/work/cache/splitCounts'
     setup_cmds = [f'mkdir -p {cache_path}']
@@ -201,7 +201,7 @@ def fraser_count_non_split_reads(b, fds, bam, coords, sample_id, _cohort_id, job
         return b.read_input(output_path)
 
     j = get_fraser_job(b, f'count_non_split_{sample_id}', job_attrs)
-    res = STANDARD.set_resources(j, ncpu=4, storage_gb=20)
+    res = STANDARD.set_resources(job=j, ncpu=4, storage_gb=20)
     j.command(
         command(f"""
         mkdir -p /io/work
@@ -224,7 +224,7 @@ def fraser_merge_non_split_reads(
 
     j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
     storage = fraser_storage_required_gb(num_samples, base_storage_gb=50, per_bam_storage_gb=10)
-    res = HIGHMEM.set_resources(j, ncpu=10, storage_gb=storage)
+    res = HIGHMEM.set_resources(job=j, ncpu=10, storage_gb=storage)
 
     setup_lines = [f'mkdir -p /io/work/cache/nonSplicedCounts/{cohort_id}']
     for sid, r in non_split_counts.items():
@@ -254,7 +254,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     j.declare_resource_group(output={k: v.name for k, v in output_paths.items()})
 
     storage = fraser_storage_required_gb(num_samples, base_storage_gb=50, per_bam_storage_gb=10)
-    res = HIGHMEM.set_resources(j, ncpu=10, storage_gb=storage)
+    res = HIGHMEM.set_resources(job=j, ncpu=10, storage_gb=storage)
 
     cfg = get_config().get('fraser', {})
     j.command(
