@@ -1,12 +1,4 @@
-# this is a template for the config file
-# demonstrating some of the common options used in cpg-flow
 [workflow]
-
-
-name = 'rdrnaseq'
-
-# mandatory fields for cpg-flow, not populated by analysis-runner
-
 sequencing_type = 'transcriptome'
 
 # used to make sure we don't repeat previously completed stages
@@ -14,7 +6,6 @@ check_expected_outputs = true
 
 # the method to register outputs, can be missing - will not generate metamist analysis entries
 status_reporter = 'metamist'
-
 
 [trim]
 adapter_type = "ILLUMINA_TRUSEQ"
