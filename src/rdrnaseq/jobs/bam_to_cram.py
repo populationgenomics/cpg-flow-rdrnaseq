@@ -56,7 +56,7 @@ def bam_to_cram(
 
 def cram_to_bam(
     input_cram_path: Path,
-    output_bam: Path,
+    output_bam: str,
     job_attrs: dict[str, str],
 ) -> tuple[Job, ResourceGroup]:
     """
@@ -101,6 +101,6 @@ def cram_to_bam(
     j.command(command(cmd, monitor_space=True))
 
     # Write BAM if requested
-    b.write_output(j.sorted_bam, str(output_bam.with_suffix('')))
+    b.write_output(j.sorted_bam, output_bam.removesuffix('.bam'))
 
     return j, j.sorted_bam
