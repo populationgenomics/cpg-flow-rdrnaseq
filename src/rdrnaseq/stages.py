@@ -2,10 +2,11 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
-import logging
 import re
 from dataclasses import dataclass
 from os.path import basename
+
+from loguru import logger
 
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
@@ -147,7 +148,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_cram=aligned_cram,
                 job_attrs=attributes,
             )
-            logging.info(f'Generating BAM for {sequencing_group.id} (Align stage)')
+            logger.info(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
             samples_with_bams[sequencing_group.id] = align_jobs[-1]
@@ -155,7 +156,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             if align_jobs:
                 jobs.extend(align_jobs)
         except Exception as e:
-            logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
+            logger.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
             raise RuntimeError(f'Error aligning RNA-seq reads for {sequencing_group}') from e
 
         # Create outputs and return jobs
@@ -194,7 +195,7 @@ class Count(stage.SequencingGroupStage):
                 output_bam=cram_and_bam_paths['bam'],
                 job_attrs=self.get_job_attrs(target=sequencing_group),
             )
-            logging.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
+            logger.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
             samples_with_bams[sequencing_group.id] = bam_job
             jobs.append(bam_job)
 
@@ -246,7 +247,7 @@ class Fraser(stage.CohortStage):
                     output_bam=cram_and_bam_paths['bam'],
                     job_attrs=self.get_job_attrs(target=sequencing_group),
                 )
-                logging.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
+                logger.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
                 samples_with_bams[sequencing_group.id] = bam_job
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
