@@ -17,7 +17,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, refactored_fraser, outrider, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -226,7 +226,7 @@ class Fraser(stage.CohortStage):
         return {
             'Rds_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz',
             'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv',
-            'temp_data': cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fraser_temp_data',
+            'temp_data': str(cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fraser_temp_data'),
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -251,11 +251,12 @@ class Fraser(stage.CohortStage):
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
-        jobs = fraser.fraser(
+        jobs = refactored_fraser.fraser_pipeline(
             input_bams=bam_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            output_prefix=output['temp_data'],
         )
 
         # if there was a non-alignment BAM creation job, this job must wait for that to conclude

@@ -1,6 +1,6 @@
 import hailtop.batch as hb
 import pandas as pd
-from cpg_flow.filetypes import BamPath, CramPath
+from cpg_flow.utils import exists
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
@@ -32,23 +32,27 @@ def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_stor
 
 
 def fraser_pipeline(
-    input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
+    input_bams: list[tuple[str, str]],
     cohort_id: str,
     job_attrs: dict,
     output_fds_path: dict[str, Path],
-    output_prefix: Path,
+    output_prefix: str,
 ) -> list[Job]:
     b = get_batch()
     # Use output_prefix for intermediate steps and extract final paths from dict
-    root = to_path(output_prefix / cohort_id)
+    root = to_path(output_prefix)
     all_jobs = []
 
     # 0. Localize/Convert Inputs
-    input_bams_localised: dict[str, hb.ResourceGroup] = {}
-    for sample_id, input_path, _ in input_bams_or_crams:
-        # Note: In CPG framework, calling .resource_group(b) on BamPath
-        # returns a group containing both .bam and .bai
-        input_bams_localised[sample_id] = input_path.resource_group(b)
+    input_bams_localised: dict[str, hb.ResourceFile] = {
+        sample_id: b.read_input_group(
+            **{
+                'bam': input_bam,
+                'bam.bai': f'{input_bam}.bai',
+            }
+        ).bam
+        for sample_id, input_bam in input_bams
+    }
 
     # 1. Init
     init_fds_path = root / 'init' / 'fds-object.RDS'
@@ -111,8 +115,12 @@ def fraser_pipeline(
     return all_jobs
 
 
-def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.ResourceFile, Job]:
+def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.ResourceFile, Job|None]:
+    if exists(output_path):
+        return b.read_output(str(output_path)), None
+
     j = get_fraser_job(b, 'fraser_init', job_attrs)
+
     storage = fraser_storage_required_gb(len(input_bams), 50, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
@@ -133,6 +141,9 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
 
 
 def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, output_path):
+    if exists(output_path):
+        return b.read_output(str(output_path)), None
+
     j = get_fraser_job(b, f'count_split_{sample_id}', job_attrs)
     res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
     j.command(
@@ -149,6 +160,9 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
 
 
 def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_paths):
+    if all(exists(outputs) for outputs in output_paths.values()):
+        return b.read_output(str(output_paths)), None
+
     j = get_fraser_job(b, 'fraser_merge_split', job_attrs)
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
     storage = fraser_storage_required_gb(len(split_counts), 50, 10)
@@ -175,6 +189,9 @@ def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_
 
 
 def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, job_attrs, output_path):
+    if exists(output_path):
+        return b.read_output(str(output_path)), None
+
     j = get_fraser_job(b, f'count_non_split_{sample_id}', job_attrs)
     res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
     j.command(
@@ -193,6 +210,8 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, job_attrs, o
 def fraser_merge_non_split_reads(
     b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples
 ):
+    if exists(output_path):
+        return b.read_output(str(output_path)), None
     j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
     storage = fraser_storage_required_gb(num_samples, base_storage_gb=50, per_bam_storage_gb=10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
@@ -217,6 +236,9 @@ def fraser_merge_non_split_reads(
 
 
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples):
+    if all(exists(x) for x in output_paths.values()):
+        return None
+
     j = get_fraser_job(b, 'fraser_analysis', job_attrs)
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
     storage = fraser_storage_required_gb(num_samples, 50, 10)
