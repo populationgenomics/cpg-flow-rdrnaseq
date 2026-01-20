@@ -260,6 +260,7 @@ class Fraser(stage.CohortStage):
             output_prefix=output['temp_data'],
         )
 
+        jobs = [x for x in jobs if x is not None]
         # if there was a non-alignment BAM creation job, this job must wait for that to conclude
         for sequencing_group in cohort.get_sequencing_groups():
             if sequencing_group.id in samples_needing_bams:
