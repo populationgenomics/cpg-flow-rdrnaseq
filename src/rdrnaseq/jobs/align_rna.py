@@ -14,12 +14,11 @@ from cpg_flow.filetypes import (
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_utils import Path, config
-from cpg_utils.config import reference_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from .bam_to_cram import bam_to_cram
-from .markdups import markdup
+from rdrnaseq.jobs.bam_to_cram import bam_to_cram
+from rdrnaseq.jobs.markdups import markdup
 
 
 class GCPStarReference:
@@ -135,7 +134,7 @@ def align(
         input_bam=out_bam,
         job_attrs=job_attrs,
         requested_nthreads=4,
-        reference_fasta_path=reference_path('broad/ref_fasta'),
+        reference_fasta_path=config.config_retrieve(['references', 'ref_fasta']),
     )
     jobs.append(j)
     b.write_output(out_cram, str(output_cram.path.with_suffix('')))

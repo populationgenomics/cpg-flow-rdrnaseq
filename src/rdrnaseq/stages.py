@@ -6,8 +6,6 @@ import re
 from dataclasses import dataclass
 from os.path import basename
 
-from loguru import logger
-
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
     BamPath,
@@ -17,6 +15,7 @@ from cpg_flow.filetypes import (
 )
 from cpg_utils import Path
 from hailtop.batch.job import Job
+from loguru import logger
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
@@ -35,7 +34,7 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 
 # an object to collect all samples where a CRAM->BAM job was already scheduled
 # this allows cross-stage job dependencies to exist, not very CPG-Flow
-samples_with_bams: dict[str, Job] = {}
+samples_needing_bams: dict[str, Job] = {}
 
 
 @dataclass
@@ -151,7 +150,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
-            samples_with_bams[sequencing_group.id] = align_jobs[-1]
+            samples_needing_bams[sequencing_group.id] = align_jobs[-1]
 
             if align_jobs:
                 jobs.extend(align_jobs)
@@ -189,14 +188,14 @@ class Count(stage.SequencingGroupStage):
         cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
 
         # if this stage is running, this sample needs to have a BAM
-        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_with_bams)):
+        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
             bam_job = bam_to_cram.cram_to_bam(
                 input_cram_path=cram_and_bam_paths['cram'],
                 output_bam=cram_and_bam_paths['bam'],
                 job_attrs=self.get_job_attrs(target=sequencing_group),
             )
             logger.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
-            samples_with_bams[sequencing_group.id] = bam_job
+            samples_needing_bams[sequencing_group.id] = bam_job
             jobs.append(bam_job)
 
         count_job = count.count(
@@ -208,8 +207,8 @@ class Count(stage.SequencingGroupStage):
         )
 
         # if there was a non-alignment BAM creation job, this job must wait for that to conclude
-        if sequencing_group.id in samples_with_bams:
-            count_job.depends_on(samples_with_bams[sequencing_group.id])
+        if sequencing_group.id in samples_needing_bams:
+            count_job.depends_on(samples_needing_bams[sequencing_group.id])
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=count_job)
 
@@ -241,14 +240,14 @@ class Fraser(stage.CohortStage):
         for sequencing_group in cohort.get_sequencing_groups():
             cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
             # if this stage is running, this sample needs to have a BAM
-            if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_with_bams)):
+            if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
                 bam_job = bam_to_cram.cram_to_bam(
                     input_cram_path=cram_and_bam_paths['cram'],
                     output_bam=cram_and_bam_paths['bam'],
                     job_attrs=self.get_job_attrs(target=sequencing_group),
                 )
                 logger.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
-                samples_with_bams[sequencing_group.id] = bam_job
+                samples_needing_bams[sequencing_group.id] = bam_job
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
@@ -260,9 +259,10 @@ class Fraser(stage.CohortStage):
         )
 
         # if there was a non-alignment BAM creation job, this job must wait for that to conclude
-        for j in jobs:
-            if sequencing_group.id in samples_with_bams:
-                j.depends_on(samples_with_bams[sequencing_group.id])
+        for sequencing_group in cohort.get_sequencing_groups():
+            if sequencing_group.id in samples_needing_bams:
+                for j in jobs:
+                    j.depends_on(samples_needing_bams[sequencing_group.id])
 
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
