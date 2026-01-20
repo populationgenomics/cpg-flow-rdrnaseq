@@ -230,7 +230,7 @@ class Fraser(stage.CohortStage):
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
-        return self.make_outputs(cohort, data=output, jobs=jobs)
+        return self.make_outputs(cohort, data=output, jobs=j)
 
 
 @stage.stage(required_stages=Count, analysis_type='outrider', analysis_keys=['RData', 'seqr_out'])

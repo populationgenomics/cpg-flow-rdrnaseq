@@ -87,8 +87,14 @@ def fraser_pipeline(
     # 5. Merge Non-Split
     fds_tar_path = to_path(output_fds_path['Rds_data'])
     fds_tar_res, j_merge_non = fraser_merge_non_split_reads(
-        b, fds_res, non_split_counts_res, merge_out_rg.g_ranges_non_split,
-        cohort_id, job_attrs, fds_tar_path, len(input_bams_localised)
+        b,
+        fds_res,
+        non_split_counts_res,
+        merge_out_rg.g_ranges_non_split,
+        cohort_id,
+        job_attrs,
+        fds_tar_path,
+        len(input_bams_localised),
     )
     all_jobs.append(j_merge_non)
 
