@@ -18,6 +18,7 @@ from hailtop.batch.job import Job
 from loguru import logger
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, outrider, refactored_fraser, trim
+from virtualenv.config.convert import NoneType
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -264,7 +265,8 @@ class Fraser(stage.CohortStage):
             if sequencing_group.id in samples_needing_bams:
                 if jobs:
                     for j in jobs:
-                        j.depends_on(samples_needing_bams[sequencing_group.id])
+                        if j is not None:
+                            j.depends_on(samples_needing_bams[sequencing_group.id])
 
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
