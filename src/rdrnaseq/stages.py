@@ -17,7 +17,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, refactored_fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, outrider, refactored_fraser, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:

@@ -1,7 +1,8 @@
+# ruff: noqa: PLR0912
 import hailtop.batch as hb
 import pandas as pd
-from cpg_flow.utils import exists
 from cpg_flow.resources import HIGHMEM, STANDARD
+from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
@@ -57,15 +58,24 @@ def fraser_pipeline(
     # 1. Init
     init_fds_path = root / 'init' / 'fds-object.RDS'
     fds_res, j_init = fraser_init(b, input_bams_localised, cohort_id, job_attrs, init_fds_path)
-    all_jobs.append(j_init)
+    if j_init:
+        all_jobs.append(j_init)
 
     # 2. Count Split
     split_counts_res = {}
+    count_split_jobs = []
     for sid, bam_rg in input_bams_localised.items():
         out_p = root / 'split_counts' / f'{sid}.RDS'
         res, j = fraser_count_split_reads(b, fds_res, bam_rg, sid, cohort_id, job_attrs, out_p)
         split_counts_res[sid] = res
-        all_jobs.append(j)
+        if j:
+            count_split_jobs.append(j)
+
+    if all_jobs and count_split_jobs:
+        for job in count_split_jobs:
+            job.depends_on(all_jobs[-1])
+
+    all_jobs.extend(count_split_jobs)
 
     # 3. Merge Split
     merge_split_paths = {
@@ -76,17 +86,29 @@ def fraser_pipeline(
     merge_out_rg, j_merge_split = fraser_merge_split_reads(
         b, fds_res, split_counts_res, cohort_id, job_attrs, merge_split_paths
     )
+
+    if j_merge_split and all_jobs:
+        j_merge_split.depends_on(*all_jobs)
+
     all_jobs.append(j_merge_split)
 
     # 4. Count Non-Split
     non_split_counts_res = {}
+    count_non_split_jobs = []
     for sid, bam_rg in input_bams_localised.items():
         out_p = root / 'non_split_counts' / f'{sid}.h5'
         res, j = fraser_count_non_split_reads(
             b, fds_res, bam_rg, merge_out_rg.splice_site_coords, sid, job_attrs, out_p
         )
         non_split_counts_res[sid] = res
-        all_jobs.append(j)
+        if j:
+            count_non_split_jobs.append(j)
+
+        if all_jobs and count_non_split_jobs:
+            for job in count_non_split_jobs:
+                job.depends_on(all_jobs[-1])
+
+        all_jobs.extend(count_non_split_jobs)
 
     # 5. Merge Non-Split
     fds_tar_path = to_path(output_fds_path['Rds_data'])
@@ -100,6 +122,9 @@ def fraser_pipeline(
         fds_tar_path,
         len(input_bams_localised),
     )
+
+    if j_merge_non and all_jobs:
+        j_merge_split.depends_on(*all_jobs)
     all_jobs.append(j_merge_non)
 
     # 6. Analysis
@@ -110,24 +135,32 @@ def fraser_pipeline(
         'stats': root / 'results' / 'statistics_summary.txt',
     }
     j_analysis = fraser_analysis(b, fds_tar_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
-    all_jobs.append(j_analysis)
+
+    if j_analysis and all_jobs:
+        j_analysis.depends_on(*all_jobs)
+
+    if j_analysis:
+        all_jobs.append(j_analysis)
 
     return all_jobs
 
 
-def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.ResourceFile, Job|None]:
+def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.ResourceFile, Job | None]:
     if exists(output_path):
-        return b.read_output(str(output_path)), None
+        return b.read_input(output_path), None
 
     j = get_fraser_job(b, 'fraser_init', job_attrs)
 
     storage = fraser_storage_required_gb(len(input_bams), 50, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
-    sample_df = pd.DataFrame([{'sample_id': s, 'bam_path': str(bam.bam)} for s, bam in input_bams.items()])
+    sample_df = pd.DataFrame([{'sample_id': s, 'bam_path': str(bam)} for s, bam in input_bams.items()])
     tmp_csv = to_path(output_path).parent / 'sample_map.csv'
     with tmp_csv.open('w') as f:
         sample_df.to_csv(f, index=False)
+
+    for input_bam in input_bams.values():
+        j.command(f'ls {input_bam}')
 
     j.command(
         command(f"""
@@ -142,15 +175,13 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
 
 def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, output_path):
     if exists(output_path):
-        return b.read_output(str(output_path)), None
+        return b.read_input(output_path), None
 
     j = get_fraser_job(b, f'count_split_{sample_id}', job_attrs)
     res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
     j.command(
         command(f"""
-        ln -s {bam_rg.bam} /io/input.bam
-        ln -s {bam_rg.bai} /io/input.bam.bai
-        Rscript {R_COUNT_SPLIT} --fds_path {fds} --bam_path /io/input.bam --cohort_id "{cohort_id}" \\
+        Rscript {R_COUNT_SPLIT} --fds_path {fds} --bam_path {bam_rg} --cohort_id "{cohort_id}" \\
             --sample_id "{sample_id}" --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
         mv /io/work/cache/splitCounts/splitCounts-{sample_id}.RDS {j.out}
     """)
@@ -161,7 +192,7 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
 
 def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_paths):
     if all(exists(outputs) for outputs in output_paths.values()):
-        return b.read_output(str(output_paths)), None
+        return b.read_input_group(**output_paths), None
 
     j = get_fraser_job(b, 'fraser_merge_split', job_attrs)
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
@@ -190,15 +221,13 @@ def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_
 
 def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, job_attrs, output_path):
     if exists(output_path):
-        return b.read_output(str(output_path)), None
+        return b.read_input(output_path), None
 
     j = get_fraser_job(b, f'count_non_split_{sample_id}', job_attrs)
     res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
     j.command(
         command(f"""
-        ln -s {bam_rg.bam} /io/input.bam
-        ln -s {bam_rg.bai} /io/input.bam.bai
-        Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path /io/input.bam --coords_path {coords} \\
+        Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path {bam_rg} --coords_path {coords} \\
             --sample_id "{sample_id}" --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
         find /io/work/cache/nonSplicedCounts/ -name "nonSplicedCounts-{sample_id}.*" -exec mv {{}} {j.out} \\;
     """)
@@ -211,7 +240,7 @@ def fraser_merge_non_split_reads(
     b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples
 ):
     if exists(output_path):
-        return b.read_output(str(output_path)), None
+        return b.read_input(output_path), None
     j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
     storage = fraser_storage_required_gb(num_samples, base_storage_gb=50, per_bam_storage_gb=10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
