@@ -13,13 +13,12 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_utils import Path, config, to_path
-from cpg_utils.config import image_path, reference_path
+from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 
-from .bam_to_cram import bam_to_cram
-from .markdups import markdup
+from rdrnaseq.jobs.bam_to_cram import bam_to_cram
+from rdrnaseq.jobs.markdups import markdup
 
 
 class GCPStarReference:
@@ -60,7 +59,7 @@ def align(
     job_attrs: dict,
     output_bam: BamPath,
     output_cram: CramPath,
-) -> list[Job] | None:
+) -> list[Job]:
     """
     Align (potentially multiple) FASTQ pairs using STAR,
     merge the resulting BAMs (if necessary),
@@ -120,29 +119,25 @@ def align(
     # The output of sort_index_bam is a ResourceGroup containing .bam and .bam.bai
     # We extract the bam file for the next step.
 
-    j, mkdup_bam = markdup(
+    j, out_bam = markdup(
         input_bam=sorted_bam_group,
         job_attrs=job_attrs,
         requested_nthreads=4,
     )
     jobs.append(j)
-    out_bam = mkdup_bam
 
-    # Output writing
-    if output_bam:
-        out_bam_path = to_path(output_bam.path)
-        b.write_output(out_bam, str(out_bam_path.with_suffix('')))
+    # BAM write
+    b.write_output(out_bam, str(output_bam.path.with_suffix('')))
 
-    if output_cram:
-        j, out_cram = bam_to_cram(
-            input_bam=out_bam,
-            job_attrs=job_attrs,
-            requested_nthreads=4,
-            reference_fasta_path=reference_path('broad/ref_fasta'),
-        )
-        jobs.append(j)
-        out_cram_path = to_path(output_cram.path)
-        b.write_output(out_cram, str(out_cram_path.with_suffix('')))
+    # CRAM create and write
+    j, out_cram = bam_to_cram(
+        input_bam=out_bam,
+        job_attrs=job_attrs,
+        requested_nthreads=4,
+        reference_fasta_path=config.config_retrieve(['references', 'ref_fasta']),
+    )
+    jobs.append(j)
+    b.write_output(out_cram, str(output_cram.path.with_suffix('')))
 
     return jobs
 
@@ -159,7 +154,7 @@ def align_fq_pair(
     b = get_batch()
 
     j = b.new_job(name='align_rna', attributes=job_attrs | {'tool': 'STAR'})
-    j.image(image_path('star'))
+    j.image(config.config_retrieve(['images', 'star']))
 
     nthreads = 8
 
@@ -191,7 +186,7 @@ def merge_bams(
     b = get_batch()
 
     j = b.new_job(name='merge_bams', attributes=job_attrs | {'tool': 'samtools'})
-    j.image(image_path('samtools'))
+    j.image(config.config_retrieve(['images', 'samtools']))
 
     nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
@@ -215,7 +210,7 @@ def sort_index_bam(
     b = get_batch()
 
     j = b.new_job(name='sort_index_bam', attributes=job_attrs | {'tool': 'samtools'})
-    j.image(image_path('samtools'))
+    j.image(config.config_retrieve(['images', 'samtools']))
 
     nthreads = 4
     res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)

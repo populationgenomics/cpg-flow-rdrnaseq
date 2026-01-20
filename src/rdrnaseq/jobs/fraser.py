@@ -6,18 +6,12 @@ Perform aberrant splicing analysis with FRASER.
 from textwrap import dedent
 
 import hailtop.batch as hb
-from cpg_flow.filetypes import (
-    BamPath,
-    CramPath,
-)
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve, get_config, reference_path
+from cpg_utils.config import config_retrieve, get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
-
-from rdrnaseq.jobs.bam_to_cram import cram_to_bam
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
@@ -188,7 +182,7 @@ cp -- "results/results.all.csv" "{self.output['results.all.csv']}"
 
 
 def fraser(
-    input_bams_or_crams: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]],
+    input_bams: list[tuple[str, str]],
     cohort_id: str,
     job_attrs: dict[str, str],
     output_fds_path: dict[str, Path],
@@ -200,28 +194,16 @@ def fraser(
 
     jobs: list[Job] = []
 
-    # Convert CRAMs to BAMs if necessary
-    input_bams_localised: dict[str, hb.ResourceFile] = {}
-    for input_bam_or_cram_tuple in input_bams_or_crams:
-        sample_id = input_bam_or_cram_tuple[0]
-        input_bam_or_cram = input_bam_or_cram_tuple[1]
-        potential_bam_path = input_bam_or_cram_tuple[2]
-        if isinstance(input_bam_or_cram, CramPath) and isinstance(potential_bam_path, Path):
-            j, output_bam = cram_to_bam(
-                input_cram=input_bam_or_cram.resource_group(b),
-                output_bam=potential_bam_path,
-                job_attrs=job_attrs,
-                reference_fasta_path=reference_path('broad/ref_fasta'),
-            )
-            if j and isinstance(j, Job):
-                jobs.append(j)
-            input_bams_localised[sample_id] = output_bam.bam
-        elif isinstance(input_bam_or_cram, BamPath):
-            # Localise BAM
-            input_bams_localised[sample_id] = input_bam_or_cram.resource_group(b).bam
-    # Use a generator to find the first element that is NOT a ResourceFile
-    if any(not isinstance(f, hb.ResourceFile) for f in input_bams_localised.values()):
-        raise TypeError('All elements in input_bams_localised must be instances of hb.ResourceFile.')
+    # Get localised BAM objects
+    input_bams_localised: dict[str, hb.ResourceFile] = {
+        sample_id: b.read_input_group(
+            **{
+                'bam': input_bam,
+                'bam.bai': f'{input_bam}.bai',
+            }
+        ).bam
+        for sample_id, input_bam in input_bams
+    }
 
     # Create FRASER job
     j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})

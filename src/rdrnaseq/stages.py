@@ -2,7 +2,6 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
-import logging
 import re
 from dataclasses import dataclass
 from os.path import basename
@@ -16,8 +15,9 @@ from cpg_flow.filetypes import (
 )
 from cpg_utils import Path
 from hailtop.batch.job import Job
+from loguru import logger
 
-from rdrnaseq.jobs import align_rna, count, outrider, refactored_fraser, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -30,6 +30,11 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
     if isinstance(alignment_input, FastqPair):
         alignment_input = FastqPairs([alignment_input])
     return alignment_input
+
+
+# an object to collect all samples where a CRAM->BAM job was already scheduled
+# this allows cross-stage job dependencies to exist, not very CPG-Flow
+samples_needing_bams: dict[str, Job] = {}
 
 
 @dataclass
@@ -80,6 +85,9 @@ class TrimAlignRNA(stage.SequencingGroupStage):
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path | str]:
         """
         Expect a pair of CRAM and CRAI files, one per set of input FASTQ files
+
+        Creates an output BAM in temporary storage, location is a String not a path, to prevent existence checking from
+        always running this stage if BAM isn't required
         """
         return {
             'cram': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram',
@@ -139,10 +147,15 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_cram=aligned_cram,
                 job_attrs=attributes,
             )
+            logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
+
+            # during this run, this SG will have a BAM created
+            samples_needing_bams[sequencing_group.id] = align_jobs[-1]
+
             if align_jobs:
                 jobs.extend(align_jobs)
         except Exception as e:
-            logging.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
+            logger.error(f'Error aligning RNA-seq reads for {sequencing_group}: {e}')
             raise RuntimeError(f'Error aligning RNA-seq reads for {sequencing_group}') from e
 
         # Create outputs and return jobs
@@ -164,31 +177,40 @@ class Count(stage.SequencingGroupStage):
             'summary': sequencing_group.dataset.prefix() / 'count' / f'{sequencing_group.id}.count.summary',
         }
 
-    def queue_jobs(
-        self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput
-    ) -> stage.StageOutput | None:
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
         """
         Queue a job to count the reads with featureCounts.
         """
         outputs = self.expected_outputs(sequencing_group)
 
-        cram_path = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
-        input_cram_or_bam: BamPath | CramPath = CramPath(cram_path, f'{cram_path!s}.crai')
+        jobs = []
 
-        bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-        if utils.exists(bam_path):
-            input_cram_or_bam = BamPath(bam_path, index_path=f'{bam_path!s}.bai')
+        cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
 
-        jobs = count.count(
-            input_cram_or_bam=input_cram_or_bam,
-            cram_to_bam_path=bam_path,
+        # if this stage is running, this sample needs to have a BAM
+        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
+            bam_job = bam_to_cram.cram_to_bam(
+                input_cram_path=cram_and_bam_paths['cram'],
+                output_bam=cram_and_bam_paths['bam'],
+                job_attrs=self.get_job_attrs(target=sequencing_group),
+            )
+            logger.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
+            samples_needing_bams[sequencing_group.id] = bam_job
+            jobs.append(bam_job)
+
+        count_job = count.count(
+            input_bam=cram_and_bam_paths['bam'],
             output_path=outputs['count'],
             summary_path=outputs['summary'],
             sg_id=sequencing_group.id,
             job_attrs=self.get_job_attrs(sequencing_group),
         )
 
-        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
+        if sequencing_group.id in samples_needing_bams:
+            count_job.depends_on(samples_needing_bams[sequencing_group.id])
+
+        return self.make_outputs(sequencing_group, data=outputs, jobs=count_job)
 
 
 @stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data'])
@@ -212,25 +234,37 @@ class Fraser(stage.CohortStage):
         Queue a job to run the refactored FRASER analysis.
         """
         output = self.expected_outputs(cohort)
-        sequencing_groups = cohort.get_sequencing_groups()
 
-        bam_or_cram_inputs: list[tuple[str, BamPath, None] | tuple[str, CramPath, Path]] = []
-        for sequencing_group in sequencing_groups:
-            cram_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'cram')
-            bam_path = inputs.as_path(sequencing_group, TrimAlignRNA, 'bam')
-            if utils.exists(bam_path):
-                bam_or_cram_inputs.append((sequencing_group.id, BamPath(bam_path, f'{bam_path}.bai'), None))
-            else:
-                bam_or_cram_inputs.append((sequencing_group.id, CramPath(cram_path, f'{cram_path!s}.crai'), bam_path))
+        bam_inputs: list[tuple[str, str]] = []
 
-        j = refactored_fraser.fraser_pipeline(
-            output_prefix=cohort.dataset.tmp_prefix() / 'fraser',
-            input_bams_or_crams=bam_or_cram_inputs,
+        for sequencing_group in cohort.get_sequencing_groups():
+            cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
+            # if this stage is running, this sample needs to have a BAM
+            if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
+                bam_job = bam_to_cram.cram_to_bam(
+                    input_cram_path=cram_and_bam_paths['cram'],
+                    output_bam=cram_and_bam_paths['bam'],
+                    job_attrs=self.get_job_attrs(target=sequencing_group),
+                )
+                logger.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
+                samples_needing_bams[sequencing_group.id] = bam_job
+
+            bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
+
+        jobs = fraser.fraser(
+            input_bams=bam_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
-        return self.make_outputs(cohort, data=output, jobs=j)
+
+        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
+        for sequencing_group in cohort.get_sequencing_groups():
+            if sequencing_group.id in samples_needing_bams:
+                for j in jobs:
+                    j.depends_on(samples_needing_bams[sequencing_group.id])
+
+        return self.make_outputs(cohort, data=output, jobs=jobs)
 
 
 @stage.stage(required_stages=Count, analysis_type='outrider', analysis_keys=['RData', 'seqr_out'])
