@@ -194,7 +194,7 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
         return b.read_input(output_path), None
 
     j = get_fraser_job(b, f'count_split_{sample_id}', job_attrs)
-    res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
+    res = STANDARD.set_resources(j=j, ncpu=16, storage_gb=20)
     j.command(
         command(f"""
         Rscript {R_COUNT_SPLIT} --fds_path {fds} --bam_path {bam_rg} --cohort_id "{cohort_id}" \\
