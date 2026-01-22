@@ -224,7 +224,8 @@ def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_
     storage = fraser_storage_required_gb(len(split_counts), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
-    setup = ['mkdir -p /io/work/cache/splitCounts']
+    # Ensure the cache directory structure exists so the symlinks work
+    setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects']
     for sid, r in split_counts.items():
         setup.append(f'ln -s {r} /io/work/cache/splitCounts/splitCounts-{sid}.RDS')
 
