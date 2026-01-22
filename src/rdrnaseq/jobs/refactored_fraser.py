@@ -1,14 +1,12 @@
 # ruff: noqa: PLR0912
 import hailtop.batch as hb
-import pandas as pd
-from loguru import logger
-
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
+from loguru import logger
 
 # R Script Paths
 R_INIT = 'RDrnaseq/fraser_init.R'
@@ -94,11 +92,17 @@ def fraser_pipeline(
         'splice_site_coords': root / 'merge_split' / 'splice_site_coords.RDS',
     }
 
-    logger.info('Planning Merge-split job')
-    merge_split_res, j_merge_split = fraser_merge_split_reads(
-        b, fds_init_res, split_counts_res, cohort_id, job_attrs, merge_split_paths
-    )
+    ref_sid = list(input_bams_localised.keys())[0]
 
+    merge_split_res, j_merge_split = fraser_merge_split_reads(
+        b,
+        fds_init_res,
+        split_counts_res,
+        cohort_id,
+        job_attrs,
+        merge_split_paths,
+        reference_bam_rg=input_bams_localised[ref_sid],  # Pass the ResourceGroup here
+    )
     if j_merge_split and all_jobs:
         j_merge_split.depends_on(*all_jobs)
     if j_merge_split:
@@ -172,7 +176,7 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
     # base_storage_gb bumped to 100 for heavy temp file initialization
     storage = fraser_storage_required_gb(len(input_bams), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
-# Ensure both the BAM directory AND the work directory exist
+    # Ensure both the BAM directory AND the work directory exist
     j.command('mkdir -p /io/batch/input_bams /io/work')
 
     j.command('echo "sample_id,bam_path" > /io/work/sample_map.csv')
@@ -215,7 +219,15 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
     return j.out, j
 
 
-def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_paths):
+def fraser_merge_split_reads(
+    b,
+    fds,
+    split_counts,
+    cohort_id,
+    job_attrs,
+    output_paths,
+    reference_bam_rg=None,  # Add this to pass a ResourceGroup
+):
     if all(exists(outputs) for outputs in output_paths.values()):
         return b.read_input_group(**output_paths), None
 
@@ -224,16 +236,27 @@ def fraser_merge_split_reads(b, fds, split_counts, cohort_id, job_attrs, output_
     storage = fraser_storage_required_gb(len(split_counts), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
-    # Ensure the cache directory structure exists so the symlinks work
-    setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects']
+    # 1. Create directory structure
+    # Added /io/batch/input_bams to the mkdir command
+    setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects /io/batch/input_bams']
+
+    # 2. Symlink the split count RDS files
     for sid, r in split_counts.items():
         setup.append(f'ln -s {r} /io/work/cache/splitCounts/splitCounts-{sid}.RDS')
 
+    # 3. FIX: Symlink a REAL BAM for metadata validation
+    if reference_bam_rg:
+        setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
+        setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
+
     j.command(
         command(
-            '\n'.join(setup) + f"""
+            'ulimit -n 4096\n'
+            + '\n'.join(setup)
+            + f"""
         Rscript {R_MERGE_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
+
         mv /io/work/savedObjects/FRASER_{cohort_id}/fds-object.RDS {j.out.fds_object}
         mv /io/work/g_ranges_split_counts.RDS {j.out.g_ranges_split}
         mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
@@ -285,7 +308,9 @@ def fraser_merge_non_split_reads(
 
     j.command(
         command(
-            'ulimit -n 4096\n' + '\n'.join(setup) + f"""
+            'ulimit -n 4096\n'
+            + '\n'.join(setup)
+            + f"""
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
         tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ FRASER_{cohort_id}/
