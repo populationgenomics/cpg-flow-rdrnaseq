@@ -172,8 +172,9 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
     # base_storage_gb bumped to 100 for heavy temp file initialization
     storage = fraser_storage_required_gb(len(input_bams), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
+# Ensure both the BAM directory AND the work directory exist
+    j.command('mkdir -p /io/batch/input_bams /io/work')
 
-    j.command('mkdir -p /io/batch/input_bams')
     j.command('echo "sample_id,bam_path" > /io/work/sample_map.csv')
     for sid, bam_rg in input_bams.items():
         j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sid}.bam')
