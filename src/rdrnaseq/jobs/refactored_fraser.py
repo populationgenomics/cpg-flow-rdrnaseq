@@ -141,7 +141,7 @@ def fraser_pipeline(
     )
 
     if j_merge_non and all_jobs:
-        j_merge_split.depends_on(*all_jobs)
+        j_merge_non.depends_on(*all_jobs)
     if j_merge_non:
         all_jobs.append(j_merge_non)
 
