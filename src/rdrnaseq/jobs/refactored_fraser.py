@@ -302,9 +302,9 @@ def fraser_merge_non_split_reads(
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
     setup = [f'mkdir -p /io/work/cache/nonSplicedCounts/{cohort_id}']
+    # Fix: Use .h5 extension directly since we know the output format
     for sid, r in non_split_counts.items():
-        setup.append(f'EXT=$(echo {r} | sed "s/.*\\.//")')
-        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sid}.$EXT')
+        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sid}.h5')
 
     j.command(
         command(
