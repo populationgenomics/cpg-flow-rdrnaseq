@@ -305,14 +305,20 @@ def fraser_merge_non_split_reads(
     # Reconstruct the exact path Script 1 and Script 2 expect:
     # cache/nonSplicedCounts/FRASER_{cohort_id}/
     fds_name = f'FRASER_{cohort_id}'
-    cache_dir = f'/io/work/cache/nonSplicedCounts/{fds_name}'
+    # We need to make sure the directory where FRASER expects BAMs exists
+    setup = [
+        f'mkdir -p /io/work/cache/nonSplicedCounts/{fds_name}',
+        'mkdir -p /io/batch/input_bams'
+    ]
 
-    setup = [f'mkdir -p {cache_dir}']
-
+    # 1. Symlink the actual count data
     for sid, r in non_split_counts.items():
-        # We link the resource file to the expected filename in the expected directory.
-        # Script 2 uses recount=FALSE, so it will look specifically for these filenames.
-        setup.append(f'ln -s {r} {cache_dir}/nonSplicedCounts-{sid}.h5')
+        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{fds_name}/nonSplicedCounts-{sid}.h5')
+        # 2. FIX: Create dummy BAM/BAI files to satisfy FRASER's validation check
+    # FRASER won't read these because recount=FALSE, but it checks for their existence.
+    for sid in non_split_counts.keys():
+        setup.append(f'touch /io/batch/input_bams/{sid}.bam')
+        setup.append(f'touch /io/batch/input_bams/{sid}.bam.bai')
 
     j.command(
         command(
