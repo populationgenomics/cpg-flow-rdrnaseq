@@ -297,14 +297,22 @@ def fraser_merge_non_split_reads(
 ):
     if exists(output_path):
         return b.read_input(output_path), None
+
     j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
     storage = fraser_storage_required_gb(num_samples, 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
-    setup = [f'mkdir -p /io/work/cache/nonSplicedCounts/{cohort_id}']
-    # Fix: Use .h5 extension directly since we know the output format
+    # Reconstruct the exact path Script 1 and Script 2 expect:
+    # cache/nonSplicedCounts/FRASER_{cohort_id}/
+    fds_name = f'FRASER_{cohort_id}'
+    cache_dir = f'/io/work/cache/nonSplicedCounts/{fds_name}'
+
+    setup = [f'mkdir -p {cache_dir}']
+
     for sid, r in non_split_counts.items():
-        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sid}.h5')
+        # We link the resource file to the expected filename in the expected directory.
+        # Script 2 uses recount=FALSE, so it will look specifically for these filenames.
+        setup.append(f'ln -s {r} {cache_dir}/nonSplicedCounts-{sid}.h5')
 
     j.command(
         command(
@@ -313,7 +321,9 @@ def fraser_merge_non_split_reads(
             + f"""
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
-        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ FRASER_{cohort_id}/
+        
+        # Wrap the results into a tarball for the final analysis step
+        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
     """
         )
     )
