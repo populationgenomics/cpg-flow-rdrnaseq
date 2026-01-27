@@ -142,6 +142,7 @@ def fraser_pipeline(
         job_attrs,
         fds_tar_path,
         len(input_bams_localised),
+        reference_bam_rg=input_bams_localised[ref_sid],
     )
 
     if j_merge_non and all_jobs:
@@ -293,7 +294,13 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
 
 def fraser_merge_non_split_reads(
-    b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples
+    b, fds, non_split_counts,
+    filtered_ranges,
+    cohort_id,
+    job_attrs,
+    output_path,
+    num_samples,
+    reference_bam_rg
 ):
     if exists(output_path):
         return b.read_input(output_path), None
@@ -301,24 +308,19 @@ def fraser_merge_non_split_reads(
     j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
     storage = fraser_storage_required_gb(num_samples, 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
-
-    # Reconstruct the exact path Script 1 and Script 2 expect:
-    # cache/nonSplicedCounts/FRASER_{cohort_id}/
     fds_name = f'FRASER_{cohort_id}'
-    # We need to make sure the directory where FRASER expects BAMs exists
-    setup = [
-        f'mkdir -p /io/work/cache/nonSplicedCounts/{fds_name}',
-        'mkdir -p /io/batch/input_bams'
-    ]
+     # 1. Create directory structure
+    # Added /io/batch/input_bams to the mkdir command
+    setup = ['mkdir -p /io/work/cache/nonSplicedCounts /io/work/savedObjects /io/batch/input_bams']
 
-    # 1. Symlink the actual count data
+    # 2. Symlink the split count RDS files
     for sid, r in non_split_counts.items():
-        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{fds_name}/nonSplicedCounts-{sid}.h5')
-        # 2. FIX: Create dummy BAM/BAI files to satisfy FRASER's validation check
-    # FRASER won't read these because recount=FALSE, but it checks for their existence.
-    for sid in non_split_counts.keys():
-        setup.append(f'touch /io/batch/input_bams/{sid}.bam')
-        setup.append(f'touch /io/batch/input_bams/{sid}.bam.bai')
+        setup.append(f'ln -s {r} /io/work/cache/splitCounts/nonSplicedCounts-{sid}.h5')
+
+    # 3. FIX: Symlink a REAL BAM for metadata validation
+    if reference_bam_rg:
+        setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
+        setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
 
     j.command(
         command(
