@@ -309,13 +309,14 @@ def fraser_merge_non_split_reads(
     storage = fraser_storage_required_gb(num_samples, 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
     fds_name = f'FRASER_{cohort_id}'
-     # 1. Create directory structure
-    # Added /io/batch/input_bams to the mkdir command
-    setup = ['mkdir -p /io/work/cache/nonSplicedCounts /io/work/savedObjects /io/batch/input_bams']
+
+    # FIX 1: Ensure the cohort-specific subdirectory is created
+    # FIX 2: Consistency - use nonSplicedCounts everywhere (was splitCounts in the error)
+    setup = [f'mkdir -p /io/work/cache/nonSplicedCounts/{cohort_id} /io/work/savedObjects /io/batch/input_bams']
 
     # 2. Symlink the split count RDS files
     for sid, r in non_split_counts.items():
-        setup.append(f'ln -s {r} /io/work/cache/splitCounts/nonSplicedCounts-{sid}.h5')
+        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sid}.h5')
 
     # 3. FIX: Symlink a REAL BAM for metadata validation
     if reference_bam_rg:
