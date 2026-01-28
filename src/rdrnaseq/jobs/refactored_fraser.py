@@ -310,15 +310,19 @@ def fraser_merge_non_split_reads(
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
     fds_name = f'FRASER_{cohort_id}'
 
-    # FIX 1: Ensure the cohort-specific subdirectory is created
-    # FIX 2: Consistency - use nonSplicedCounts everywhere (was splitCounts in the error)
-    setup = [f'mkdir -p /io/work/cache/nonSplicedCounts/{cohort_id} /io/work/savedObjects /io/batch/input_bams']
+    # Define the target internal path based on your requirement
+    # We use /io/work as the base, so the internal path matches the structure FRASER expects
+    internal_h5_path = f"/io/work/savedObjects/Data_Analysis/nonSplitCounts"
 
-    # 2. Symlink the split count RDS files
+    # 1. Setup: Create the specific nested directory
+    setup = [f'mkdir -p {internal_h5_path} /io/batch/input_bams']
+
+    # 2. Symlink the h5 files into the requested path
+    # Note: FRASER usually looks for files named 'nonSplicedCounts-sampleId.h5'
     for sid, r in non_split_counts.items():
-        setup.append(f'ln -s {r} /io/work/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sid}.h5')
+        setup.append(f'ln -s {r} {internal_h5_path}/nonSplicedCounts-{sid}.h5')
 
-    # 3. FIX: Symlink a REAL BAM for metadata validation
+    # 3. Symlink reference BAM for metadata
     if reference_bam_rg:
         setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
         setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
@@ -331,8 +335,8 @@ def fraser_merge_non_split_reads(
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
         
-        # Wrap the results into a tarball for the final analysis step
-        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
+        # Tar the entire savedObjects directory to preserve the structure in the output
+        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/ Data_Analysis/
     """
         )
     )
