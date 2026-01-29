@@ -157,7 +157,6 @@ def fraser_pipeline(
         b,
         merge_split_res=merge_split_res,
         merge_non_split_tar=fds_tar_res,
-        filtered_ranges=merge_split_res['g_ranges_non_split'],  # Add brackets
         cohort_id=cohort_id,
         job_attrs=job_attrs,
         output_path=joined_tar_path,
@@ -364,9 +363,8 @@ def fraser_merge_non_split_reads(
 
 def fraser_join_counts(
     b: hb.Batch,
-    merge_split_res: hb.ResourceGroup,  # Output from Step 3
-    merge_non_split_tar: hb.ResourceFile,  # Output from Step 5
-    filtered_ranges: hb.ResourceFile,
+    merge_split_res: hb.ResourceGroup,
+    merge_non_split_tar: hb.ResourceFile,
     cohort_id: str,
     job_attrs: dict,
     output_path: Path,
@@ -383,14 +381,15 @@ def fraser_join_counts(
     # Step 3 outputs (merge_split_res) are ResourceFiles in a group
     # Step 5 output (merge_non_split_tar) is a tar of savedObjects/
     setup = [
-        f'mkdir -p {work_dir}/savedObjects/{fds_name}',
-        # Access ResourceGroup items using dictionary syntax, not attribute syntax
-        f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
-        f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
-        f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
-        # 2. Localize Non-Split Merge outputs (Step 5)
-        f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
-    ]
+    f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+    f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
+    f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
+    f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
+    f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+    # Add this line to create symlink if Data_Analysis was created by Stage 5:
+    f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
+]
+
 
     j.command(
         command(
@@ -398,8 +397,7 @@ def fraser_join_counts(
             + '\n'.join(setup)
             + f"""
         Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
-    --cohort_id "{cohort_id}" --filtered_ranges_path {filtered_ranges} \\
-    --work_dir "{work_dir}"
+            --cohort_id "{cohort_id}" --work_dir "{work_dir}" --nthreads "{res.get_nthreads()}"
 
 
         # Tar the final integrated structure for Step 6 (Analysis)
