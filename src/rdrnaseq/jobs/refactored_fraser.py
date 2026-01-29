@@ -363,8 +363,9 @@ def fraser_merge_non_split_reads(
 
 def fraser_join_counts(
     b: hb.Batch,
-    merge_split_res: hb.ResourceGroup,
-    merge_non_split_tar: hb.ResourceFile,
+    merge_split_res: hb.ResourceGroup, # Step 3 output
+    merge_non_split_tar: hb.ResourceFile, # Step 5 output
+    filtered_ranges: hb.ResourceFile,
     cohort_id: str,
     job_attrs: dict,
     output_path: Path,
@@ -377,19 +378,26 @@ def fraser_join_counts(
     fds_name = f'FRASER_{cohort_id}'
     work_dir = '/io/work'
 
-    # Matching the specific directory structure FRASER expects
-    # Step 3 outputs (merge_split_res) are ResourceFiles in a group
-    # Step 5 output (merge_non_split_tar) is a tar of savedObjects/
+    # The split counts from Step 3 are likely stored in fds_name/splitCounts/
     setup = [
-    f'mkdir -p {work_dir}/savedObjects/{fds_name}',
-    f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
-    f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
-    f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
-    f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
-    # Add this line to create symlink if Data_Analysis was created by Stage 5:
-    f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
-]
+        f'mkdir -p {work_dir}/savedObjects/{fds_name}/splitCounts',
+        # 1. Localize the RDS files from Step 3 ResourceGroup
+        f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
+        f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
+        f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
 
+        # 2. Extract Step 5 tar (contains nonSplitCounts)
+        f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+
+        # 3. Align nonSplitCounts if they were in Data_Analysis
+        f'if [ -d {work_dir}/savedObjects/Data_Analysis/nonSplitCounts ]; then '
+        f'cp -r {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/; fi',
+
+        # 4. FIX: Bring in the Split Count HDF5 data from the Step 3 ResourceGroup
+        # Note: If Step 3 produced an assays.h5 and se.rds, they must be copied here:
+        f'cp {merge_split_res["split_counts_h5"]} {work_dir}/savedObjects/{fds_name}/splitCounts/assays.h5 || true',
+        f'cp {merge_split_res["split_counts_se"]} {work_dir}/savedObjects/{fds_name}/splitCounts/se.rds || true'
+    ]
 
     j.command(
         command(
@@ -399,8 +407,6 @@ def fraser_join_counts(
         Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
             --cohort_id "{cohort_id}" --work_dir "{work_dir}" --nthreads "{res.get_nthreads()}"
 
-
-        # Tar the final integrated structure for Step 6 (Analysis)
         tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
     """
         )
