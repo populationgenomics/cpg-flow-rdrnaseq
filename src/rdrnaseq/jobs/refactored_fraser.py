@@ -14,6 +14,7 @@ R_COUNT_SPLIT = 'RDrnaseq/fraser_count_split.R'
 R_MERGE_SPLIT = 'RDrnaseq/fraser_merge_split.R'
 R_COUNT_NON_SPLIT = 'RDrnaseq/fraser_count_non_split.R'
 R_MERGE_NON_SPLIT = 'RDrnaseq/fraser_merge_non_split.R'
+R_JOIN_COUNTS = 'RDrnaseq/fraser_join_counts.R'
 R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
 
 
@@ -150,6 +151,24 @@ def fraser_pipeline(
     if j_merge_non:
         all_jobs.append(j_merge_non)
 
+    # NEW STEP: Join the counts
+    joined_tar_path = root / 'joined' / 'fds_joined.tar.gz'
+    fds_joined_res, j_join = fraser_join_counts(
+        b,
+        merge_split_res=merge_split_res,
+        merge_non_split_tar=fds_tar_res,
+        filtered_ranges=merge_split_res['g_ranges_non_split'],  # Add brackets
+        cohort_id=cohort_id,
+        job_attrs=job_attrs,
+        output_path=joined_tar_path,
+        num_samples=len(input_bams_localised),
+    )
+
+    if j_join and all_jobs:
+        j_join.depends_on(*all_jobs)
+    if j_join:
+        all_jobs.append(j_join)
+
     # 6. Analysis
     analysis_paths = {
         'sig_results': root / 'results' / 'results.significant.csv',
@@ -158,7 +177,7 @@ def fraser_pipeline(
         'stats': root / 'results' / 'statistics_summary.txt',
     }
     logger.info('Fraser Analysis!')
-    j_analysis = fraser_analysis(b, fds_tar_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
+    j_analysis = fraser_analysis(b, fds_joined_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
 
     if j_analysis and all_jobs:
         j_analysis.depends_on(*all_jobs)
@@ -337,6 +356,54 @@ def fraser_merge_non_split_reads(
         
         # Tar the entire savedObjects directory to preserve the structure in the output
         tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/ Data_Analysis/
+    """
+        )
+    )
+    b.write_output(j.fds_tar, str(output_path))
+    return j.fds_tar, j
+
+def fraser_join_counts(
+    b: hb.Batch,
+    merge_split_res: hb.ResourceGroup,  # Output from Step 3
+    merge_non_split_tar: hb.ResourceFile,  # Output from Step 5
+    filtered_ranges: hb.ResourceFile,
+    cohort_id: str,
+    job_attrs: dict,
+    output_path: Path,
+    num_samples: int,
+) -> tuple[hb.ResourceFile, Job]:
+    j = get_fraser_job(b, 'fraser_join_counts', job_attrs)
+    storage = fraser_storage_required_gb(num_samples, 100, 10)
+    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
+
+    fds_name = f'FRASER_{cohort_id}'
+    work_dir = '/io/work'
+
+    # Matching the specific directory structure FRASER expects
+    # Step 3 outputs (merge_split_res) are ResourceFiles in a group
+    # Step 5 output (merge_non_split_tar) is a tar of savedObjects/
+    setup = [
+        f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+        # Access ResourceGroup items using dictionary syntax, not attribute syntax
+        f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
+        f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
+        f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
+        # 2. Localize Non-Split Merge outputs (Step 5)
+        f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+    ]
+
+    j.command(
+        command(
+            'ulimit -n 4096\n'
+            + '\n'.join(setup)
+            + f"""
+        Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
+    --cohort_id "{cohort_id}" --filtered_ranges_path {filtered_ranges} \\
+    --work_dir "{work_dir}"
+
+
+        # Tar the final integrated structure for Step 6 (Analysis)
+        tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
     """
         )
     )
