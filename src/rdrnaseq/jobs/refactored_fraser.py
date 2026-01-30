@@ -422,14 +422,18 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     storage = fraser_storage_required_gb(num_samples, 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
+    fds_name = f'FRASER_{cohort_id}'
     cfg = get_config().get('fraser', {})
+
     j.command(
         command(f"""
-        mkdir -p /io/work
-        tar -xf {fds_tar} -C /io/work/
-        Rscript {R_ANALYSIS} --fds_dir "/io/work" --cohort_id "{cohort_id}" \\
+        mkdir -p /io/work/savedObjects
+        tar -xzf {fds_tar} -C /io/work/savedObjects/
+        
+        Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
             --pval_cutoff {cfg.get('pval_cutoff', 0.05)} --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
             --nthreads {res.get_nthreads()}
+        
         tar -czvf {j.out.plots} -C /io/work/ plots/
         cp /io/work/results.significant.csv {j.out.sig_results}
         cp /io/work/results.all.csv {j.out.all_results}
@@ -439,3 +443,4 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     for k, p in output_paths.items():
         b.write_output(j.out[k], str(p))
     return j
+
