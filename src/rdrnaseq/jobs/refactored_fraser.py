@@ -284,11 +284,12 @@ def fraser_merge_split_reads(
     mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
     mv /io/work/splice_site_coords.RDS {j.out.splice_site_coords}
 
-    # NEW: Capture the split counts HDF5 files
-    tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
+        # Capture the split counts HDF5 files
+        tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
 """
-        )
     )
+)
+
 
     for k, p in all_output_paths.items():
         b.write_output(j.out[k], str(p))
@@ -373,7 +374,7 @@ def fraser_join_counts(
     num_samples: int,
 ) -> tuple[hb.ResourceFile, Job]:
     if exists(output_path):
-        return b.read_input(output_path), None  # Skip if already exists
+        return b.read_input(output_path), None
 
     j = get_fraser_job(b, 'fraser_join_counts', job_attrs)
     storage = fraser_storage_required_gb(num_samples, 100, 10)
@@ -388,7 +389,7 @@ def fraser_join_counts(
         f'cp {merge_split_res.g_ranges_split} {work_dir}/g_ranges_split_counts.RDS',
         f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
         # Extract split counts HDF5 files
-        f'tar -xf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
+        f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
         # Extract non-split counts
         f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
         f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
@@ -409,6 +410,7 @@ tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
     j.command(command(cmd))
     b.write_output(j.fds_tar, str(output_path))
     return j.fds_tar, j
+
 
 
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples):
