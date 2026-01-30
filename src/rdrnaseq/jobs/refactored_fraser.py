@@ -248,11 +248,14 @@ def fraser_merge_split_reads(
     output_paths,
     reference_bam_rg=None,  # Add this to pass a ResourceGroup
 ):
-    if all(exists(outputs) for outputs in output_paths.values()):
-        return b.read_input_group(**output_paths), None
+    # Add split_counts_tar to output_paths
+    all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
+
+    if all(exists(p) for p in all_output_paths.values()):
+        return b.read_input_group(**all_output_paths), None
 
     j = get_fraser_job(b, 'fraser_merge_split', job_attrs)
-    j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
+    j.declare_resource_group(out={k: v.name for k, v in all_output_paths.items()})
     storage = fraser_storage_required_gb(len(split_counts), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
@@ -277,14 +280,18 @@ def fraser_merge_split_reads(
         Rscript {R_MERGE_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
 
-        mv /io/work/savedObjects/FRASER_{cohort_id}/fds-object.RDS {j.out.fds_object}
-        mv /io/work/g_ranges_split_counts.RDS {j.out.g_ranges_split}
-        mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
-        mv /io/work/splice_site_coords.RDS {j.out.splice_site_coords}
-    """
-        )
+    mv /io/work/savedObjects/FRASER_{cohort_id}/fds-object.RDS {j.out.fds_object}
+    mv /io/work/g_ranges_split_counts.RDS {j.out.g_ranges_split}
+    mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
+    mv /io/work/splice_site_coords.RDS {j.out.splice_site_coords}
+
+    # NEW: Capture the split counts HDF5 files
+    tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
+"""
     )
-    for k, p in output_paths.items():
+)
+
+    for k, p in all_output_paths.items():
         b.write_output(j.out[k], str(p))
     return j.out, j
 
@@ -379,20 +386,27 @@ def fraser_join_counts(
     work_dir = '/io/work'
 
     setup = [
-        f'mkdir -p {work_dir}/savedObjects/{fds_name}',
-        f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
-        f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
-        f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
-        f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
-        f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
-    ]
+    f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+    f'cp {merge_split_res["fds_object"]} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
+    f'cp {merge_split_res["g_ranges_split"]} {work_dir}/g_ranges_split_counts.RDS',
+    f'cp {merge_split_res["g_ranges_non_split"]} {work_dir}/g_ranges_non_split_counts.RDS',
+    # Extract split counts HDF5 files
+    f'tar -xf {merge_split_res["split_counts_tar"]} -C {work_dir}/savedObjects/{fds_name}/',
+    # Extract non-split counts
+    f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+    f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
+]
+
 
     cmd = f"""
 ulimit -n 4096
 {chr(10).join(setup)}
 
 Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
-    --cohort_id "{cohort_id}" --work_dir "{work_dir}" --nthreads "{res.get_nthreads()}"
+    --cohort_id "{cohort_id}" \\
+    --filtered_ranges_path "{work_dir}/g_ranges_non_split_counts.RDS" \\
+    --work_dir "{work_dir}" \\
+    --nthreads "{res.get_nthreads()}"
 
 tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
 """
