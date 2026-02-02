@@ -266,9 +266,8 @@ def fraser_merge_split_reads(
         # Capture the split counts HDF5 files
         tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
 """
+        )
     )
-)
-
 
     for k, p in all_output_paths.items():
         b.write_output(j.out[k], str(p))
@@ -391,7 +390,6 @@ tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
     return j.fds_tar, j
 
 
-
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples):
     if all(exists(x) for x in output_paths.values()):
         return None
@@ -404,20 +402,20 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     cfg = get_config().get('fraser', {})
 
     # Build optional z_cutoff argument
-    z_cutoff_arg = f"--z_cutoff {cfg['z_cutoff']}" if 'z_cutoff' in cfg else ""
+    z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
 
     j.command(
         command(f"""
         mkdir -p /io/work/savedObjects
         tar -xzf {fds_tar} -C /io/work/savedObjects/
-        
+
         cd /io/work
         Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
             --pval_cutoff {cfg.get('pval_cutoff', 0.05)} \\
             --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
             --min_count {cfg.get('min_count', 5)} \\
             --nthreads {res.get_nthreads()} {z_cutoff_arg}
-        
+
         tar -czvf {j.out.plots} qc_plots/
         cp {cohort_id}.significant.csv {j.out.sig_results}
         cp {cohort_id}.all_results.csv.gz {j.out.all_results}
@@ -428,4 +426,3 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     for k, p in output_paths.items():
         b.write_output(j.out[k], str(p))
     return j
-

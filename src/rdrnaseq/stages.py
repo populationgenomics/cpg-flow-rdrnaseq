@@ -18,7 +18,6 @@ from hailtop.batch.job import Job
 from loguru import logger
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, outrider, refactored_fraser, trim
-from virtualenv.config.convert import NoneType
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
