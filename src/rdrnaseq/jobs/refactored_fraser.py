@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0912
 import hailtop.batch as hb
 from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_flow.utils import exists
+from cpg_flow.utils import dependency_handler, exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
@@ -79,11 +79,7 @@ def fraser_pipeline(
 
     logger.info(f'{len(count_split_jobs)} count-split jobs found')
 
-    if all_jobs and count_split_jobs:
-        for job in count_split_jobs:
-            job.depends_on(all_jobs[-1])
-    if count_split_jobs:
-        all_jobs.extend(count_split_jobs)
+    dependency_handler(count_split_jobs, all_jobs)
 
     # 3. Merge Split
     merge_split_paths = {
@@ -104,10 +100,8 @@ def fraser_pipeline(
         merge_split_paths,
         reference_bam_rg=input_bams_localised[ref_sid],  # Pass the ResourceGroup here
     )
-    if j_merge_split and all_jobs:
-        j_merge_split.depends_on(*all_jobs)
-    if j_merge_split:
-        all_jobs.append(j_merge_split)
+
+    dependency_handler(j_merge_split, all_jobs)
 
     # 4. Count Non-Split
     non_split_counts_res = {}
@@ -124,12 +118,7 @@ def fraser_pipeline(
 
     logger.info(f'{len(count_split_jobs)} count-non-split jobs found')
 
-    if all_jobs and count_non_split_jobs:
-        for job in count_non_split_jobs:
-            job.depends_on(all_jobs[-1])
-
-    if count_non_split_jobs:
-        all_jobs.extend(count_non_split_jobs)
+    dependency_handler(count_non_split_jobs, all_jobs)
 
     # 5. Merge Non-Split
     fds_tar_path = to_path(output_fds_path['Rds_data'])
@@ -146,13 +135,10 @@ def fraser_pipeline(
         reference_bam_rg=input_bams_localised[ref_sid],
     )
 
-    if j_merge_non and all_jobs:
-        j_merge_non.depends_on(*all_jobs)
-    if j_merge_non:
-        all_jobs.append(j_merge_non)
+    dependency_handler(j_merge_non, all_jobs)
 
-    # NEW STEP: Join the counts
     joined_tar_path = root / 'joined' / 'fds_joined.tar.gz'
+
     fds_joined_res, j_join = fraser_join_counts(
         b,
         merge_split_res=merge_split_res,
@@ -163,10 +149,7 @@ def fraser_pipeline(
         num_samples=len(input_bams_localised),
     )
 
-    if j_join and all_jobs:
-        j_join.depends_on(*all_jobs)
-    if j_join:
-        all_jobs.append(j_join)
+    dependency_handler(j_join, all_jobs)
 
     # 6. Analysis
     analysis_paths = {
@@ -178,11 +161,7 @@ def fraser_pipeline(
     logger.info('Fraser Analysis!')
     j_analysis = fraser_analysis(b, fds_joined_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
 
-    if j_analysis and all_jobs:
-        j_analysis.depends_on(*all_jobs)
-
-    if j_analysis:
-        all_jobs.append(j_analysis)
+    dependency_handler(j_analysis, all_jobs)
 
     return all_jobs
 
