@@ -173,7 +173,7 @@ def fraser_pipeline(
         'sig_results': root / 'results' / 'results.significant.csv',
         'all_results': to_path(output_fds_path['seqr_data']),
         'plots': root / 'results' / 'plots.tar.gz',
-        'stats': root / 'results' / 'statistics_summary.txt',
+        'final_fds': root / 'results' / 'final_object.tar.gz',
     }
     logger.info('Fraser Analysis!')
     j_analysis = fraser_analysis(b, fds_joined_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
