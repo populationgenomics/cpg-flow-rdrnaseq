@@ -430,7 +430,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     j.command(
         command(f"""
         mkdir -p /io/work/savedObjects
-        tar -xzf {fds_tar} -C /io/work/savedObjects/
+        tar -xzf {fds_tar} -C /work/io/savedObjects/
         Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
             --pval_cutoff {cfg.get('pval_cutoff', 0.05)} \\
             --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
