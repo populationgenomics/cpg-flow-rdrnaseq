@@ -385,14 +385,14 @@ def fraser_join_counts(
 
     setup = [
         f'mkdir -p {work_dir}/savedObjects/{fds_name}',
-        f'cp {merge_split_res.fds_object} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
-        f'cp {merge_split_res.g_ranges_split} {work_dir}/g_ranges_split_counts.RDS',
-        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
-        # Extract split counts HDF5 files
+        # Extract split counts
         f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
         # Extract non-split counts
-        f'tar -xf {merge_non_split_tar} -C {work_dir}/savedObjects/',
-        f'ln -s {work_dir}/savedObjects/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts || true',
+        f'tar -xf {merge_non_split_tar} -C {work_dir}/temp_non_split/',
+        # Move them to the correct home
+        f'mv {work_dir}/temp_non_split/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts',
+        # Ensure the FDS object is the latest version
+        f'cp {merge_split_res.fds_object} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
     ]
 
     cmd = f"""
