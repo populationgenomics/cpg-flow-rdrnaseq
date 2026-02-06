@@ -330,17 +330,19 @@ def fraser_merge_non_split_reads(
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
     fds_name = f'FRASER_{cohort_id}'
 
-    # Define the target internal path based on your requirement
-    # We use /io/work as the base, so the internal path matches the structure FRASER expects
-    internal_h5_path = f'/io/work/savedObjects/Data_Analysis/nonSplitCounts'
+    # The merge script expects h5 files in a cache directory it can copy from
+    # We'll use the same structure that worked before but ensure output goes to the right place
+    cache_h5_path = f'/io/work/cache/nonSplicedCounts'
 
-    # 1. Setup: Create the specific nested directory
-    setup = [f'mkdir -p {internal_h5_path} /io/batch/input_bams']
+    # 1. Setup: Create directories
+    setup = [
+        f'mkdir -p {cache_h5_path} /io/batch/input_bams',
+        f'mkdir -p /io/work/savedObjects/{fds_name}'
+    ]
 
-    # 2. Symlink the h5 files into the requested path
-    # Note: FRASER usually looks for files named 'nonSplicedCounts-sampleId.h5'
+    # 2. Symlink the h5 files into the cache directory (as the R script expects)
     for sid, r in non_split_counts.items():
-        setup.append(f'ln -s {r} {internal_h5_path}/nonSplicedCounts-{sid}.h5')
+        setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
 
     # 3. Symlink reference BAM for metadata
     if reference_bam_rg:
@@ -355,8 +357,9 @@ def fraser_merge_non_split_reads(
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
 
-        # Tar the entire savedObjects directory to preserve the structure in the output
-        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/ Data_Analysis/
+        # The R script creates /io/work/savedObjects/{fds_name}/nonSplitCounts with the merged HDF5 SE
+        # Tar only the FRASER directory - nonSplitCounts is now inside it
+        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
     """
         )
     )
@@ -383,16 +386,11 @@ def fraser_join_counts(
     fds_name = f'FRASER_{cohort_id}'
     work_dir = '/io/work'
 
+    # Define setup commands to properly extract and structure all count data
     setup = [
         f'mkdir -p {work_dir}/savedObjects/{fds_name}',
-        # Extract split counts
+        f'tar -xzf {merge_non_split_tar} -C {work_dir}/savedObjects/',
         f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
-        # Extract non-split counts
-        f'tar -xf {merge_non_split_tar} -C {work_dir}/temp_non_split/',
-        # Move them to the correct home
-        f'mv {work_dir}/temp_non_split/Data_Analysis/nonSplitCounts {work_dir}/savedObjects/{fds_name}/nonSplitCounts',
-        # Ensure the FDS object is the latest version
-        f'cp {merge_split_res.fds_object} {work_dir}/savedObjects/{fds_name}/fds-object.RDS',
     ]
 
     cmd = f"""
