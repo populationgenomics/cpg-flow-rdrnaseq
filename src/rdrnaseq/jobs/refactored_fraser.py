@@ -1,4 +1,3 @@
-# ruff: noqa: PLR0912
 import hailtop.batch as hb
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import exists
@@ -309,14 +308,33 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
     j.command(
         command(f"""
+        echo "=== Starting count non-split for {sample_id} ==="
+        
         Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
             --coords_path {coords} --sample_id "{sample_id}" --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
         
+        echo "=== R script completed for {sample_id} ==="
+        echo "=== Checking for output files ==="
+        ls -lah /io/work/cache/nonSplicedCounts/
+        
         # The R script creates the file directly in /io/work/cache/nonSplicedCounts/
         # Move it to the output location for Batch to capture
-        mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 {j.out} || \\
-        mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS {j.out}
+        if [ -f /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 ]; then
+            echo "Found H5 file, moving to output"
+            mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 {j.out}
+        elif [ -f /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS ]; then
+            echo "Found RDS file, moving to output"
+            mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS {j.out}
+        else
+            echo "ERROR: No output file found for {sample_id}!"
+            echo "Contents of cache directory:"
+            find /io/work/cache/nonSplicedCounts/ -type f
+            exit 1
+        fi
+        
+        echo "=== Output file created successfully ==="
+        ls -lah {j.out}
     """)
     )
     b.write_output(j.out, str(output_path))
@@ -335,7 +353,7 @@ def fraser_merge_non_split_reads(
     fds_name = f'FRASER_{cohort_id}'
 
     # The merge script expects h5 files in a cache directory it can copy from
-    cache_h5_path = f'/io/work/cache/nonSplicedCounts'
+    cache_h5_path = '/io/work/cache/nonSplicedCounts'
 
     # 1. Setup: Create directories
     setup = [
@@ -345,17 +363,17 @@ def fraser_merge_non_split_reads(
 
     # 2. Symlink the h5 files into the cache directory (as the R script expects)
     if not non_split_counts:
-        raise ValueError(f"ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.")
+        raise ValueError("ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.")
 
     for sid, r in non_split_counts.items():
         setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
 
     # Debug: List what's in the cache directory after symlinking
-    setup.append(f'echo "=== DEBUG: Files in cache directory ==="')
+    setup.append('echo "=== DEBUG: Files in cache directory ==="')
     setup.append(f'ls -lah {cache_h5_path}/')
-    setup.append(f'echo "=== DEBUG: Number of .h5 files ==="')
+    setup.append('echo "=== DEBUG: Number of .h5 files ==="')
     setup.append(f'find {cache_h5_path} -name "*.h5" | wc -l')
-    setup.append(f'echo "=== DEBUG: Testing readability ==="')
+    setup.append('echo "=== DEBUG: Testing readability ==="')
     setup.append(f'find {cache_h5_path} -name "*.h5" -exec file {{}} \\;')
 
     # 3. Symlink reference BAM for metadata
