@@ -122,7 +122,7 @@ def fraser_pipeline(
         if j:
             count_non_split_jobs.append(j)
 
-    logger.info(f'{len(count_split_jobs)} count-non-split jobs found')
+    logger.info(f'{len(count_non_split_jobs)} count-non-split jobs found')
 
     if all_jobs and count_non_split_jobs:
         for job in count_non_split_jobs:
@@ -131,14 +131,14 @@ def fraser_pipeline(
     if count_non_split_jobs:
         all_jobs.extend(count_non_split_jobs)
 
-    # 5. Merge Non-Split
+    # 5. Merge Non-Split - FIXED: Pass splice_site_coords instead of g_ranges_non_split
     fds_tar_path = to_path(output_fds_path['Rds_data'])
     logger.info('Planning Merge non-split job')
     fds_tar_res, j_merge_non = fraser_merge_non_split_reads(
         b,
         merge_split_res.fds_object,
         non_split_counts_res,
-        merge_split_res.g_ranges_non_split,
+        merge_split_res.splice_site_coords,  # FIXED: was merge_split_res.g_ranges_non_split
         cohort_id,
         job_attrs,
         fds_tar_path,
@@ -151,7 +151,7 @@ def fraser_pipeline(
     if j_merge_non:
         all_jobs.append(j_merge_non)
 
-    # NEW STEP: Join the counts
+    # 6. Join the counts
     joined_tar_path = root / 'joined' / 'fds_joined.tar.gz'
     fds_joined_res, j_join = fraser_join_counts(
         b,
@@ -168,7 +168,7 @@ def fraser_pipeline(
     if j_join:
         all_jobs.append(j_join)
 
-    # 6. Analysis
+    # 7. Analysis
     analysis_paths = {
         'sig_results': root / 'results' / 'results.significant.csv',
         'all_results': to_path(output_fds_path['seqr_data']),
