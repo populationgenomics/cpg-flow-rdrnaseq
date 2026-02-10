@@ -423,13 +423,23 @@ def fraser_join_counts(
     # Define setup commands to properly extract and structure all count data
     setup = [
         f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+        # Extract the non-split counts tar (contains the FRASER directory with nonSplitCounts)
         f'tar -xzf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+        # Extract the split counts tar into the FRASER directory
         f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
+        # Copy the splice_site_coords.RDS to /io/work/ where it might be expected
+        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
+        # Also copy other range files that might be needed
+        f'cp {merge_split_res.g_ranges_split} {work_dir}/g_ranges_split_counts.RDS',
+        f'cp {merge_split_res.g_ranges_non_split} {work_dir}/g_ranges_non_split_counts.RDS',
     ]
 
     cmd = f"""
 ulimit -n 4096
 {chr(10).join(setup)}
+
+echo "=== Files in work directory ==="
+ls -lah {work_dir}/*.RDS
 
 Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
     --cohort_id "{cohort_id}" \\
