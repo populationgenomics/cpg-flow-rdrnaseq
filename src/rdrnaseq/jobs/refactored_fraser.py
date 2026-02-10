@@ -312,7 +312,11 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
         Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
             --coords_path {coords} --sample_id "{sample_id}" --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
-        find /io/work/cache/nonSplicedCounts/ -name "nonSplicedCounts-{sample_id}.*" -exec mv {{}} {j.out} \\;
+        
+        # The R script creates the file directly in /io/work/cache/nonSplicedCounts/
+        # Move it to the output location for Batch to capture
+        mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 {j.out} || \\
+        mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS {j.out}
     """)
     )
     b.write_output(j.out, str(output_path))
@@ -331,7 +335,6 @@ def fraser_merge_non_split_reads(
     fds_name = f'FRASER_{cohort_id}'
 
     # The merge script expects h5 files in a cache directory it can copy from
-    # We'll use the same structure that worked before but ensure output goes to the right place
     cache_h5_path = f'/io/work/cache/nonSplicedCounts'
 
     # 1. Setup: Create directories
@@ -341,8 +344,19 @@ def fraser_merge_non_split_reads(
     ]
 
     # 2. Symlink the h5 files into the cache directory (as the R script expects)
+    if not non_split_counts:
+        raise ValueError(f"ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.")
+
     for sid, r in non_split_counts.items():
         setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
+
+    # Debug: List what's in the cache directory after symlinking
+    setup.append(f'echo "=== DEBUG: Files in cache directory ==="')
+    setup.append(f'ls -lah {cache_h5_path}/')
+    setup.append(f'echo "=== DEBUG: Number of .h5 files ==="')
+    setup.append(f'find {cache_h5_path} -name "*.h5" | wc -l')
+    setup.append(f'echo "=== DEBUG: Testing readability ==="')
+    setup.append(f'find {cache_h5_path} -name "*.h5" -exec file {{}} \\;')
 
     # 3. Symlink reference BAM for metadata
     if reference_bam_rg:
@@ -354,11 +368,13 @@ def fraser_merge_non_split_reads(
             'ulimit -n 4096\n'
             + '\n'.join(setup)
             + f"""
+        
+        echo "=== Starting R script ==="
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
 
         # The R script creates /io/work/savedObjects/{fds_name}/nonSplitCounts with the merged HDF5 SE
-        # Tar only the FRASER directory - nonSplitCounts is now inside it
+        echo "=== R script completed, creating tar archive ==="
         tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
     """
         )
