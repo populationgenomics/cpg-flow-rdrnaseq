@@ -35,11 +35,11 @@ def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_stor
 
 
 def fraser_pipeline(
-    input_bams: list[tuple[str, str]],
-    cohort_id: str,
-    job_attrs: dict,
-    output_fds_path: dict[str, Path],
-    output_prefix: str,
+        input_bams: list[tuple[str, str]],
+        cohort_id: str,
+        job_attrs: dict,
+        output_fds_path: dict[str, Path],
+        output_prefix: str,
 ) -> list[Job]:
     b = get_batch()
     # Use output_prefix for intermediate steps and extract final paths from dict
@@ -238,13 +238,13 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
 
 
 def fraser_merge_split_reads(
-    b,
-    fds,
-    split_counts,
-    cohort_id,
-    job_attrs,
-    output_paths,
-    reference_bam_rg=None,  # Add this to pass a ResourceGroup
+        b,
+        fds,
+        split_counts,
+        cohort_id,
+        job_attrs,
+        output_paths,
+        reference_bam_rg=None,  # Add this to pass a ResourceGroup
 ):
     # Add split_counts_tar to output_paths
     all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
@@ -286,8 +286,8 @@ def fraser_merge_split_reads(
         # Capture the split counts HDF5 files
         tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
 """
+        )
     )
-)
 
 
     for k, p in all_output_paths.items():
@@ -309,15 +309,15 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
     j.command(
         command(f"""
         echo "=== Starting count non-split for {sample_id} ==="
-        
+
         Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
             --coords_path {coords} --sample_id "{sample_id}" --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
-        
+
         echo "=== R script completed for {sample_id} ==="
         echo "=== Checking for output files ==="
         ls -lah /io/work/cache/nonSplicedCounts/
-        
+
         # The R script creates the file directly in /io/work/cache/nonSplicedCounts/
         # Move it to the output location for Batch to capture
         if [ -f /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 ]; then
@@ -332,7 +332,7 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
             find /io/work/cache/nonSplicedCounts/ -type f
             exit 1
         fi
-        
+
         echo "=== Output file created successfully ==="
         ls -lah {j.out}
     """)
@@ -342,7 +342,7 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
 
 def fraser_merge_non_split_reads(
-    b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples, reference_bam_rg
+        b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples, reference_bam_rg
 ):
     if exists(output_path):
         return b.read_input(output_path), None
@@ -386,7 +386,7 @@ def fraser_merge_non_split_reads(
             'ulimit -n 4096\n'
             + '\n'.join(setup)
             + f"""
-        
+
         echo "=== Starting R script ==="
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
@@ -402,13 +402,13 @@ def fraser_merge_non_split_reads(
 
 
 def fraser_join_counts(
-    b: hb.Batch,
-    merge_split_res: hb.ResourceGroup,
-    merge_non_split_tar: hb.ResourceFile,
-    cohort_id: str,
-    job_attrs: dict,
-    output_path: Path,
-    num_samples: int,
+        b: hb.Batch,
+        merge_split_res: hb.ResourceGroup,
+        merge_non_split_tar: hb.ResourceFile,
+        cohort_id: str,
+        job_attrs: dict,
+        output_path: Path,
+        num_samples: int,
 ) -> tuple[hb.ResourceFile, Job]:
     if exists(output_path):
         return b.read_input(output_path), None
@@ -423,29 +423,41 @@ def fraser_join_counts(
     # Define setup commands to properly extract and structure all count data
     setup = [
         f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+        f'mkdir -p {work_dir}/savedObjects',
         # Extract the non-split counts tar (contains the FRASER directory with nonSplitCounts)
         f'tar -xzf {merge_non_split_tar} -C {work_dir}/savedObjects/',
         # Extract the split counts tar into the FRASER directory
         f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
-        # Copy the splice_site_coords.RDS to /io/work/ where it might be expected
-        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
-        # Also copy other range files that might be needed
-        f'cp {merge_split_res.g_ranges_split} {work_dir}/g_ranges_split_counts.RDS',
-        f'cp {merge_split_res.g_ranges_non_split} {work_dir}/g_ranges_non_split_counts.RDS',
     ]
+
+    # CRITICAL FIX: Copy the splice_site_coords.RDS to the expected location
+    # The R script expects it at: dirname(dirname(saveDir))/splice_site_coords.RDS
+    # saveDir = /io/work/savedObjects/FRASER_cohort_id
+    # dirname(dirname(saveDir)) = /io/work
+    # So it expects: /io/work/splice_site_coords.RDS
+    setup.extend([
+        f'echo "=== Copying splice site coordinates to expected location ==="',
+        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
+        f'ls -lah {work_dir}/splice_site_coords.RDS',
+    ])
 
     cmd = f"""
 ulimit -n 4096
 {chr(10).join(setup)}
 
-echo "=== Files in work directory ==="
-ls -lah {work_dir}/*.RDS
+echo "=== Directory structure before R script ==="
+echo "Work directory contents:"
+ls -lah {work_dir}/*.RDS || echo "No RDS files in work directory"
+echo "SavedObjects structure:"
+find {work_dir}/savedObjects/{fds_name} -type d
+echo "=== Running R script ==="
 
 Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
     --cohort_id "{cohort_id}" \\
     --work_dir "{work_dir}" \\
     --nthreads "{res.get_nthreads()}"
 
+echo "=== R script completed, creating tar archive ==="
 tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
 """
 
@@ -478,7 +490,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
             --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
             --min_count {cfg.get('min_count', 5)} \\
             --nthreads {res.get_nthreads()} {z_cutoff_arg}
-        
+
         tar -czvf {j.out.plots} qc_plots/
         cp {cohort_id}.significant.csv {j.out.sig_results}
         cp {cohort_id}.all_results.csv.gz {j.out.all_results}
