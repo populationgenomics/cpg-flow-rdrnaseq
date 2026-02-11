@@ -1,3 +1,5 @@
+# ruff: noqa: PLR0912
+# ruff: noqa: PLR0915
 import hailtop.batch as hb
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_flow.utils import exists
@@ -35,11 +37,11 @@ def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_stor
 
 
 def fraser_pipeline(
-        input_bams: list[tuple[str, str]],
-        cohort_id: str,
-        job_attrs: dict,
-        output_fds_path: dict[str, Path],
-        output_prefix: str,
+    input_bams: list[tuple[str, str]],
+    cohort_id: str,
+    job_attrs: dict,
+    output_fds_path: dict[str, Path],
+    output_prefix: str,
 ) -> list[Job]:
     b = get_batch()
     # Use output_prefix for intermediate steps and extract final paths from dict
@@ -92,7 +94,7 @@ def fraser_pipeline(
         'splice_site_coords': root / 'merge_split' / 'splice_site_coords.RDS',
     }
 
-    ref_sid = list(input_bams_localised.keys())[0]
+    ref_sid = list(input_bams_localised.keys())[0]  # noqa: RUF015
 
     merge_split_res, j_merge_split = fraser_merge_split_reads(
         b,
@@ -238,13 +240,13 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
 
 
 def fraser_merge_split_reads(
-        b,
-        fds,
-        split_counts,
-        cohort_id,
-        job_attrs,
-        output_paths,
-        reference_bam_rg=None,  # Add this to pass a ResourceGroup
+    b,
+    fds,
+    split_counts,
+    cohort_id,
+    job_attrs,
+    output_paths,
+    reference_bam_rg=None,  # Add this to pass a ResourceGroup
 ):
     # Add split_counts_tar to output_paths
     all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
@@ -288,7 +290,6 @@ def fraser_merge_split_reads(
 """
         )
     )
-
 
     for k, p in all_output_paths.items():
         b.write_output(j.out[k], str(p))
@@ -342,7 +343,7 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
 
 def fraser_merge_non_split_reads(
-        b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples, reference_bam_rg
+    b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples, reference_bam_rg
 ):
     if exists(output_path):
         return b.read_input(output_path), None
@@ -356,14 +357,11 @@ def fraser_merge_non_split_reads(
     cache_h5_path = '/io/work/cache/nonSplicedCounts'
 
     # 1. Setup: Create directories
-    setup = [
-        f'mkdir -p {cache_h5_path} /io/batch/input_bams',
-        f'mkdir -p /io/work/savedObjects/{fds_name}'
-    ]
+    setup = [f'mkdir -p {cache_h5_path} /io/batch/input_bams', f'mkdir -p /io/work/savedObjects/{fds_name}']
 
     # 2. Symlink the h5 files into the cache directory (as the R script expects)
     if not non_split_counts:
-        raise ValueError("ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.")
+        raise ValueError('ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.')
 
     for sid, r in non_split_counts.items():
         setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
@@ -402,13 +400,13 @@ def fraser_merge_non_split_reads(
 
 
 def fraser_join_counts(
-        b: hb.Batch,
-        merge_split_res: hb.ResourceGroup,
-        merge_non_split_tar: hb.ResourceFile,
-        cohort_id: str,
-        job_attrs: dict,
-        output_path: Path,
-        num_samples: int,
+    b: hb.Batch,
+    merge_split_res: hb.ResourceGroup,
+    merge_non_split_tar: hb.ResourceFile,
+    cohort_id: str,
+    job_attrs: dict,
+    output_path: Path,
+    num_samples: int,
 ) -> tuple[hb.ResourceFile, Job]:
     if exists(output_path):
         return b.read_input(output_path), None
@@ -435,11 +433,13 @@ def fraser_join_counts(
     # saveDir = /io/work/savedObjects/FRASER_cohort_id
     # dirname(dirname(saveDir)) = /io/work
     # So it expects: /io/work/splice_site_coords.RDS
-    setup.extend([
-        f'echo "=== Copying splice site coordinates to expected location ==="',
-        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
-        f'ls -lah {work_dir}/splice_site_coords.RDS',
-    ])
+    setup.extend(
+        [
+            'echo "=== Copying splice site coordinates to expected location ==="',
+            f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
+            f'ls -lah {work_dir}/splice_site_coords.RDS',
+        ]
+    )
 
     cmd = f"""
 ulimit -n 4096
@@ -466,7 +466,6 @@ tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
     return j.fds_tar, j
 
 
-
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples):
     if all(exists(x) for x in output_paths.values()):
         return None
@@ -479,13 +478,13 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     cfg = get_config().get('fraser', {})
 
     # Build optional z_cutoff argument
-    z_cutoff_arg = f"--z_cutoff {cfg['z_cutoff']}" if 'z_cutoff' in cfg else ""
+    z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
 
     j.command(
         command(f"""
         mkdir -p /io/work/savedObjects
         tar -xzf {fds_tar} -C /io/work/savedObjects/
-        
+
         Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
             --pval_cutoff {cfg.get('pval_cutoff', 0.05)} \\
             --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
@@ -494,13 +493,12 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
 
         # Archive outputs from their created locations
         tar -czvf {j.out.plots} qc_plots
-        cp /io/work/{cohort_id}.significant.csv {j.out.sig_results}
-        cp /io/work/{cohort_id}.all_results.csv.gz {j.out.all_results}
-        tar -czvf {j.out.final_fds} -C /io/work/savedObjects {cohort_id}_final/
+        cp {cohort_id}.significant.csv {j.out.sig_results}
+        cp {cohort_id}.all_results.csv.gz {j.out.all_results}
+        tar -czvf {j.out.final_fds} -C savedObjects {cohort_id}_final/
     """)
     )
 
     for k, p in output_paths.items():
         b.write_output(j.out[k], str(p))
     return j
-
