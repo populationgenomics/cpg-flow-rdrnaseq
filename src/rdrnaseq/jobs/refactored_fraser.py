@@ -493,7 +493,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
             --nthreads {res.get_nthreads()} {z_cutoff_arg}
 
         # Archive outputs from their created locations
-        tar -czvf {j.out.plots} -C /io/work qc_plots
+        tar -czvf {j.out.plots} qc_plots
         cp /io/work/{cohort_id}.significant.csv {j.out.sig_results}
         cp /io/work/{cohort_id}.all_results.csv.gz {j.out.all_results}
         tar -czvf {j.out.final_fds} -C /io/work/savedObjects {cohort_id}_final/
