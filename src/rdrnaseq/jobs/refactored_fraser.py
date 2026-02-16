@@ -321,12 +321,12 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
         # The R script creates the file directly in /io/work/cache/nonSplicedCounts/
         # Move it to the output location for Batch to capture
-        if [ -f /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 ]; then
+        if [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 ]; then
             echo "Found H5 file, moving to output"
-            mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.h5 {j.out}
-        elif [ -f /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS ]; then
+            mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.out}
+        elif [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.RDS ]; then
             echo "Found RDS file, moving to output"
-            mv /io/work/cache/nonSplicedCounts/nonSplicedCounts-{sample_id}.RDS {j.out}
+            mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.RDS {j.out}
         else
             echo "ERROR: No output file found for {sample_id}!"
             echo "Contents of cache directory:"
