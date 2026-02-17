@@ -190,8 +190,8 @@ def fraser_pipeline(
 
     # Analysis
     analysis_paths = {
-        'sig_results': root / 'results' / 'results.significant.csv',
         'all_results': to_path(output_fds_path['seqr_data']),
+        'significant_results': to_path(output_fds_path['sig_results']),
         'plots': root / 'results' / 'plots.tar.gz',
         'final_fds': root / 'results' / 'final_object.tar.gz',
     }
