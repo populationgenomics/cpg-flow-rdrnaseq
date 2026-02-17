@@ -13,7 +13,6 @@ This pipeline implements a comprehensive RNA-seq workflow with four main stages:
 - **Outrider**: Conducts outlier gene expression analysis using count data from all samples in a cohort. Outputs results as R data files (`<dataset_prefix>/outrider/<cohort_id>.outrider.RData`).
 ## Planned Future Improvements
 - Integration of additional QC metrics and visualization tools. (Integrating PICARD.)
-- Updating Fraser to its latest version for improved splicing analysis.
 - Optimization to improve scalability and efficiency.
 ## Usage
 
