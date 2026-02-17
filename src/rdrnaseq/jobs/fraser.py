@@ -17,18 +17,43 @@ R_MERGE_NON_SPLIT = 'RDrnaseq/fraser_merge_non_split.R'
 R_JOIN_COUNTS = 'RDrnaseq/fraser_join_counts.R'
 R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
 
+BASE_STORAGE_GB_COHORT = config_retrieve(['cohort_job_resources', 'base_storage_gb'], 100)
+PER_BAM_STORAGE_COHORT = config_retrieve(['cohort_job_resources', 'per_bam_storage'], 10)
+NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 10)
+MACHINE_REQUIRED_COHORT = config_retrieve(['cohort_job_resources', 'machine_required'], 'HIGHMEM')
 
-def get_fraser_job(batch: hb.Batch, name: str, job_attrs: dict) -> Job:
-    """Create a standard FRASER job with common configuration."""
-    j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
-    j.image(config_retrieve(['images', 'fraser']))
-    j.command('export HDF5_USE_FILE_LOCKING=FALSE')
-    return j
+BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 100)
+PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 10)
+NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 16)
+MACHINE_REQUIRED_SAMPLE = config_retrieve(['sample_job_resources', 'machine_required'], 'STANDARD')
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
     """Calculate disk space needed based on cohort size."""
     return base_storage_gb + num_bams * per_bam_storage_gb
+
+
+def get_fraser_job(
+    batch: hb.Batch,
+    name: str,
+    job_attrs: dict,
+    n_samples: int,
+    base_storage_gb: int,
+    per_bam_storage: int,
+    ncpu: int,
+    machine_required: str,
+) -> Job:
+    """Create a standard FRASER job with common configuration."""
+    storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
+    j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
+    j.image(config_retrieve(['images', 'fraser']))
+    j.command('export HDF5_USE_FILE_LOCKING=FALSE')
+
+    if machine_required == 'HIGHMEM':
+        res = HIGHMEM.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
+    else:
+        res = STANDARD.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
+    return j, res
 
 
 def fraser_pipeline(
@@ -186,11 +211,17 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
     if exists(output_path):
         return b.read_input(output_path), None
 
-    j = get_fraser_job(b, 'fraser_init', job_attrs)
-    storage = fraser_storage_required_gb(len(input_bams), 100, 10)
-    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
+    j, res = get_fraser_job(
+        b,
+        'fraser_init',
+        job_attrs,
+        n_samples=len(input_bams),
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=MACHINE_REQUIRED_COHORT,
+    )
     j.command('mkdir -p /io/batch/input_bams /io/work')
-
     j.command('echo "sample_id,bam_path" > /io/work/sample_map.csv')
     for sid, bam_rg in input_bams.items():
         j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sid}.bam')
@@ -212,8 +243,16 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
     if exists(output_path):
         return b.read_input(output_path), None
 
-    j = get_fraser_job(b, f'count_split_{sample_id}', job_attrs)
-    res = STANDARD.set_resources(j=j, ncpu=16, storage_gb=20)
+    j, res = get_fraser_job(
+        b,
+        f'count_split_{sample_id}',
+        job_attrs,
+        n_samples=1,
+        base_storage_gb=BASE_STORAGE_GB_SAMPLE,
+        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        ncpu=NCPU_SAMPLE,
+        machine_required=MACHINE_REQUIRED_SAMPLE,
+    )
 
     j.command('mkdir -p /io/batch/input_bams')
     j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sample_id}.bam')
@@ -240,15 +279,24 @@ def fraser_merge_split_reads(
     output_paths,
     reference_bam_rg=None,
 ):
+    """Merge split read counts and create GRanges objects for split and non-split counts.
+    Also localizing one reference bam to pass fraser metadata check even though the bam is not used in the merge step"""
     all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
 
     if all(exists(p) for p in all_output_paths.values()):
         return b.read_input_group(**all_output_paths), None
 
-    j = get_fraser_job(b, 'fraser_merge_split', job_attrs)
+    j, res = get_fraser_job(
+        b,
+        'fraser_merge_split',
+        job_attrs,
+        n_samples=len(split_counts),
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=MACHINE_REQUIRED_COHORT,
+    )
     j.declare_resource_group(out={k: v.name for k, v in all_output_paths.items()})
-    storage = fraser_storage_required_gb(len(split_counts), 100, 10)
-    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
     setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects /io/batch/input_bams']
 
@@ -286,8 +334,16 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
     if exists(output_path):
         return b.read_input(output_path), None
 
-    j = get_fraser_job(b, f'count_non_split_{sample_id}', job_attrs)
-    res = STANDARD.set_resources(j=j, ncpu=4, storage_gb=20)
+    j, res = get_fraser_job(
+        b,
+        f'count_non_split_{sample_id}',
+        job_attrs,
+        n_samples=1,
+        base_storage_gb=BASE_STORAGE_GB_SAMPLE,
+        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        ncpu=NCPU_SAMPLE,
+        machine_required=MACHINE_REQUIRED_SAMPLE,
+    )
 
     j.command('mkdir -p /io/batch/input_bams')
     j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sample_id}.bam')
@@ -302,9 +358,6 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
         if [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 ]; then
             echo "Found H5 file, moving to output"
             mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.out}
-        elif [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.RDS ]; then
-            echo "Found RDS file, moving to output"
-            mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.RDS {j.out}
         else
             echo "ERROR: No output file found for {sample_id}"
             find /io/work/cache/nonSplicedCounts/ -type f
@@ -322,9 +375,16 @@ def fraser_merge_non_split_reads(
     if exists(output_path):
         return b.read_input(output_path), None
 
-    j = get_fraser_job(b, 'fraser_merge_non_split', job_attrs)
-    storage = fraser_storage_required_gb(num_samples, 100, 10)
-    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
+    j, res = get_fraser_job(
+        b,
+        'fraser_merge_non_split',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=MACHINE_REQUIRED_COHORT,
+    )
     fds_name = f'FRASER_{cohort_id}'
     cache_h5_path = '/io/work/cache/nonSplicedCounts'
 
@@ -369,9 +429,16 @@ def fraser_join_counts(
     if exists(output_path):
         return b.read_input(output_path), None
 
-    j = get_fraser_job(b, 'fraser_join_counts', job_attrs)
-    storage = fraser_storage_required_gb(num_samples, 100, 10)
-    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
+    j, res = get_fraser_job(
+        b,
+        'fraser_join_counts',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=MACHINE_REQUIRED_COHORT,
+    )
 
     fds_name = f'FRASER_{cohort_id}'
     work_dir = '/io/work'
@@ -406,11 +473,17 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     if all(exists(x) for x in output_paths.values()):
         return None
 
-    j = get_fraser_job(b, 'fraser_analysis', job_attrs)
+    j, res = get_fraser_job(
+        b,
+        'fraser_analysis',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=MACHINE_REQUIRED_COHORT,
+    )
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
-    storage = fraser_storage_required_gb(num_samples, 100, 10)
-    res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
-
     cfg = get_config().get('fraser', {})
     z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
 
