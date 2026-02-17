@@ -13,7 +13,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, outrider, refactored_fraser, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -210,7 +210,7 @@ class Fraser(stage.CohortStage):
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
-        jobs = refactored_fraser.fraser_pipeline(
+        jobs = fraser.fraser_pipeline(
             input_bams=bam_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,

@@ -9,7 +9,6 @@ from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 from loguru import logger
 
-# R Script Paths
 R_INIT = 'RDrnaseq/fraser_init.R'
 R_COUNT_SPLIT = 'RDrnaseq/fraser_count_split.R'
 R_MERGE_SPLIT = 'RDrnaseq/fraser_merge_split.R'
@@ -20,20 +19,16 @@ R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
 
 
 def get_fraser_job(batch: hb.Batch, name: str, job_attrs: dict) -> Job:
-    """Helper to create a standard FRASER job."""
+    """Create a standard FRASER job with common configuration."""
     j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
     j.image(config_retrieve(['images', 'fraser']))
-    # Vulnerability Fix: Prevent HDF5 filesystem locking issues on network storage
     j.command('export HDF5_USE_FILE_LOCKING=FALSE')
     return j
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
-    """Calculates disk space needed based on cohort size."""
+    """Calculate disk space needed based on cohort size."""
     return base_storage_gb + num_bams * per_bam_storage_gb
-
-
-# --- Orchestration Pipeline ---
 
 
 def fraser_pipeline(
@@ -44,12 +39,11 @@ def fraser_pipeline(
     output_prefix: str,
 ) -> list[Job]:
     b = get_batch()
-    # Use output_prefix for intermediate steps and extract final paths from dict
     root = to_path(output_prefix)
 
     all_jobs = []
 
-    # 0. Localize Inputs as ResourceGroups
+    # Localize inputs as ResourceGroups
     input_bams_localised: dict[str, hb.ResourceGroup] = {
         sample_id: b.read_input_group(
             **{
@@ -60,14 +54,14 @@ def fraser_pipeline(
         for sample_id, input_bam in input_bams
     }
 
-    # 1. Init
+    # Init
     init_fds_path = root / 'init' / 'fds-object.RDS'
     logger.info('Planning Fraser init job')
     fds_init_res, j_init = fraser_init(b, input_bams_localised, cohort_id, job_attrs, init_fds_path)
     if j_init:
         all_jobs.append(j_init)
 
-    # 2. Count Split
+    # Count Split
     split_counts_res = {}
     count_split_jobs = []
     logger.info('Planning Fraser count-split jobs')
@@ -86,7 +80,7 @@ def fraser_pipeline(
     if count_split_jobs:
         all_jobs.extend(count_split_jobs)
 
-    # 3. Merge Split
+    # Merge Split
     merge_split_paths = {
         'fds_object': root / 'merge_split' / 'fds-object.RDS',
         'g_ranges_split': root / 'merge_split' / 'g_ranges_split_counts.RDS',
@@ -110,7 +104,7 @@ def fraser_pipeline(
     if j_merge_split:
         all_jobs.append(j_merge_split)
 
-    # 4. Count Non-Split
+    # Count Non-Split
     non_split_counts_res = {}
     count_non_split_jobs = []
     logger.info('Planning Count non-split job')
@@ -132,14 +126,14 @@ def fraser_pipeline(
     if count_non_split_jobs:
         all_jobs.extend(count_non_split_jobs)
 
-    # 5. Merge Non-Split - FIXED: Pass splice_site_coords instead of g_ranges_non_split
+    # Merge Non-Split
     fds_tar_path = to_path(output_fds_path['Rds_data'])
     logger.info('Planning Merge non-split job')
     fds_tar_res, j_merge_non = fraser_merge_non_split_reads(
         b,
         merge_split_res.fds_object,
         non_split_counts_res,
-        merge_split_res.splice_site_coords,  # FIXED: was merge_split_res.g_ranges_non_split
+        merge_split_res.splice_site_coords,
         cohort_id,
         job_attrs,
         fds_tar_path,
@@ -152,7 +146,7 @@ def fraser_pipeline(
     if j_merge_non:
         all_jobs.append(j_merge_non)
 
-    # 6. Join the counts
+    # Join counts
     joined_tar_path = root / 'joined' / 'fds_joined.tar.gz'
     fds_joined_res, j_join = fraser_join_counts(
         b,
@@ -169,14 +163,14 @@ def fraser_pipeline(
     if j_join:
         all_jobs.append(j_join)
 
-    # 7. Analysis
+    # Analysis
     analysis_paths = {
         'sig_results': root / 'results' / 'results.significant.csv',
         'all_results': to_path(output_fds_path['seqr_data']),
         'plots': root / 'results' / 'plots.tar.gz',
         'final_fds': root / 'results' / 'final_object.tar.gz',
     }
-    logger.info('Fraser Analysis!')
+    logger.info('Planning Fraser analysis job')
     j_analysis = fraser_analysis(b, fds_joined_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
 
     if j_analysis and all_jobs:
@@ -193,10 +187,8 @@ def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Re
         return b.read_input(output_path), None
 
     j = get_fraser_job(b, 'fraser_init', job_attrs)
-    # base_storage_gb bumped to 100 for heavy temp file initialization
     storage = fraser_storage_required_gb(len(input_bams), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
-    # Ensure both the BAM directory AND the work directory exist
     j.command('mkdir -p /io/batch/input_bams /io/work')
 
     j.command('echo "sample_id,bam_path" > /io/work/sample_map.csv')
@@ -246,9 +238,8 @@ def fraser_merge_split_reads(
     cohort_id,
     job_attrs,
     output_paths,
-    reference_bam_rg=None,  # Add this to pass a ResourceGroup
+    reference_bam_rg=None,
 ):
-    # Add split_counts_tar to output_paths
     all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
 
     if all(exists(p) for p in all_output_paths.values()):
@@ -259,15 +250,11 @@ def fraser_merge_split_reads(
     storage = fraser_storage_required_gb(len(split_counts), 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
-    # 1. Create directory structure
-    # Added /io/batch/input_bams to the mkdir command
     setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects /io/batch/input_bams']
 
-    # 2. Symlink the split count RDS files
     for sid, r in split_counts.items():
         setup.append(f'ln -s {r} /io/work/cache/splitCounts/splitCounts-{sid}.RDS')
 
-    # 3. FIX: Symlink a REAL BAM for metadata validation
     if reference_bam_rg:
         setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
         setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
@@ -285,7 +272,6 @@ def fraser_merge_split_reads(
     mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
     mv /io/work/splice_site_coords.RDS {j.out.splice_site_coords}
 
-        # Capture the split counts HDF5 files
         tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
 """
         )
@@ -309,18 +295,10 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
 
     j.command(
         command(f"""
-        echo "=== Starting count non-split for {sample_id} ==="
-
         Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
             --coords_path {coords} --sample_id "{sample_id}" --cohort_id "{cohort_id}" \\
             --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
 
-        echo "=== R script completed for {sample_id} ==="
-        echo "=== Checking for output files ==="
-        ls -lah /io/work/cache/nonSplicedCounts/
-
-        # The R script creates the file directly in /io/work/cache/nonSplicedCounts/
-        # Move it to the output location for Batch to capture
         if [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 ]; then
             echo "Found H5 file, moving to output"
             mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.out}
@@ -328,14 +306,10 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
             echo "Found RDS file, moving to output"
             mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.RDS {j.out}
         else
-            echo "ERROR: No output file found for {sample_id}!"
-            echo "Contents of cache directory:"
+            echo "ERROR: No output file found for {sample_id}"
             find /io/work/cache/nonSplicedCounts/ -type f
             exit 1
         fi
-
-        echo "=== Output file created successfully ==="
-        ls -lah {j.out}
     """)
     )
     b.write_output(j.out, str(output_path))
@@ -352,29 +326,16 @@ def fraser_merge_non_split_reads(
     storage = fraser_storage_required_gb(num_samples, 100, 10)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
     fds_name = f'FRASER_{cohort_id}'
-
-    # The merge script expects h5 files in a cache directory it can copy from
     cache_h5_path = '/io/work/cache/nonSplicedCounts'
 
-    # 1. Setup: Create directories
     setup = [f'mkdir -p {cache_h5_path} /io/batch/input_bams', f'mkdir -p /io/work/savedObjects/{fds_name}']
 
-    # 2. Symlink the h5 files into the cache directory (as the R script expects)
     if not non_split_counts:
-        raise ValueError('ERROR: non_split_counts dictionary is empty! Cannot merge non-split reads.')
+        raise ValueError('non_split_counts dictionary is empty')
 
     for sid, r in non_split_counts.items():
         setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
 
-    # Debug: List what's in the cache directory after symlinking
-    setup.append('echo "=== DEBUG: Files in cache directory ==="')
-    setup.append(f'ls -lah {cache_h5_path}/')
-    setup.append('echo "=== DEBUG: Number of .h5 files ==="')
-    setup.append(f'find {cache_h5_path} -name "*.h5" | wc -l')
-    setup.append('echo "=== DEBUG: Testing readability ==="')
-    setup.append(f'find {cache_h5_path} -name "*.h5" -exec file {{}} \\;')
-
-    # 3. Symlink reference BAM for metadata
     if reference_bam_rg:
         setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
         setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
@@ -385,12 +346,9 @@ def fraser_merge_non_split_reads(
             + '\n'.join(setup)
             + f"""
 
-        echo "=== Starting R script ==="
         Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
             --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{res.get_nthreads()}"
 
-        # The R script creates /io/work/savedObjects/{fds_name}/nonSplitCounts with the merged HDF5 SE
-        echo "=== R script completed, creating tar archive ==="
         tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
     """
         )
@@ -418,39 +376,17 @@ def fraser_join_counts(
     fds_name = f'FRASER_{cohort_id}'
     work_dir = '/io/work'
 
-    # Define setup commands to properly extract and structure all count data
     setup = [
         f'mkdir -p {work_dir}/savedObjects/{fds_name}',
         f'mkdir -p {work_dir}/savedObjects',
-        # Extract the non-split counts tar (contains the FRASER directory with nonSplitCounts)
         f'tar -xzf {merge_non_split_tar} -C {work_dir}/savedObjects/',
-        # Extract the split counts tar into the FRASER directory
         f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
+        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
     ]
-
-    # CRITICAL FIX: Copy the splice_site_coords.RDS to the expected location
-    # The R script expects it at: dirname(dirname(saveDir))/splice_site_coords.RDS
-    # saveDir = /io/work/savedObjects/FRASER_cohort_id
-    # dirname(dirname(saveDir)) = /io/work
-    # So it expects: /io/work/splice_site_coords.RDS
-    setup.extend(
-        [
-            'echo "=== Copying splice site coordinates to expected location ==="',
-            f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
-            f'ls -lah {work_dir}/splice_site_coords.RDS',
-        ]
-    )
 
     cmd = f"""
 ulimit -n 4096
 {chr(10).join(setup)}
-
-echo "=== Directory structure before R script ==="
-echo "Work directory contents:"
-ls -lah {work_dir}/*.RDS || echo "No RDS files in work directory"
-echo "SavedObjects structure:"
-find {work_dir}/savedObjects/{fds_name} -type d
-echo "=== Running R script ==="
 
 Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
     --cohort_id "{cohort_id}" \\
@@ -476,8 +412,6 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
     res = HIGHMEM.set_resources(j=j, ncpu=10, storage_gb=storage)
 
     cfg = get_config().get('fraser', {})
-
-    # Build optional z_cutoff argument
     z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
 
     j.command(
@@ -491,7 +425,6 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
             --min_count {cfg.get('min_count', 5)} \\
             --nthreads {res.get_nthreads()} {z_cutoff_arg}
 
-        # Archive outputs from their created locations
         tar -czvf {j.out.plots} qc_plots
         cp {cohort_id}.significant.csv {j.out.sig_results}
         cp {cohort_id}.all_results.csv.gz {j.out.all_results}
