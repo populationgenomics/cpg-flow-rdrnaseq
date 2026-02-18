@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0912
 # ruff: noqa: PLR0915
 import hailtop.batch as hb
-from cpg_flow.resources import MachineType,JobResource
+from cpg_flow.resources import MachineType, JobResource
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
@@ -48,7 +48,7 @@ def get_fraser_job(
     j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
     j.image(config_retrieve(['images', 'fraser']))
     j.command('export HDF5_USE_FILE_LOCKING=FALSE')
-    res=machine_required.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
+    res = machine_required.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
 
     return j, res
 
