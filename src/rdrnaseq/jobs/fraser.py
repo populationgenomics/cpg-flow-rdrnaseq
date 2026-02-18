@@ -425,7 +425,7 @@ def fraser_join_counts(
     if exists(output_path):
         return b.read_input(output_path), None
 
-    job, threads = get_fraser_job(
+    j, threads = get_fraser_job(
         b,
         'fraser_join_counts',
         job_attrs,
@@ -457,12 +457,12 @@ Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-objec
     --nthreads "{threads}"
 
 echo "=== R script completed, creating tar archive ==="
-tar -cvzf {job.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
+tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
 """
 
-    job.command(command(cmd))
-    b.write_output(job.fds_tar, str(output_path))
-    return job.fds_tar, job
+    j.command(command(cmd))
+    b.write_output(j.fds_tar, str(output_path))
+    return j.fds_tar, j
 
 
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples) -> Job | None:
