@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0912
 # ruff: noqa: PLR0915
 import hailtop.batch as hb
-from cpg_flow.resources import MachineType, JobResource
+from cpg_flow.resources import JobResource, MachineType
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
