@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0912
 # ruff: noqa: PLR0915
 import hailtop.batch as hb
-from cpg_flow.resources import HIGHMEM, STANDARD
+from cpg_flow.resources import MachineType,JobResource
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
@@ -41,18 +41,15 @@ def get_fraser_job(
     base_storage_gb: int,
     per_bam_storage: int,
     ncpu: int,
-    machine_required: str,
-) -> Job:
+    machine_required: MachineType,  # would have to import this abstract class
+) -> tuple[Job, JobResource]:
     """Create a standard FRASER job with common configuration."""
     storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
     j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
     j.image(config_retrieve(['images', 'fraser']))
     j.command('export HDF5_USE_FILE_LOCKING=FALSE')
+    res=machine_required.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
 
-    if machine_required == 'HIGHMEM':
-        res = HIGHMEM.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
-    else:
-        res = STANDARD.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
     return j, res
 
 
