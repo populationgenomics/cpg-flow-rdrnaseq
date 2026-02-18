@@ -6,8 +6,8 @@ build-backend = "hatchling.build"
 name='rdrnaseq'
 description='Rare Disease RNAseq workflow, implemented in CPG-Flow'
 readme = "README.md"
-requires-python = ">=3.10,<3.11"
-version="0.2.5"
+requires-python = ">=3.10,<3.12"
+version="1.0.0"
 license={ "file" = "LICENSE" }
 classifiers=[
     'Environment :: Console',
@@ -20,7 +20,7 @@ classifiers=[
 ]
 
 dependencies=[
-    'cpg-flow~=1.1.1',
+    'cpg-flow~=1.3',
 ]
 
 [project.urls]
@@ -66,7 +66,6 @@ quote-style = "single"
 "src/rdrnaseq/stages.py" = ["ARG002"]
 
 [tool.ruff.lint]
-# ignore pydocstyle, flake8-boolean-trap (FBT)
 select = ["A", "B", "C", "E", "F", "G", "I", "I001", "N", "Q", "S", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
 
 fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "I001", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "FBT", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
@@ -95,7 +94,7 @@ cpg = ["cpg-flow", "cpg-utils"]
 hail = ["hail"]
 
 [tool.bumpversion]
-current_version = "0.2.5"
+current_version="1.0.0"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 commit = true

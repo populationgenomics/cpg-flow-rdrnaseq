@@ -2,10 +2,6 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
-import re
-from dataclasses import dataclass
-from os.path import basename
-
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
     BamPath,
@@ -35,45 +31,6 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 # an object to collect all samples where a CRAM->BAM job was already scheduled
 # this allows cross-stage job dependencies to exist, not very CPG-Flow
 samples_needing_bams: dict[str, Job] = {}
-
-
-@dataclass
-class InOutFastqPair:
-    """
-    Represents a single set of input and output paired FASTQ files
-    """
-
-    id: str
-    input_pair: FastqPair
-    output_pair: FastqPair
-
-
-def get_input_output_pairs(sequencing_group: targets.SequencingGroup) -> list[InOutFastqPair]:
-    """
-    Get the input FASTQ pairs, determine the trimmed output FASTQ file pair paths and
-    output a list of InOutFastqPair objects
-    """
-    inputs = get_trim_inputs(sequencing_group)
-    if not inputs or not isinstance(inputs, FastqPairs):
-        return []
-    prefix = sequencing_group.dataset.tmp_prefix() / 'trim'
-    trim_suffix = '.trimmed.fastq.gz'
-    input_output_pairs = []
-    for i, pair in enumerate(inputs, 1):
-        if not isinstance(pair, FastqPair):
-            raise Exception(f'Invalid FASTQ pair in sequencing group {sequencing_group.id}')
-        input_r1_bn = re.sub('.f(ast)?q.gz', '', basename(str(pair.r1)))
-        input_r2_bn = re.sub('.f(ast)?q.gz', '', basename(str(pair.r2)))
-        output_r1 = prefix / f'{input_r1_bn}{trim_suffix}'
-        output_r2 = prefix / f'{input_r2_bn}{trim_suffix}'
-        input_output_pairs.append(
-            InOutFastqPair(
-                str(i),  # ID
-                pair,  # input FASTQ pair
-                FastqPair(output_r1, output_r2),  # output FASTQ pair
-            ),
-        )
-    return input_output_pairs
 
 
 @stage.stage()
@@ -150,6 +107,8 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
+            # If this trim align job is running then a bam is already being created for this sample,
+            # so we can add it to the dict of samples needing bams
             samples_needing_bams[sequencing_group.id] = align_jobs[-1]
 
             if align_jobs:
@@ -213,7 +172,9 @@ class Count(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=count_job)
 
 
-@stage.stage(required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data'])
+@stage.stage(
+    required_stages=TrimAlignRNA, analysis_type='fraser', analysis_keys=['Rds_data', 'seqr_data', 'sig_results']
+)
 class Fraser(stage.CohortStage):
     """
     Perform aberrant splicing analysis with FRASER.
@@ -224,15 +185,16 @@ class Fraser(stage.CohortStage):
         Generate FRASER outputs.
         """
         return {
-            'Rds_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz',
+            'Rds_data': str(cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'),
             'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv',
+            'sig_results': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.significant.csv',
+            'temp_data': str(cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fraser_temp_data'),
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         """
-        Queue a job to run FRASER.
+        Queue a job to run the refactored FRASER analysis.
         """
-
         output = self.expected_outputs(cohort)
 
         bam_inputs: list[tuple[str, str]] = []
@@ -251,18 +213,23 @@ class Fraser(stage.CohortStage):
 
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
-        jobs = fraser.fraser(
+        jobs = fraser.fraser_pipeline(
             input_bams=bam_inputs,
             output_fds_path=output,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            output_prefix=output['temp_data'],
         )
 
+        jobs = [x for x in jobs if x is not None]
         # if there was a non-alignment BAM creation job, this job must wait for that to conclude
         for sequencing_group in cohort.get_sequencing_groups():
-            if sequencing_group.id in samples_needing_bams:
+            parent_job = samples_needing_bams.get(sequencing_group.id)
+            if parent_job and jobs:
                 for j in jobs:
-                    j.depends_on(samples_needing_bams[sequencing_group.id])
+                    # We already cleaned 'jobs', but a final check doesn't hurt
+                    if j is not None:
+                        j.depends_on(parent_job)
 
         return self.make_outputs(cohort, data=output, jobs=jobs)
 

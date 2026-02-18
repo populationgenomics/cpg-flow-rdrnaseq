@@ -1,819 +1,506 @@
-"""
-Perform aberrant splicing analysis with FRASER.
-"""
-
-# ruff: noqa: E501
-from textwrap import dedent
-
+# ruff: noqa: PLR0912
+# ruff: noqa: PLR0915
 import hailtop.batch as hb
-from cpg_flow.resources import HIGHMEM, STANDARD
-from cpg_flow.utils import can_reuse
+from cpg_flow.resources import HIGHMEM, STANDARD, MachineType
+from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve, get_config, image_path
+from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
+from loguru import logger
+
+R_INIT = 'RDrnaseq/fraser_init.R'
+R_COUNT_SPLIT = 'RDrnaseq/fraser_count_split.R'
+R_MERGE_SPLIT = 'RDrnaseq/fraser_merge_split.R'
+R_COUNT_NON_SPLIT = 'RDrnaseq/fraser_count_non_split.R'
+R_MERGE_NON_SPLIT = 'RDrnaseq/fraser_merge_non_split.R'
+R_JOIN_COUNTS = 'RDrnaseq/fraser_join_counts.R'
+R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
+
+BASE_STORAGE_GB_COHORT = config_retrieve(['cohort_job_resources', 'base_storage_gb'], 100)
+PER_BAM_STORAGE_COHORT = config_retrieve(['cohort_job_resources', 'per_bam_storage'], 10)
+NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 10)
+
+BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 100)
+PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 10)
+NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 16)
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
+    """Calculate disk space needed based on cohort size."""
     return base_storage_gb + num_bams * per_bam_storage_gb
 
 
-class Fraser:
-    """
-    Construct a FRASER command for performing aberrant splicing analysis.
-    """
+def get_fraser_job(
+    batch: hb.Batch,
+    name: str,
+    job_attrs: dict,
+    n_samples: int,
+    base_storage_gb: int,
+    per_bam_storage: int,
+    ncpu: int,
+    machine_required: MachineType,  # would have to import this abstract class
+) -> tuple[Job, int]:
+    """Create a standard FRASER job with common configuration."""
+    storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
+    j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
+    j.image(config_retrieve(['images', 'fraser']))
+    j.command('export HDF5_USE_FILE_LOCKING=FALSE')
 
-    def __init__(
-        self,
-        fds_tar: hb.ResourceFile,
-        cohort_id: str,
-        output: hb.ResourceGroup,
-        nthreads: int = 8,
-        pval_cutoff: float = 0.05,
-        z_cutoff: float | None = None,
-        min_delta_psi: float = 0.0,
-        delta_psi_cutoff: float = 0.3,
-        min_count: int = 5,
-    ) -> None:
-        self.fds_tar = fds_tar
-        if not isinstance(self.fds_tar, hb.ResourceFile):
-            raise TypeError(f'fds_tar must be a resource file, instead got {self.fds_tar}')
-        self.cohort_id = cohort_id
-        self.output = output
-        self.nthreads = nthreads
-        self.pval_cutoff = str(pval_cutoff)
-        self.z_cutoff = str(z_cutoff) if z_cutoff else 'NA'
-        self.min_delta_psi = str(min_delta_psi)
-        self.delta_psi_cutoff = str(delta_psi_cutoff)
-        self.min_count = str(min_count)
+    res = machine_required.set_resources(j=j, ncpu=ncpu, storage_gb=storage)
 
-        # Build OUTRIDER command
-        self.command = f"""\
-        # Create output directories
-        rm -rf plots results output
-        mkdir -p plots/heatmaps plots/volcano plots/misc results
-
-        # Extract FDS data
-        tar -xvf {self.fds_tar}
-        """
-        self.command += """\
-        R --vanilla <<EOF
-        library(FRASER)
-        library(tidyverse)
-        library(TxDb.Hsapiens.UCSC.hg38.knownGene)
-        library(org.Hs.eg.db)
-        """
-        self.command += f"""\
-        # Set significance values and other parameters
-        pval_cutoff <- {self.pval_cutoff}
-        z_cutoff <- {self.z_cutoff}
-        minDeltaPsi <- {self.min_delta_psi}
-        deltaPsi_cutoff <- {self.delta_psi_cutoff}
-        min_count <- {self.min_count}
-        n_parallel_workers <- {self.nthreads - 1!s}
-
-        # Load FDS (pre-counted)
-        fds <- loadFraserDataSet(dir = "output", name = "{self.cohort_id}")
-
-        # Extract count data and build new FDS using the FraserDataSet command
-        sample_table <- fds@colData
-        raw_counts_splice_sites <- cbind(
-          as.data.table(granges(rowRanges(fds, type="ss"))),
-          as.data.table(rowData(fds, type="ss")),
-          as.data.table(counts(fds, type="ss"))
-        )
-        raw_counts_junctions <- cbind(
-          as.data.table(granges(rowRanges(fds, type="j"))),
-          as.data.table(counts(fds, type="j")),
-          as.data.table(rowData(fds, type="j"))
-        )
-        rm(fds)
-
-        fds <- FraserDataSet(
-          colData = sample_table,
-          junctions = raw_counts_junctions,
-          spliceSites = raw_counts_splice_sites,
-          workingDir = "output.cohort.new"
-        )
-        """
-        self.command += """\
-        # Setup parallelisation
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        # Calculate PSI values
-        fds <- calculatePSIValues(fds)
-
-        # Filter
-        fds <- filterExpressionAndVariability(fds, minDeltaPsi = minDeltaPsi, filter = FALSE)
-
-        png(file = "plots/misc/filter_expression.png", width = 4000, height = 4000, res = 600)
-        plotFilterExpression(fds, bins = 100)
-        dev.off()
-
-        fds_filtered <- fds[mcols(fds, type = "j")[, "passed"],]
-
-        # Plot sample correlation
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.", psi_type, ".png"),
-            width = 4000, height = 4000, res = 600)
-            print(plotCountCorHeatmap(fds_filtered, type = psi_type, logit = TRUE, normalized = FALSE))
-            dev.off()
-        }
-
-        # Calculate optimal encoding dimensions (q)
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            fds_filtered <- optimHyperParams(fds_filtered, type = psi_type, plot = FALSE)
-            png(file = paste0("plots/misc/optimal_q.", psi_type, ".png"), width = 4000, height = 4000, res = 600)
-            print(plotEncDimSearch(fds_filtered, type = psi_type))
-            dev.off()
-        }
-
-        optimal_qs <- c(
-          psi5 = fds_filtered@metadata\\$hyperParams_psi5\\$q,
-          psi3 = fds_filtered@metadata\\$hyperParams_psi3\\$q,
-          theta = fds_filtered@metadata\\$hyperParams_theta\\$q
-        )
-
-        # Fit model
-        fds_filtered_fit <- FRASER(fds_filtered, q = optimal_qs, BPPARAM = bp)
-
-        # Plot sample correlation post-correction
-        for (psi_type in c("psi5", "psi3", "theta")) {
-            png(file = paste0("plots/heatmaps/count_correlation_heatmap.corrected.", psi_type, ".png"),
-            width = 4000, height = 4000, res = 600)
-            print(plotCountCorHeatmap(fds_filtered_fit, type = psi_type, logit = TRUE, normalized = TRUE))
-            dev.off()
-        }
-
-        # Annotate gene symbols
-        txdb <- TxDb.Hsapiens.UCSC.hg38.knownGene
-        orgDb <- org.Hs.eg.db
-        fds_filtered_fit <- annotateRangesWithTxDb(fds_filtered_fit, txdb = txdb, orgDb = orgDb)
-
-        # Get results
-        res <- results(fds_filtered_fit, padjCutoff = pval_cutoff, deltaPsiCutoff = deltaPsi_cutoff,
-        zScoreCutoff = z_cutoff, minCount = min_count)
-        res_all <- results(fds_filtered_fit, padjCutoff = 1, deltaPsiCutoff = 0, minCount = 0)
-        write_csv(
-            data.frame(res),
-            file = paste0(
-                "results/results.significant.p_",
-                pval_cutoff, ".z_", z_cutoff, ".dPsi_", deltaPsi_cutoff, ".min_count_", min_count, ".csv"
-            )
-        )
-        write_csv(data.frame(res_all), file = "results/results.all.csv")
-
-        # Plot results
-        for (sample_id in fds\\$sampleID) {
-            png(file = paste0("plots/volcano/", sample_id, ".psi5.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi5")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".psi3.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "psi3")
-            dev.off()
-            png(file = paste0("plots/volcano/", sample_id, ".theta.png"), width = 4000, height = 4000, res = 600)
-            plotVolcano(fds_filtered_fit, sample_id, type = "theta")
-            dev.off()
-        }
-
-        # Save
-        saveFraserDataSet(fds_filtered_fit, dir = getwd(), name = "FraserDataSet")
-        EOF
-        """
-        # Tar up outputs
-        self.command += f"""
-        tar -czvf {self.output['heatmaps.tar.gz']} -C plots/heatmaps .
-        tar -czvf {self.output['volcano_plots.tar.gz']} -C plots/volcano .
-        tar -czvf {self.output['misc_plots.tar.gz']} -C plots/misc .
-
-       # Python
-# Copy significant results file (quote paths and use `cp --`)
-cp -- "results/results.significant.p_{self.pval_cutoff}.z_{self.z_cutoff}.dPsi_{self.delta_psi_cutoff}.min_count_{self.min_count}.csv" "{self.output['results.csv']}"
-
-# Copy all results (quote paths and use `cp --`)
-cp -- "results/results.all.csv" "{self.output['results.all.csv']}"
-
-        tar -czvf {self.output['fds.tar.gz']} savedObjects/
-        """
-        self.command = dedent(self.command).strip()
-
-    def __str__(self):
-        return self.command
-
-    def __repr__(self):
-        return self.__str__()
+    return j, res.get_nthreads()
 
 
-def fraser(
+def fraser_pipeline(
     input_bams: list[tuple[str, str]],
     cohort_id: str,
-    job_attrs: dict[str, str],
+    job_attrs: dict,
     output_fds_path: dict[str, Path],
+    output_prefix: str,
 ) -> list[Job]:
-    """
-    Run FRASER.
-    """
     b = get_batch()
+    root = to_path(output_prefix)
 
-    jobs: list[Job] = []
+    all_jobs = []
 
-    # Get localised BAM objects
-    input_bams_localised: dict[str, hb.ResourceFile] = {
+    # Localize inputs as ResourceGroups
+    input_bams_localised: dict[str, hb.ResourceGroup] = {
         sample_id: b.read_input_group(
             **{
                 'bam': input_bam,
                 'bam.bai': f'{input_bam}.bai',
             }
-        ).bam
+        )
         for sample_id, input_bam in input_bams
     }
 
-    # Create FRASER job
-    j = b.new_job(f'fraser_{cohort_id}', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(config_retrieve(['images', 'fraser']))
+    # Init
+    init_fds_path = root / 'init' / 'fds-object.RDS'
+    logger.info('Planning Fraser init job')
+    fds_init_res, j_init = fraser_init(b, input_bams_localised, cohort_id, job_attrs, init_fds_path)
+    if j_init:
+        all_jobs.append(j_init)
 
-    storage_required_gb = fraser_storage_required_gb(
+    # Count Split
+    split_counts_res = {}
+    count_split_jobs = []
+    logger.info('Planning Fraser count-split jobs')
+    for sid, bam_rg in input_bams_localised.items():
+        out_p = root / 'split_counts' / f'{sid}.RDS'
+        res, j = fraser_count_split_reads(b, fds_init_res, bam_rg, sid, cohort_id, job_attrs, out_p)
+        split_counts_res[sid] = res
+        if j:
+            count_split_jobs.append(j)
+
+    logger.info(f'{len(count_split_jobs)} count-split jobs found')
+
+    if all_jobs and count_split_jobs:
+        for job in count_split_jobs:
+            job.depends_on(all_jobs[-1])
+    if count_split_jobs:
+        all_jobs.extend(count_split_jobs)
+
+    # Merge Split
+    merge_split_paths = {
+        'fds_object': root / 'merge_split' / 'fds-object.RDS',
+        'g_ranges_split': root / 'merge_split' / 'g_ranges_split_counts.RDS',
+        'g_ranges_non_split': root / 'merge_split' / 'g_ranges_non_split_counts.RDS',
+        'splice_site_coords': root / 'merge_split' / 'splice_site_coords.RDS',
+    }
+
+    ref_sid = list(input_bams_localised.keys())[0]  # noqa: RUF015
+
+    merge_split_res, j_merge_split = fraser_merge_split_reads(
+        b,
+        fds_init_res,
+        split_counts_res,
+        cohort_id,
+        job_attrs,
+        merge_split_paths,
+        reference_bam_rg=input_bams_localised[ref_sid],  # Pass the ResourceGroup here
+    )
+    if j_merge_split and all_jobs:
+        j_merge_split.depends_on(*all_jobs)
+    if j_merge_split:
+        all_jobs.append(j_merge_split)
+
+    # Count Non-Split
+    non_split_counts_res = {}
+    count_non_split_jobs = []
+    logger.info('Planning Count non-split job')
+    for sid, bam_rg in input_bams_localised.items():
+        out_p = root / 'non_split_counts' / f'{sid}.h5'
+        res, j = fraser_count_non_split_reads(
+            b, merge_split_res.fds_object, bam_rg, merge_split_res.splice_site_coords, sid, cohort_id, job_attrs, out_p
+        )
+        non_split_counts_res[sid] = res
+        if j:
+            count_non_split_jobs.append(j)
+
+    logger.info(f'{len(count_non_split_jobs)} count-non-split jobs found')
+
+    if all_jobs and count_non_split_jobs:
+        for job in count_non_split_jobs:
+            job.depends_on(all_jobs[-1])
+
+    if count_non_split_jobs:
+        all_jobs.extend(count_non_split_jobs)
+
+    # Merge Non-Split
+    fds_tar_path = to_path(output_fds_path['Rds_data'])
+    logger.info('Planning Merge non-split job')
+    fds_tar_res, j_merge_non = fraser_merge_non_split_reads(
+        b,
+        merge_split_res.fds_object,
+        non_split_counts_res,
+        merge_split_res.splice_site_coords,
+        cohort_id,
+        job_attrs,
+        fds_tar_path,
         len(input_bams_localised),
-        config_retrieve(['workflow', 'fraser_init_storage'], 50),
-        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+        reference_bam_rg=input_bams_localised[ref_sid],
     )
 
-    res = HIGHMEM.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_cpu'], 8),
-        storage_gb=storage_required_gb,
-    )
+    if j_merge_non and all_jobs:
+        j_merge_non.depends_on(*all_jobs)
+    if j_merge_non:
+        all_jobs.append(j_merge_non)
 
-    j.declare_resource_group(
-        output={
-            'results.csv': '{root}.results.csv',
-            'results.all.csv': '{root}.results.all.csv',
-            'heatmaps.tar.gz': '{root}.heatmaps.tar.gz',
-            'volcano_plots.tar.gz': '{root}.volcano_plots.tar.gz',
-            'misc_plots.tar.gz': '{root}.misc_plots.tar.gz',
-            'fds.tar.gz': '{root}.fds.tar.gz',
-        },
-    )
-
-    # Perform counting in parallel jobs
-    output_counts_prefix = to_path(output_fds_path['Rds_data']).parent / 'counts'
-    count_jobs, fds_tar = fraser_count(
-        input_bams_localised=input_bams_localised,
-        cohort_id=cohort_id,
-        output_counts_prefix=output_counts_prefix,
-        job_attrs=job_attrs,
-    )
-    jobs.extend(count_jobs)
-
-    # Get Fraser parameters
-    pval_cutoff = get_config().get('fraser', {}).get('pval_cutoff', 0.05)
-    z_cutoff = get_config().get('fraser', {}).get('z_cutoff', None)
-    min_delta_psi = get_config().get('fraser', {}).get('min_delta_psi', 0.0)
-    delta_psi_cutoff = get_config().get('fraser', {}).get('delta_psi_cutoff', 0.3)
-    min_count = get_config().get('fraser', {}).get('min_count', 5)
-
-    # Create counting command
-    fraser = Fraser(
-        fds_tar=fds_tar,
-        cohort_id=cohort_id,
-        output=j.output,
-        nthreads=res.get_nthreads(),
-        pval_cutoff=pval_cutoff,
-        z_cutoff=z_cutoff,
-        min_delta_psi=min_delta_psi,
-        delta_psi_cutoff=delta_psi_cutoff,
-        min_count=min_count,
-    )
-
-    cmd = str(fraser)
-    j.command(command(cmd, monitor_space=True))
-
-    jobs.append(j)
-
-    # Write output to file
-    if output_fds_path:
-        # NOTE: j.output is just a placeholder
-        b.write_output(
-            j.output,
-            str(to_path(output_fds_path['Rds_data']).with_suffix('').with_suffix('').with_suffix('')),
-        )  # Remove .fds.tar.gz suffix
-
-    return jobs
-
-
-def fraser_count(
-    input_bams_localised: dict[str, hb.ResourceFile],
-    cohort_id: str,
-    output_counts_prefix: Path,
-    job_attrs: dict[str, str],
-) -> tuple[list[Job], hb.ResourceFile]:
-    """
-    Run FRASER counting.
-    """
-
-    jobs = []
-    j, fds, sample_ids = fraser_init(
-        input_bams_localised=input_bams_localised,
+    # Join counts
+    joined_tar_path = root / 'joined' / 'fds_joined.tar.gz'
+    fds_joined_res, j_join = fraser_join_counts(
+        b,
+        merge_split_res=merge_split_res,
+        merge_non_split_tar=fds_tar_res,
         cohort_id=cohort_id,
         job_attrs=job_attrs,
-    )
-    jobs.append(j)
-
-    split_counts_dict = {}
-    for sample_id in sample_ids:
-        output_counts_path = output_counts_prefix / 'output/cache/splitCounts' / f'splitCounts-{sample_id}.RDS'
-        sample_j, split_counts = fraser_count_split_reads_one_sample(
-            fds=fds,
-            sample_id=sample_id,
-            bam=input_bams_localised[sample_id],
-            cohort_id=cohort_id,
-            output_counts_path=output_counts_path,
-            job_attrs=job_attrs,
-        )
-        if sample_j:
-            jobs.append(sample_j)
-        split_counts_dict[sample_id] = split_counts
-
-    j, split_counts_rg = fraser_merge_split_reads(
-        fds=fds,
-        cohort_id=cohort_id,
-        split_counts_dict=split_counts_dict,
-        bams=list(input_bams_localised.values()),
-        job_attrs=job_attrs,
-    )
-    jobs.append(j)
-
-    non_spliced_counts_dict = {}
-    for sample_id in sample_ids:
-        output_counts_path = (
-            output_counts_prefix / 'output/cache/nonSplicedCounts' / cohort_id / f'nonSplicedCounts-{sample_id}.h5'
-        )
-        sample_j, non_spliced_counts = fraser_count_non_split_reads_one_sample(
-            fds=fds,
-            cohort_id=cohort_id,
-            split_counts=split_counts_rg,
-            sample_id=sample_id,
-            bam=input_bams_localised[sample_id],
-            output_counts_path=output_counts_path,
-            job_attrs=job_attrs,
-        )
-        jobs.append(sample_j)
-        non_spliced_counts_dict[sample_id] = non_spliced_counts
-
-    j, fds_tar = fraser_merge_non_split_reads(
-        fds=fds,
-        cohort_id=cohort_id,
-        non_spliced_counts_dict=non_spliced_counts_dict,
-        split_counts=split_counts_rg,
-        bams=list(input_bams_localised.values()),
-        job_attrs=job_attrs,
-    )
-    jobs.append(j)
-
-    return jobs, fds_tar
-
-
-def fraser_init(
-    input_bams_localised: dict[str, hb.ResourceFile],
-    cohort_id: str,
-    job_attrs: dict[str, str],
-) -> tuple[Job, hb.ResourceFile, list[str]]:
-    """
-    Run FRASER initialisation.
-    """
-    b = get_batch()
-
-    # Create FRASER job
-    j = b.new_bash_job('fraser_init', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser'))
-    # Set resource requirements
-    storage_required_gb = fraser_storage_required_gb(
-        len(input_bams_localised),
-        config_retrieve(['workflow', 'fraser_init_storage'], 50),
-        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+        output_path=joined_tar_path,
+        num_samples=len(input_bams_localised),
     )
 
-    res = STANDARD.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_init_cpu'], 8),
-        storage_gb=storage_required_gb,
+    if j_join and all_jobs:
+        j_join.depends_on(*all_jobs)
+    if j_join:
+        all_jobs.append(j_join)
+
+    # Analysis
+    analysis_paths = {
+        'all_results': to_path(output_fds_path['seqr_data']),
+        'significant_results': to_path(output_fds_path['sig_results']),
+        'plots': root / 'results' / 'plots.tar.gz',
+        'final_fds': root / 'results' / 'final_object.tar.gz',
+    }
+    logger.info('Planning Fraser analysis job')
+    j_analysis = fraser_analysis(b, fds_joined_res, cohort_id, job_attrs, analysis_paths, len(input_bams_localised))
+
+    if j_analysis and all_jobs:
+        j_analysis.depends_on(*all_jobs)
+
+    if j_analysis:
+        all_jobs.append(j_analysis)
+
+    return all_jobs
+
+
+def fraser_init(b, input_bams, cohort_id, job_attrs, output_path) -> tuple[hb.Resource, Job | None]:
+    if exists(output_path):
+        return b.read_input(output_path), None
+
+    j, threads = get_fraser_job(
+        b,
+        'fraser_init',
+        job_attrs,
+        n_samples=len(input_bams),
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=HIGHMEM,
+    )
+    j.command('mkdir -p /io/batch/input_bams /io/work')
+    j.command('echo "sample_id,bam_path" > /io/work/sample_map.csv')
+    for sid, bam_rg in input_bams.items():
+        j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sid}.bam')
+        j.command(f'ln -s {bam_rg["bam.bai"]} /io/batch/input_bams/{sid}.bam.bai')
+        j.command(f'echo "{sid},/io/batch/input_bams/{sid}.bam" >> /io/work/sample_map.csv')
+
+    j.command(
+        command(f"""
+        Rscript {R_INIT} --cohort_id "{cohort_id}" --sample_map "/io/work/sample_map.csv" \\
+            --work_dir "/io/work" --nthreads {threads}
+        mv /io/work/savedObjects/FRASER_{cohort_id}/fds-object.RDS {j.fds}
+    """)
+    )
+    b.write_output(j.fds, str(output_path))
+    return j.fds, j
+
+
+def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, output_path):
+    if exists(output_path):
+        return b.read_input(output_path), None
+
+    j, threads = get_fraser_job(
+        b,
+        f'count_split_{sample_id}',
+        job_attrs,
+        n_samples=1,
+        base_storage_gb=BASE_STORAGE_GB_SAMPLE,
+        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        ncpu=NCPU_SAMPLE,
+        machine_required=STANDARD,
     )
 
-    bam_files_r_str = ''
-    sample_ids_r_str = ''
-    sample_ids = []
-    for sample_id, bam_file in input_bams_localised.items():
-        bam_files_r_str += f'"{bam_file}", '
-        sample_ids_r_str += f'"{sample_id}", '
-        sample_ids.append(sample_id)
-    bam_files_r_str = bam_files_r_str[:-2]  # Remove trailing comma and space
-    sample_ids_r_str = sample_ids_r_str[:-2]  # Remove trailing comma and space
+    j.command('mkdir -p /io/batch/input_bams')
+    j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sample_id}.bam')
+    j.command(f'ln -s {bam_rg["bam.bai"]} /io/batch/input_bams/{sample_id}.bam.bai')
 
-    cmd = dedent(
-        f"""\
-        R --vanilla <<EOF
-        library(FRASER)
-
-        bam_files <- c({bam_files_r_str})
-        sample_ids <- c({sample_ids_r_str})
-        sample_table <- DataFrame(
-            sampleID = sample_ids,
-            bamFile = bam_files,
-            group = seq_len(length(bam_files)),
-            pairedEnd = TRUE
-        )
-
-        fds <- FraserDataSet(
-            colData = sample_table,
-            workingDir = "output",
-            name = "{cohort_id}"
-        )
-
-        n_parallel_workers <- {res.get_nthreads() - 1!s}
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        fds <- saveFraserDataSet(fds)
-        EOF
-
-        # Move output to resource file
-        mv output/savedObjects/{cohort_id}/fds-object.RDS {j.fds}
-        """,
+    j.command(
+        command(f"""
+        Rscript {R_COUNT_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
+            --cohort_id "{cohort_id}" --sample_id "{sample_id}" --work_dir "/io/work" \\
+            --nthreads "{threads}"
+        mv /io/work/cache/splitCounts/splitCounts-{sample_id}.RDS {j.out}
+    """)
     )
-
-    j.command(command(cmd, monitor_space=True))
-
-    return j, j.fds, sample_ids
-
-
-def fraser_count_split_reads_one_sample(
-    fds: hb.ResourceFile,
-    sample_id: str,
-    bam: hb.ResourceFile,
-    cohort_id: str,
-    output_counts_path: Path,
-    job_attrs: dict[str, str],
-) -> tuple[Job | None, hb.ResourceFile]:
-    """
-    Run FRASER split-read counting for a single sample.
-    """
-    b = get_batch()
-
-    # Reuse existing output if possible
-    if can_reuse(output_counts_path):
-        return None, b.read_input(output_counts_path)
-
-    # Create FRASER job
-    j = b.new_job('fraser_count_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser'))
-
-    # Set resource requirements
-    res = STANDARD.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_split_one_sample'], 8),
-        storage_gb=50,
-    )
-
-    cmd = dedent(
-        f"""\
-        # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_id}
-        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
-        # ls BAM file to ensure it is localised
-        ls {bam}
-
-        R --vanilla <<EOF
-        library(FRASER)
-
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
-
-        n_parallel_workers <- {res.get_nthreads() - 1!s}
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        options("FRASER.maxSamplesNoHDF5"=0)
-        options("FRASER.maxJunctionsNoHDF5"=-1)
-
-        sample_id <- "{sample_id}"
-        sample_count <- countSplitReads(
-          sampleID = sample_id,
-          fds = fds,
-          NcpuPerSample = n_parallel_workers,
-        )
-        EOF
-
-        # Move output to resource file
-        mv output/cache/splitCounts/splitCounts-{sample_id}.RDS {j.split_counts}
-        """,
-    )
-
-    j.command(command(cmd, monitor_space=True))
-
-    # Write output to file
-    b.write_output(j.split_counts, str(output_counts_path))
-
-    return j, j.split_counts
+    b.write_output(j.out, str(output_path))
+    return j.out, j
 
 
 def fraser_merge_split_reads(
-    fds: hb.ResourceFile,
-    cohort_id: str,
-    split_counts_dict: dict[str, hb.ResourceFile],
-    bams: list[hb.ResourceFile],
-    job_attrs: dict[str, str],
-) -> tuple[Job, hb.ResourceGroup]:
-    """
-    Merge split-read counts.
-    """
-    b = get_batch()
+    b,
+    fds,
+    split_counts,
+    cohort_id,
+    job_attrs,
+    output_paths,
+    reference_bam_rg=None,
+):
+    """Merge split read counts and create GRanges objects for split and non-split counts.
+    Also localizing one reference bam to pass fraser metadata check even though the bam is not used in the merge step"""
+    all_output_paths = output_paths | {'split_counts_tar': output_paths['fds_object'].parent / 'split_counts.tar.gz'}
 
-    # Create FRASER job
-    j = b.new_job('fraser_merge_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser'))
+    if all(exists(p) for p in all_output_paths.values()):
+        return b.read_input_group(**all_output_paths), None
 
-    storage_required_gb = fraser_storage_required_gb(
-        len(bams),
-        config_retrieve(['workflow', 'fraser_init_storage'], 50),
-        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    j, threads = get_fraser_job(
+        b,
+        'fraser_merge_split',
+        job_attrs,
+        n_samples=len(split_counts),
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=HIGHMEM,
     )
+    j.declare_resource_group(out={k: v.name for k, v in all_output_paths.items()})
 
-    # Set resource requirements
-    res = STANDARD.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=storage_required_gb,
-    )
+    setup = ['mkdir -p /io/work/cache/splitCounts /io/work/savedObjects /io/batch/input_bams']
 
-    # Create command to symlink split counts
-    link_counts_cmd = 'mkdir -p output/cache/splitCounts\n'
-    link_counts_cmd += '\n'.join(
-        [
-            f'ln -s {split_counts} output/cache/splitCounts/splitCounts-{sample_id}.RDS'
-            for sample_id, split_counts in split_counts_dict.items()
-        ],
-    )
+    for sid, r in split_counts.items():
+        setup.append(f'ln -s {r} /io/work/cache/splitCounts/splitCounts-{sid}.RDS')
 
-    # Create resource group for outputs
-    split_counts_rg = {
-        'raw_counts_j_h5': f'output/savedObjects/{cohort_id}/rawCountsJ.h5',
-        'split_counts_assays': f'output/savedObjects/{cohort_id}/splitCounts/assays.h5',
-        'split_counts_se': f'output/savedObjects/{cohort_id}/splitCounts/se.rds',
-        'g_ranges_split_counts': 'rds/g_ranges_split_counts.RDS',
-        'g_ranges_non_split_counts': 'rds/g_ranges_non_split_counts.RDS',
-        'splice_site_coords': 'rds/splice_site_coords.RDS',
-    }
-    split_counts_rg_flat = {key: value.split('/')[-1] for key, value in split_counts_rg.items()}
-    j.declare_resource_group(
-        split_counts=split_counts_rg_flat,
-    )
+    if reference_bam_rg:
+        setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
+        setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
 
-    # Create move command for outputs
-    move_cmd = '\n'.join([f'mv {file} {j.split_counts[key]}' for key, file in split_counts_rg.items()])
+    j.command(
+        command(
+            'ulimit -n 4096\n'
+            + '\n'.join(setup)
+            + f"""
+        Rscript {R_MERGE_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
+            --work_dir "/io/work" --nthreads "{threads}"
 
-    cmd = dedent(
-        f"""\
-        # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_id}
-        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
-        # Symlink split counts
-        {link_counts_cmd}
-        # ls BAM files to ensure they are localised
-        ls {' '.join(bams)}
-        # Make RDS directory
-        mkdir -p rds
+    mv /io/work/savedObjects/FRASER_{cohort_id}/fds-object.RDS {j.out.fds_object}
+    mv /io/work/g_ranges_split_counts.RDS {j.out.g_ranges_split}
+    mv /io/work/g_ranges_non_split_counts.RDS {j.out.g_ranges_non_split}
+    mv /io/work/splice_site_coords.RDS {j.out.splice_site_coords}
 
-        R --vanilla <<EOF
-        library(FRASER)
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
-
-        n_parallel_workers <- {res.get_nthreads() - 1!s}
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        options("FRASER.maxSamplesNoHDF5"=0)
-        options("FRASER.maxJunctionsNoHDF5"=-1)
-
-        minExpressionInOneSample <- 20
-
-        # Read counts from cache
-        split_counts <- getSplitReadCountsForAllSamples(fds = fds, recount = FALSE)
-
-        split_count_ranges <- rowRanges(split_counts)
-        split_count_ranges <- FRASER:::annotateSpliceSite(split_count_ranges)
-        saveRDS(split_count_ranges, "rds/g_ranges_split_counts.RDS")
-
-        max_count <- rowMaxs(assay(split_counts, "rawCountsJ"))
-        passed <- max_count >= minExpressionInOneSample
-        split_count_ranges <- split_count_ranges[passed, ]
-        saveRDS(split_count_ranges, "rds/g_ranges_non_split_counts.RDS")
-
-        splice_site_coords <- FRASER:::extractSpliceSiteCoordinates(split_count_ranges, fds)
-        saveRDS(splice_site_coords, "rds/splice_site_coords.RDS")
-        EOF
-
-        # Move outputs to resource group
-        {move_cmd}
-        """,
-    )
-
-    j.command(command(cmd, monitor_space=True))
-
-    return j, j.split_counts
-
-
-def fraser_count_non_split_reads_one_sample(
-    fds: hb.ResourceFile,
-    cohort_id: str,
-    split_counts: hb.ResourceGroup,
-    sample_id: str,
-    bam: hb.ResourceFile,
-    output_counts_path: Path,
-    job_attrs: dict[str, str],
-) -> tuple[Job, hb.ResourceFile]:
-    """
-    Run FRASER non-split-read counting for a single sample.
-    """
-    b = get_batch()
-
-    # NOTE: Can't reuse output, need to count non-split reads for each sample
-
-    # Create FRASER job
-    j = b.new_bash_job('fraser_count_non_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser'))
-
-    # Set resource requirements
-    res = STANDARD.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_nonsplit_one_sample'], 8),
-        storage_gb=50,
-    )
-
-    cmd = dedent(
-        f"""\
-        # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_id}
-        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
-        # Symlink splice site coords RDS file
-        mkdir -p rds
-        ln -s {split_counts.splice_site_coords} rds/splice_site_coords.RDS
-        # ls BAM file to ensure it is localised
-        ls {bam}
-
-        R --vanilla <<EOF
-        library(FRASER)
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
-
-        n_parallel_workers <- {res.get_nthreads() - 1!s}
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        options("FRASER.maxSamplesNoHDF5"=0)
-        options("FRASER.maxJunctionsNoHDF5"=-1)
-
-        splice_site_coords <- readRDS("rds/splice_site_coords.RDS")
-
-        sample_id <- "{sample_id}"
-        sample_count <- countNonSplicedReads(
-          sampleID = sample_id,
-          splitCountRanges = NULL,
-          fds = fds,
-          minAnchor = 5,
-          NcpuPerSample = n_parallel_workers,
-          spliceSiteCoords = splice_site_coords
+        tar -czf {j.out.split_counts_tar} -C /io/work/savedObjects/FRASER_{cohort_id}/ splitCounts/
+"""
         )
-        EOF
-
-        # Move output to resource file
-        mv output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.non_spliced_counts}
-        """,
     )
 
-    j.command(command(cmd, monitor_space=True))
+    for k, p in all_output_paths.items():
+        b.write_output(j.out[k], str(p))
+    return j.out, j
 
-    # Write output to file
-    b.write_output(j.non_spliced_counts, str(output_counts_path))
 
-    return j, j.non_spliced_counts
+def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, job_attrs, output_path):
+    if exists(output_path):
+        return b.read_input(output_path), None
+
+    j, threads = get_fraser_job(
+        b,
+        f'count_non_split_{sample_id}',
+        job_attrs,
+        n_samples=1,
+        base_storage_gb=BASE_STORAGE_GB_SAMPLE,
+        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        ncpu=NCPU_SAMPLE,
+        machine_required=STANDARD,
+    )
+
+    j.command('mkdir -p /io/batch/input_bams')
+    j.command(f'ln -s {bam_rg.bam} /io/batch/input_bams/{sample_id}.bam')
+    j.command(f'ln -s {bam_rg["bam.bai"]} /io/batch/input_bams/{sample_id}.bam.bai')
+
+    j.command(
+        command(f"""
+        Rscript {R_COUNT_NON_SPLIT} --fds_path {fds} --bam_path "/io/batch/input_bams/{sample_id}.bam" \\
+            --coords_path {coords} --sample_id "{sample_id}" --cohort_id "{cohort_id}" \\
+            --work_dir "/io/work" --nthreads "{threads}"
+
+        if [ -f /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 ]; then
+            echo "Found H5 file, moving to output"
+            mv /io/work/cache/nonSplicedCounts/FRASER_{cohort_id}/nonSplicedCounts-{sample_id}.h5 {j.out}
+        else
+            echo "ERROR: No output file found for {sample_id}"
+            find /io/work/cache/nonSplicedCounts/ -type f
+            exit 1
+        fi
+    """)
+    )
+    b.write_output(j.out, str(output_path))
+    return j.out, j
 
 
 def fraser_merge_non_split_reads(
-    fds: hb.ResourceFile,
+    b, fds, non_split_counts, filtered_ranges, cohort_id, job_attrs, output_path, num_samples, reference_bam_rg
+):
+    if exists(output_path):
+        return b.read_input(output_path), None
+
+    j, threads = get_fraser_job(
+        b,
+        'fraser_merge_non_split',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=HIGHMEM,
+    )
+    fds_name = f'FRASER_{cohort_id}'
+    cache_h5_path = '/io/work/cache/nonSplicedCounts'
+
+    setup = [f'mkdir -p {cache_h5_path} /io/batch/input_bams', f'mkdir -p /io/work/savedObjects/{fds_name}']
+
+    if not non_split_counts:
+        raise ValueError('non_split_counts dictionary is empty')
+
+    for sid, r in non_split_counts.items():
+        setup.append(f'ln -s {r} {cache_h5_path}/nonSplicedCounts-{sid}.h5')
+
+    if reference_bam_rg:
+        setup.append(f'ln -s {reference_bam_rg.bam} /io/batch/input_bams/reference.bam')
+        setup.append(f'ln -s {reference_bam_rg["bam.bai"]} /io/batch/input_bams/reference.bam.bai')
+
+    j.command(
+        command(
+            'ulimit -n 4096\n'
+            + '\n'.join(setup)
+            + f"""
+
+        Rscript {R_MERGE_NON_SPLIT} --fds_path {fds} --cohort_id "{cohort_id}" \\
+            --filtered_ranges_path {filtered_ranges} --work_dir "/io/work" --nthreads "{threads}"
+
+        tar -cvzf {j.fds_tar} -C /io/work/savedObjects/ {fds_name}/
+    """
+        )
+    )
+    b.write_output(j.fds_tar, str(output_path))
+    return j.fds_tar, j
+
+
+def fraser_join_counts(
+    b: hb.Batch,
+    merge_split_res: hb.ResourceGroup,
+    merge_non_split_tar: hb.ResourceFile,
     cohort_id: str,
-    non_spliced_counts_dict: dict[str, hb.ResourceFile],
-    split_counts: hb.ResourceGroup,
-    bams: list[hb.ResourceFile],
-    job_attrs: dict[str, str],
-) -> tuple[Job, hb.ResourceFile]:
-    """
-    Merge non-split-read counts.
-    """
+    job_attrs: dict,
+    output_path: Path,
+    num_samples: int,
+) -> tuple[hb.Resource, Job | None]:
+    if exists(output_path):
+        return b.read_input(output_path), None
 
-    b = get_batch()
-
-    # Create FRASER job
-    j = b.new_job('fraser_merge_non_split', attributes=job_attrs | {'tool': 'fraser'})
-    j.image(image_path('fraser'))
-
-    storage_required_gb = fraser_storage_required_gb(
-        len(bams),
-        config_retrieve(['workflow', 'fraser_init_storage'], 50),
-        config_retrieve(['workflow', 'fraser_bam_single_storage_req'], 10),
+    j, threads = get_fraser_job(
+        b,
+        'fraser_join_counts',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=HIGHMEM,
     )
 
-    # Set resource requirements
-    res = STANDARD.set_resources(
-        j=j,
-        ncpu=config_retrieve(['workflow', 'fraser_merge'], 8),
-        storage_gb=storage_required_gb,
+    fds_name = f'FRASER_{cohort_id}'
+    work_dir = '/io/work'
+
+    setup = [
+        f'mkdir -p {work_dir}/savedObjects/{fds_name}',
+        f'mkdir -p {work_dir}/savedObjects',
+        f'tar -xzf {merge_non_split_tar} -C {work_dir}/savedObjects/',
+        f'tar -xzf {merge_split_res.split_counts_tar} -C {work_dir}/savedObjects/{fds_name}/',
+        f'cp {merge_split_res.splice_site_coords} {work_dir}/splice_site_coords.RDS',
+    ]
+
+    cmd = f"""
+ulimit -n 4096
+{chr(10).join(setup)}
+
+Rscript {R_JOIN_COUNTS} --fds_path "{work_dir}/savedObjects/{fds_name}/fds-object.RDS" \\
+    --cohort_id "{cohort_id}" \\
+    --work_dir "{work_dir}" \\
+    --nthreads "{threads}"
+
+echo "=== R script completed, creating tar archive ==="
+tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
+"""
+
+    j.command(command(cmd))
+    b.write_output(j.fds_tar, str(output_path))
+    return j.fds_tar, j
+
+
+def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples) -> Job | None:
+    if all(exists(x) for x in output_paths.values()):
+        return None
+
+    j, threads = get_fraser_job(
+        b,
+        'fraser_analysis',
+        job_attrs,
+        n_samples=num_samples,
+        base_storage_gb=BASE_STORAGE_GB_COHORT,
+        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        ncpu=NCPU_COHORT,
+        machine_required=HIGHMEM,
+    )
+    j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
+    cfg = get_config().get('fraser', {})
+    z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
+
+    j.command(
+        command(f"""
+        mkdir -p /io/work/savedObjects
+        tar -xzf {fds_tar} -C /io/work/savedObjects/
+
+        Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
+            --pval_cutoff {cfg.get('pval_cutoff', 0.05)} \\
+            --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.3)} \\
+            --min_count {cfg.get('min_count', 5)} \\
+            --nthreads {threads} {z_cutoff_arg}
+
+        tar -czvf {j.out.plots} qc_plots
+        cp {cohort_id}.significant.csv {j.out.sig_results}
+        cp {cohort_id}.all_results.csv.gz {j.out.all_results}
+        tar -czvf {j.out.final_fds} -C savedObjects {cohort_id}_final/
+    """)
     )
 
-    # Create command to symlink non-spliced counts
-    link_counts_cmd = f'mkdir -p output/cache/nonSplicedCounts/{cohort_id}\n'
-    link_counts_cmd += '\n'.join(
-        [
-            f'ln -s {non_spliced_counts} output/cache/nonSplicedCounts/{cohort_id}/nonSplicedCounts-{sample_id}.h5'
-            for sample_id, non_spliced_counts in non_spliced_counts_dict.items()
-        ],
-    )
-    link_counts_cmd += '\n'
-    # Add command to symlink RDS files
-    link_counts_cmd += 'mkdir -p rds\n'
-    link_counts_cmd += f'ln -s {split_counts.g_ranges_split_counts} rds/g_ranges_split_counts.RDS\n'
-    link_counts_cmd += f'ln -s {split_counts.g_ranges_non_split_counts} rds/g_ranges_non_split_counts.RDS\n'
-    link_counts_cmd += f'ln -s {split_counts.splice_site_coords} rds/splice_site_coords.RDS\n'
-    # Add command to symlink split counts assays
-    link_counts_cmd += f'mkdir -p output/savedObjects/{cohort_id}/splitCounts\n'
-    link_counts_cmd += f'ln -s {split_counts.raw_counts_j_h5} output/savedObjects/{cohort_id}/rawCountsJ.h5\n'
-    link_counts_cmd += (
-        f'ln -s {split_counts.split_counts_assays} output/savedObjects/{cohort_id}/splitCounts/assays.h5\n'
-    )
-    link_counts_cmd += f'ln -s {split_counts.split_counts_se} output/savedObjects/{cohort_id}/splitCounts/se.rds\n'
-
-    cmd = dedent(
-        f"""\
-        # Symlink FDS resource file to proper location
-        mkdir -p output/savedObjects/{cohort_id}
-        ln -s {fds} output/savedObjects/{cohort_id}/fds-object.RDS
-        # Symlink non-spliced counts, RDS files, and split counts
-        {link_counts_cmd}
-        # ls BAM files to ensure they are localised
-        ls {' '.join(bams)}
-
-        R --vanilla <<EOF
-        library(FRASER)
-
-        fds <- loadFraserDataSet(dir = "output", name = "{cohort_id}")
-
-        n_parallel_workers <- {res.get_nthreads() - 1!s}
-        register(MulticoreParam(workers = n_parallel_workers))
-        bp <- MulticoreParam(workers = n_parallel_workers)
-
-        options("FRASER.maxSamplesNoHDF5"=0)
-        options("FRASER.maxJunctionsNoHDF5"=-1)
-
-        minAnchor <- 5
-
-        split_count_ranges <- readRDS("rds/g_ranges_non_split_counts.RDS")
-        non_split_counts <- getNonSplitReadCountsForAllSamples(
-          fds = fds,
-          splitCountRanges = split_count_ranges,
-          minAnchor = minAnchor,
-          recount = FALSE,
-          longRead = FALSE
-        )
-
-        split_count_ranges <- readRDS("rds/g_ranges_split_counts.RDS")
-        splice_site_coords <- readRDS("rds/splice_site_coords.RDS")
-
-        split_counts_h5 <- HDF5Array::HDF5Array("output/savedObjects/{cohort_id}/rawCountsJ.h5", "rawCountsJ")
-        split_counts_se <- SummarizedExperiment(
-          colData = colData(fds),
-          rowRanges = split_count_ranges,
-          assays = list(rawCountsJ = split_counts_h5)
-        )
-
-        non_split_counts_h5 <- HDF5Array::HDF5Array("output/savedObjects/{cohort_id}/rawCountsSS.h5", "rawCountsSS")
-        non_split_counts_se <- SummarizedExperiment(
-          colData = colData(fds),
-          rowRanges = splice_site_coords,
-          assays = list(rawCountsSS = non_split_counts_h5)
-        )
-
-        fds <- addCountsToFraserDataSet(
-          fds = fds,
-          splitCounts = split_counts_se,
-          nonSplitCounts = non_split_counts_se
-        )
-
-        fds <- saveFraserDataSet(fds)
-        EOF
-
-        # tar saved objects directory
-        tar -chf {j.fds_tar} output/savedObjects/{cohort_id}/
-        """,
-    )
-
-    j.command(command(cmd, monitor_space=True))
-
-    return j, j.fds_tar
+    for k, p in output_paths.items():
+        b.write_output(j.out[k], str(p))
+    return j
