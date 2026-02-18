@@ -495,7 +495,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
             --nthreads {threads} {z_cutoff_arg}
 
         tar -czvf {j.out.plots} qc_plots
-        cp {cohort_id}.significant.csv {j.out.sig_results}
+        cp {cohort_id}.significant.csv {j.out.significant_results}
         cp {cohort_id}.all_results.csv.gz {j.out.all_results}
         tar -czvf {j.out.final_fds} -C savedObjects {cohort_id}_final/
     """)
