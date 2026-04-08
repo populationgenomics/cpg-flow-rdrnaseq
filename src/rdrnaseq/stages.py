@@ -13,7 +13,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim, rna_dashboard
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -264,3 +264,39 @@ class Outrider(stage.CohortStage):
             job_attrs=self.get_job_attrs(),
         )
         return self.make_outputs(cohort, data=output, jobs=j)
+
+
+@stage.stage(required_stages=[Fraser, Outrider], analysis_type='Dashboard', analysis_keys=['Dashboard_html'])
+class Dashboard(stage.CohortStage):
+    """
+    Perform outlier gene expression analysis with Outrider.
+    """
+
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        """
+        Generate outrider outputs.
+        """
+        return {
+            'Dashboard_html': cohort.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna.html',
+        }
+
+    def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+        """
+        Queue a job to run outrider.
+        """
+        output = self.expected_outputs(cohort)
+        fraser_input = [
+            inputs.as_path(cohort, Fraser, 'sig_results')
+        ]
+        outrider_input = [inputs.as_path(cohort, Outrider, 'results.csv')]
+
+        j = rna_dashboard.make_dashboard(
+            fraser_results=fraser_input,
+            outrider_results=outrider_input,
+            output_dashboard_path=output['Dashboard_html'],
+            output_latest= html_path
+            cohort_id= cohort.id,
+            job_attrs=self.get_job_attrs(),
+        )
+        return self.make_outputs(cohort, data=output, jobs=j)
+
