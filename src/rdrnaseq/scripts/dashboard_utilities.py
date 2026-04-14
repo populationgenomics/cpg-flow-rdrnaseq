@@ -123,6 +123,12 @@ def load_cpg_to_family_mapping(mapping_file: str) -> dict:
     return mapping
 
 
+def add_family_ids(df: pd.DataFrame, cpg_to_family: dict) -> pd.DataFrame:
+    """Add a familyID column to a DataFrame by mapping sampleID to family IDs."""
+    df['familyID'] = df['sampleID'].map(cpg_to_family).fillna('Unknown')
+    return df
+
+
 # =============================================================================
 # Data Loading Functions
 # =============================================================================
