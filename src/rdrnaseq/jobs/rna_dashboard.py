@@ -107,7 +107,6 @@ def make_dashboards(
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
-        j.image(config_retrieve(['images', 'rdrnaseq']))
 
         # Build a family-mapping CSV scoped to this dataset's SG IDs
         csv_lines = ['sequencing_group.id,family.external_ids']
