@@ -249,6 +249,7 @@ class Outrider(stage.CohortStage):
         return {
             'RData': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData',
             'seqr_out': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.aberrant_genes_per_sample.csv',
+            'outrider_csv': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -282,10 +283,8 @@ class Dashboard(stage.CohortStage):
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         output = self.expected_outputs(cohort)
 
-        # Fraser significant results — tracked stage output
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
-        # Outrider full results CSV — written by the Outrider resource group
-        outrider_csv = cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv'
+        outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_csv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
