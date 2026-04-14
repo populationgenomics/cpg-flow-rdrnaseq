@@ -1,51 +1,31 @@
+"""
+Create an interactive HTML dashboard for RNA-seq FRASER/OUTRIDER results.
+
+This job module creates one Hail Batch job per dataset in the cohort. Each job
+localises the cohort-level Fraser/Outrider CSVs, subsets to the dataset's SG IDs
+via family-mapping metadata, and runs the dashboard CLI script to produce a
+self-contained HTML file.
+"""
+
+from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from collections import defaultdict
-import loguru
-from cpg_flow import targets
-from cpg_utils import Path, config, hail_batch, to_path
+
+from cpg_utils import Path
+from cpg_utils.config import config_retrieve
+from cpg_utils.hail_batch import command, get_batch
+from loguru import logger
 from metamist.graphql import gql, query
 
-from pyarrow.dataset import dataset
-from cpg-flow-rdrnaseq.scripts import create_interactive_dashboard, dashboard_utilities.py
-
 if TYPE_CHECKING:
-    from hailtop.batch.job import BashJob
-
-"A query that checks which project each of the sequencing groups in my cohort belong to"
-
-project_query = gql(
-"""Pedigree($cohort: String!) { 
-  cohorts(id: {eq: "$cohort"}) {
-    sequencingGroups {
-      id
-      sample {
-        project {
-          name
-        }
-      }
-    }
-  }
-}
-"""
-)
+    from hailtop.batch.job import Job
 
 
-
-
-"""
-Create Hail Batch jobs to run STRipy
-"""
-
-
-# not used, needs correction
-REPORT_TEMPLATE_PATH = './cpg_flow_stripy/stripy_report_template.html'
-
-COMBINED_QUERY = gql(
+METADATA_QUERY = gql(
     """
     query Pedigree($project: String!, $sgIds: [String!]!) {
         project(name: $project) {
-            sequencingGroups(id: {in_: $sgIds}}) {
+            sequencingGroups(id: {in_: $sgIds}) {
                 id
                 sample {
                     participant {
@@ -65,122 +45,94 @@ COMBINED_QUERY = gql(
 )
 
 
-def get_cpg_metadata(dataset: str, relevant_ids: list[str]) -> dict[str, dict[str, str | int]]:
+def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str, str | int]]:
     """
-    Returns a dictionary mapping cpgID to metadata:
-    {cpgID: {"family_id": str, "external_id": str, "affected": int or str}}
-    """
+    Query metamist for SG ID -> family/participant metadata.
 
-    # Handle test environment naming conventions
-    query_dataset = dataset
-    if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
+    Returns a dict mapping cpg_id to {family_id, external_id, affected}.
+    Runs at stage construction time (not inside the batch job).
+    """
+    query_dataset = dataset_name
+    if config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
         query_dataset += '-test'
 
-    variables = {'project': query_dataset, 'sgIds': relevant_ids}
-    result = query(COMBINED_QUERY, variables=variables)
+    result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
 
-    cpg_metadata = {}
-
-    sequencing_groups = result.get('project', {}).get('sequencingGroups', [])
-
-    for group in sequencing_groups:
+    cpg_metadata: dict[str, dict[str, str | int]] = {}
+    for group in result.get('project', {}).get('sequencingGroups', []):
         cpg_id = group.get('id')
         try:
             participant = group['sample']['participant']
-            ext_id = participant['externalId']
-            family_id = participant['families'][0]['externalId']
-            affected = participant['familyParticipants'][0]['affected']
             cpg_metadata[cpg_id] = {
-                'family_id': family_id,
-                'external_id': ext_id,
-                'affected': affected,
+                'family_id': participant['families'][0]['externalId'],
+                'external_id': participant['externalId'],
+                'affected': participant['familyParticipants'][0]['affected'],
             }
         except (KeyError, IndexError, TypeError):
-            if cpg_id in relevant_ids:
-                print(f'Warning: Missing metadata for requested ID {cpg_id}')
+            if cpg_id in sg_ids:
+                logger.warning(f'Missing metadata for requested ID {cpg_id}')
             continue
 
     return cpg_metadata
 
-def make_dashboard(
-    fraser_results: Path,
-    outrider_results: Path,
-    output_dashboard_path: Path,
+
+def make_dashboards(
+    fraser_csv: str | Path,
+    outrider_csv: str | Path,
+    output_html: str | Path,
+    sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
-    output_latest: Path,
     job_attrs: dict,
-) -> 'BashJob':
-    """Makes an Dashboard for all rnaseq results."""
-    batch_instance = hail_batch.get_batch()
+) -> list[Job]:
+    """
+    Create one Hail Batch job per dataset that renders an interactive dashboard.
 
-    variables = {'cohort': cohort_id}
-    result = query(COMBINED_QUERY, variables=variables)
+    Each job localises the full cohort-level Fraser and Outrider CSVs, writes a
+    family-mapping CSV scoped to that dataset's SG IDs, and runs the dashboard
+    CLI script. The script itself filters results to matching sample IDs via
+    the family mapping.
+    """
+    b = get_batch()
+    access_level = config_retrieve(['workflow', 'access_level'], 'main')
 
-    dataset_dict = defaultdict(list)
-    for sg in result['data']['cohorts'][0]['sequencingGroups']:
-        project = sg['sample']['project']['name']
-        dataset_dict[project].append(sg['id'])
-    list_of_jobs = []
+    # Localise the cohort-level CSVs once (shared across jobs)
+    fraser_input = b.read_input(str(fraser_csv))
+    outrider_input = b.read_input(str(outrider_csv))
 
-    for dataset_name, sg_ids in dataset_dict:
-        j = batch_instance.new_bash_job(name=f'Make RNA-seq Results Dashboard for {dataset_name}', attributes=job_attrs)
-        j.image(config.config_retrieve(['workflow', 'driver_image']))
-
-
+    jobs: list[Job] = []
+    for dataset_name, sg_ids in sg_ids_by_dataset.items():
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
-        file_prefix = config.config_retrieve(['storage', dataset_name, 'web'])
-        html_prefix = config.config_retrieve(['storage', dataset_name, 'web_url'])
+        j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
+        j.image(config_retrieve(['images', 'rdrnaseq']))
 
-        # an object to store all the content we need to write
-        collected_lines: list[str] = []
-        for cpg_id, output_dict in inputs.items():
-            fam_id = cpg_metadata[cpg_id]['family_id']
-            external_id = cpg_metadata[cpg_id]['external_id']
-            affected = cpg_metadata[cpg_id]['affected']
-            # possible values for affected:0(unknown), 1(unaffected), 2(affected) -9(unknown)
-            match affected:
-                case 1:
-                    affected_status = 'Unaffected'
-                case 2:
-                    affected_status = 'Affected'
-                case 0 | -9 | 'Unknown':
-                    affected_status = 'Unknown'
-                case _:
-                    affected_status = 'Unknown'
-                    loguru.logger.warning(f'Unexpected status {affected} for ID {cpg_id}.')
+        # Build a family-mapping CSV scoped to this dataset's SG IDs
+        csv_lines = ['sequencing_group.id,family.external_ids']
+        for cpg_id, meta in cpg_metadata.items():
+            csv_lines.append(f'{cpg_id},{meta["family_id"]}')
+        family_csv_content = '\n'.join(csv_lines)
 
-            for report_type, report_path in output_dict.items():
-                # substitute the report HTML path for a proxy-rendered path
-                corrected_path = str(report_path).replace(file_prefix, html_prefix)
-                collected_lines.append(
-                    f'{cpg_id}\t{fam_id}\t{external_id}\t{report_type}\t{corrected_path}\t{affected_status}'
-                )
+        j.command(
+            command(f"""\
+cat > /tmp/family_mapping.csv << 'FAMILY_EOF'
+{family_csv_content}
+FAMILY_EOF
 
-        # write all reports to a single temp file, instead of passing an arbitrary number of CLI/script arguments
-        with to_path(all_reports).open('w') as f:
-            f.write('\n'.join(collected_lines))
+python3 -m rdrnaseq.scripts.create_interactive_dashboard \
+    --fraser {fraser_input} \
+    --outrider {outrider_input} \
+    --family-mapping /tmp/family_mapping.csv \
+    --output {j.output}
+"""),
+        )
 
-        # localise that file
-        mega_input_file = hail_batch.get_batch().read_input(all_reports)
-        # --- Job Command (SINGLE STEP) ---
-        # Runs your script, telling it to write to the local VM path
-        j.command(f"""
-            python3 -m cpg_flow_stripy.scripts.make_stripy_index \\
-            --manifest {mega_input_file} \\
-            --dataset {dataset_name} \\
-            --output {j.output} \\
-            --logfile {j.biglog}
-        """)
-        batch_instance.write_output(j.output, output_archive)
-        batch_instance.write_output(j.output, output_latest)
+        b.write_output(j.output, str(output_html))
 
-        corrected_path_index = str(output_archive).replace(file_prefix, html_prefix)
-        corrected_path_latest = str(output_latest).replace(file_prefix, html_prefix)
+        web_path = (
+            f'https://{access_level}-web.populationgenomics.org.au'
+            f'/{dataset_name}/rna_dashboard/{cohort_id}.rna_dashboard.html'
+        )
+        logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
+        jobs.append(j)
 
-        loguru.logger.info(f'Index page job created for dataset {dataset_name} at {corrected_path_index}')
-        loguru.logger.info(f'latest page job created for dataset {dataset_name} at {corrected_path_latest}')
-
-        list_of_jobs.append(j)
-
-    return j
+    return jobs
