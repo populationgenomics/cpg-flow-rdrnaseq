@@ -9,6 +9,7 @@ self-contained HTML file.
 
 from __future__ import annotations
 
+from os import replace
 from typing import TYPE_CHECKING
 
 from cpg_utils.config import config_retrieve
@@ -95,7 +96,10 @@ def make_dashboards(
     b = get_batch()
     access_level = config_retrieve(['workflow', 'access_level'], 'main')
 
-    # Localise the cohort-level CSVs once (shared across jobs)
+    if access_level == 'test':
+        fraser_csv = str(fraser_csv).replace('main', 'test')
+        outrider_csv = str(outrider_csv).replace('main', 'test')
+
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
 
