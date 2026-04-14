@@ -9,7 +9,6 @@ self-contained HTML file.
 
 from __future__ import annotations
 
-from os import replace
 from typing import TYPE_CHECKING
 
 from cpg_utils.config import config_retrieve
