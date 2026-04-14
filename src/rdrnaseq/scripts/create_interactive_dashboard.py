@@ -449,6 +449,8 @@ def render_dashboard(  # noqa: PLR0912,PLR0915
         default_pvalue_threshold=pvalue_threshold,
         default_deltapsi_threshold=deltapsi_threshold,
         default_zscore_threshold=zscore_threshold,
+        genome='hg38',
+        sample_bam_mapping={},
     )
 
     # Write output
