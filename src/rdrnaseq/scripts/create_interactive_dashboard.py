@@ -565,9 +565,19 @@ def main() -> None:
     fraser_df = load_fraser_data(args.fraser)  # Use original for full data load
     outrider_df = load_outrider_data(args.outrider) if args.outrider else None
 
-    # Add family IDs if mapping was provided
+    # If a family mapping was provided, use its SG IDs to filter both DataFrames
+    # down to only the samples belonging to this dataset, then annotate with family IDs.
     if cpg_to_family:
-        print('\nAdding family IDs...')
+        sg_ids = set(cpg_to_family.keys())
+        print(f'\nFiltering to {len(sg_ids)} sample IDs from family mapping...')
+        pre = len(fraser_df)
+        fraser_df = fraser_df[fraser_df['sampleID'].isin(sg_ids)].copy()
+        print(f'  FRASER: {pre} -> {len(fraser_df)} rows')
+        if outrider_df is not None:
+            pre = len(outrider_df)
+            outrider_df = outrider_df[outrider_df['sampleID'].isin(sg_ids)].copy()
+            print(f'  OUTRIDER: {pre} -> {len(outrider_df)} rows')
+
         fraser_df = add_family_ids(fraser_df, cpg_to_family)
         if outrider_df is not None:
             outrider_df = add_family_ids(outrider_df, cpg_to_family)
