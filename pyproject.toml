@@ -21,6 +21,8 @@ classifiers=[
 
 dependencies=[
     'cpg-flow~=1.3',
+    'jinja2',
+    'pysam',
 ]
 
 [project.urls]
