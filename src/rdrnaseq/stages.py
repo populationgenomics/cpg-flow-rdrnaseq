@@ -274,10 +274,9 @@ class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
     """
-
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         return {
-            'Dashboard_html': cohort.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
+            'Dashboard_html': cohort.dataset.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
