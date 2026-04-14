@@ -1,6 +1,7 @@
 """
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
+
 from collections import defaultdict
 
 from cpg_flow import stage, targets, utils
@@ -14,7 +15,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim, rna_dashboard
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -275,7 +276,7 @@ class Dashboard(stage.CohortStage):
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         return {
-            'Dashboard_html': cohort.web_prefix()/'rna_dashboard'/f'{cohort.id}.rna_dashboard.html',
+            'Dashboard_html': cohort.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -283,9 +284,9 @@ class Dashboard(stage.CohortStage):
 
         # Fraser significant results — tracked stage output
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
-       # Outrider full results CSV — written by the Outrider resource group
+        # Outrider full results CSV — written by the Outrider resource group
         outrider_csv = cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv'
-        
+
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
@@ -299,4 +300,3 @@ class Dashboard(stage.CohortStage):
             job_attrs=self.get_job_attrs(),
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)
-

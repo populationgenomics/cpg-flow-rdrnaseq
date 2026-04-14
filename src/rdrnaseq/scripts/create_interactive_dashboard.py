@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """
 Create an interactive dashboard with volcano plot and IGV browser.
 
@@ -22,7 +21,6 @@ Coordinate system: 1-based, inclusive (BED-like but 1-based for consistency with
 
 import argparse
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import pandas as pd
@@ -38,10 +36,10 @@ from rdrnaseq.scripts.dashboard_utilities import (
     prepare_tabix_file,
 )
 
-
 # =============================================================================
 # Common Results Identification
 # =============================================================================
+
 
 def _build_common_entry(sample: str, fraser_row: pd.Series, outrider_row: pd.Series) -> dict:
     """Build a common-significant result dict from a FRASER and OUTRIDER row pair."""
@@ -71,31 +69,30 @@ def _build_common_entry(sample: str, fraser_row: pd.Series, outrider_row: pd.Ser
     return entry
 
 
-def find_common_significant(df_fraser: pd.DataFrame, df_outrider: pd.DataFrame,
-                           pval_threshold: float = 0.05, deltapsi_threshold: float = 0.2) -> tuple:
+def find_common_significant(
+    df_fraser: pd.DataFrame, df_outrider: pd.DataFrame, pval_threshold: float = 0.05, deltapsi_threshold: float = 0.2
+) -> tuple:
     """Find genes that are significant in both FRASER and OUTRIDER"""
-    print("\nFinding common significant results...")
+    print('\nFinding common significant results...')
 
     # FRASER significant: meets p-value and deltaPSI thresholds
     fraser_sig = df_fraser[
-        (df_fraser['padjust'] <= pval_threshold) &
-        (np.abs(df_fraser['deltaPsi']) >= deltapsi_threshold)
+        (df_fraser['padjust'] <= pval_threshold) & (np.abs(df_fraser['deltaPsi']) >= deltapsi_threshold)
     ].copy()
 
     # OUTRIDER significant: meets p-value and z-score thresholds (if zScore column exists)
     if 'zScore' in df_outrider.columns:
         outrider_sig = df_outrider[
-            (df_outrider['padjust'] <= pval_threshold) &
-            (np.abs(df_outrider['zScore']) >= 2)
+            (df_outrider['padjust'] <= pval_threshold) & (np.abs(df_outrider['zScore']) >= 2)
         ].copy()
     else:
         outrider_sig = df_outrider[df_outrider['padjust'] <= pval_threshold].copy()
 
-    print(f"  FRASER significant: {len(fraser_sig)}")
-    print(f"  OUTRIDER significant: {len(outrider_sig)}")
+    print(f'  FRASER significant: {len(fraser_sig)}')
+    print(f'  OUTRIDER significant: {len(outrider_sig)}')
 
     common_samples = set(fraser_sig['sampleID']) & set(outrider_sig['sampleID'])
-    print(f"  Samples with both FRASER and OUTRIDER hits: {len(common_samples)}")
+    print(f'  Samples with both FRASER and OUTRIDER hits: {len(common_samples)}')
 
     common_by_sample = []
     for sample in common_samples:
@@ -117,18 +114,15 @@ def find_common_significant(df_fraser: pd.DataFrame, df_outrider: pd.DataFrame,
             common_by_sample.append(_build_common_entry(sample, f_top, o_top))
 
     df_common = pd.DataFrame(common_by_sample)
-    print(f"  Common significant results: {len(df_common)}")
-    print(f"  (Samples showing aberrations in both splicing and expression)")
+    print(f'  Common significant results: {len(df_common)}')
+    print('  (Samples showing aberrations in both splicing and expression)')
 
     return df_common, fraser_sig, outrider_sig
 
 
-def prepare_table_data(df: pd.DataFrame, columns_subset: Optional[list] = None) -> pd.DataFrame:
+def prepare_table_data(df: pd.DataFrame, columns_subset: list | None = None) -> pd.DataFrame:
     """Prepare data for searchable tables with formatted numeric values"""
-    if columns_subset:
-        available_columns = [col for col in columns_subset if col in df.columns]
-    else:
-        available_columns = df.columns.tolist()
+    available_columns = [col for col in columns_subset if col in df.columns] if columns_subset else df.columns.tolist()
 
     table_df = df[available_columns].copy()
 
@@ -136,22 +130,21 @@ def prepare_table_data(df: pd.DataFrame, columns_subset: Optional[list] = None) 
     for col in table_df.columns:
         if 'pValue' in col or 'padjust' in col or 'pvalue' in col:
             table_df[col] = table_df[col].apply(
-                lambda x: f"{x:.2e}" if pd.notna(x) and isinstance(x, (int, float)) else str(x)
+                lambda x: f'{x:.2e}' if pd.notna(x) and isinstance(x, int | float) else str(x)
             )
         elif 'psi' in col.lower() or 'Score' in col or 'score' in col.lower() or 'l2fc' in col or 'deltaPsi' in col:
             table_df[col] = table_df[col].apply(
-                lambda x: f"{x:.3f}" if pd.notna(x) and isinstance(x, (int, float)) else str(x)
+                lambda x: f'{x:.3f}' if pd.notna(x) and isinstance(x, int | float) else str(x)
             )
 
     # Fill NaN values
-    table_df = table_df.fillna('NA')
-
-    return table_df
+    return table_df.fillna('NA')
 
 
 # =============================================================================
 # Data Preparation for Dashboard
 # =============================================================================
+
 
 def get_top_positions(df: pd.DataFrame, n: int = 100) -> list[dict]:
     """Get top N positions by p-value for IGV."""
@@ -159,18 +152,19 @@ def get_top_positions(df: pd.DataFrame, n: int = 100) -> list[dict]:
 
     positions = []
     for _, row in top_df.iterrows():
-        positions.append({
-            'chr': str(row['seqnames']),
-            'start': int(row['start']),
-            'end': int(row['end']),
-            'gene': str(row['hgncSymbol']) if pd.notna(row['hgncSymbol']) else 'NA',
-            'pValue': float(row['pValue']),
-            'deltaPsi': float(row['deltaPsi']),
-            'psiValue': float(row['psiValue'])
-        })
+        positions.append(
+            {
+                'chr': str(row['seqnames']),
+                'start': int(row['start']),
+                'end': int(row['end']),
+                'gene': str(row['hgncSymbol']) if pd.notna(row['hgncSymbol']) else 'NA',
+                'pValue': float(row['pValue']),
+                'deltaPsi': float(row['deltaPsi']),
+                'psiValue': float(row['psiValue']),
+            }
+        )
 
     return positions
-
 
 
 def prepare_volcano_data(df: pd.DataFrame) -> dict:
@@ -219,7 +213,9 @@ def prepare_outrider_top_genes_data(df: pd.DataFrame, n: int = 50) -> dict:
     Shows the top N genes by significance.
     """
     df = df.copy()
-    df['gene_display'] = df['hgncSymbol'].fillna(df.get('geneID', 'NA')) if 'hgncSymbol' in df.columns else df.get('geneID', 'NA')
+    df['gene_display'] = (
+        df['hgncSymbol'].fillna(df.get('geneID', 'NA')) if 'hgncSymbol' in df.columns else df.get('geneID', 'NA')
+    )
 
     top_df = df.nsmallest(n, 'pValue').copy()
     if '-log10(pValue)' not in top_df.columns:
@@ -240,7 +236,7 @@ def prepare_outrider_top_genes_data(df: pd.DataFrame, n: int = 50) -> dict:
     }
 
 
-def prepare_top_genes_data(df: pd.DataFrame, n: int = 100) -> list[dict]:
+def prepare_top_genes_data(df: pd.DataFrame, n: int = 100) -> dict[str, list]:
     """Prepare data for top genes plot."""
     top_df = df.nsmallest(n, 'pValue').copy()
 
@@ -304,14 +300,13 @@ def prepare_tabix_data_for_js(df: pd.DataFrame, data_type: str = 'fraser') -> li
     return records
 
 
-def calculate_stats(fraser_df: pd.DataFrame, outrider_df: Optional[pd.DataFrame],
-                    pvalue_threshold: float) -> dict:
+def calculate_stats(fraser_df: pd.DataFrame, outrider_df: pd.DataFrame | None, pvalue_threshold: float) -> dict:
     """Calculate summary statistics for the dashboard."""
     stats = {
         'total_variants': len(fraser_df),
         'chromosomes': fraser_df['seqnames'].nunique(),
         'unique_genes': fraser_df['hgncSymbol'].nunique(),
-        'significant_count': int((fraser_df['padjust'] < pvalue_threshold).sum())
+        'significant_count': int((fraser_df['padjust'] < pvalue_threshold).sum()),
     }
 
     if outrider_df is not None:
@@ -324,9 +319,10 @@ def calculate_stats(fraser_df: pd.DataFrame, outrider_df: Optional[pd.DataFrame]
 # HTML Generation
 # =============================================================================
 
-def render_dashboard(
+
+def render_dashboard(  # noqa: PLR0912,PLR0915
     fraser_df: pd.DataFrame,
-    outrider_df: Optional[pd.DataFrame],
+    outrider_df: pd.DataFrame | None,
     output_path: str,
     pvalue_threshold: float = 0.05,
     deltapsi_threshold: float = 0.2,
@@ -334,7 +330,7 @@ def render_dashboard(
 ) -> None:
     """Render the dashboard HTML using Jinja2 template."""
 
-    print("Preparing data for dashboard...")
+    print('Preparing data for dashboard...')
 
     # Prepare all data structures
     volcano_data = prepare_volcano_data(fraser_df)
@@ -357,17 +353,27 @@ def render_dashboard(
         df_common, _, _ = find_common_significant(fraser_df, outrider_df, pvalue_threshold, deltapsi_threshold)
 
     # Prepare table data
-    print("Preparing table data...")
+    print('Preparing table data...')
 
     # FRASER table
-    fraser_table_cols = ['hgncSymbol', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust',
-                         'psiValue', 'deltaPsi', 'sampleID']
+    fraser_table_cols = [
+        'hgncSymbol',
+        'seqnames',
+        'start',
+        'end',
+        'type',
+        'pValue',
+        'padjust',
+        'psiValue',
+        'deltaPsi',
+        'sampleID',
+    ]
     if 'familyID' in fraser_df.columns:
         fraser_table_cols.append('familyID')
 
     fraser_table = prepare_table_data(fraser_df, fraser_table_cols)
     fraser_table_data = fraser_table.to_dict('records')
-    fraser_table_columns = [{"data": col, "title": col} for col in fraser_table.columns]
+    fraser_table_columns = [{'data': col, 'title': col} for col in fraser_table.columns]
 
     # OUTRIDER table
     outrider_table_data = []
@@ -389,7 +395,7 @@ def render_dashboard(
 
         outrider_table = prepare_table_data(outrider_df, outrider_table_cols)
         outrider_table_data = outrider_table.to_dict('records')
-        outrider_table_columns = [{"data": col, "title": col} for col in outrider_table.columns]
+        outrider_table_columns = [{'data': col, 'title': col} for col in outrider_table.columns]
 
     # Common results table
     common_table_data = []
@@ -397,7 +403,7 @@ def render_dashboard(
     if len(df_common) > 0:
         common_table = prepare_table_data(df_common)
         common_table_data = common_table.to_dict('records')
-        common_table_columns = [{"data": col, "title": col} for col in common_table.columns]
+        common_table_columns = [{'data': col, 'title': col} for col in common_table.columns]
 
     # Calculate stats
     stats = calculate_stats(fraser_df, outrider_df, pvalue_threshold)
@@ -405,19 +411,26 @@ def render_dashboard(
 
     # Get unique families for filtering (combine from both FRASER and OUTRIDER)
     families = set()
-    if 'familyID' in fraser_df.columns:
-        families.update(fraser_df['familyID'].unique().tolist())
-    if outrider_df is not None and 'familyID' in outrider_df.columns:
-        families.update(outrider_df['familyID'].unique().tolist())
-    families = sorted([f for f in families if f != 'Unknown'])
+
+    # Safety check for FRASER
+    if 'fraser_df' in locals() and fraser_df is not None and 'familyID' in fraser_df.columns:
+        # dropna() removes actual nulls; unique() gets the rest
+        families.update(fraser_df['familyID'].dropna().unique())
+
+    # Safety check for OUTRIDER
+    if 'outrider_df' in locals() and outrider_df is not None and 'familyID' in outrider_df.columns:
+        families.update(outrider_df['familyID'].dropna().unique())
+
+    # Filter 'Unknown', ensure everything is a string (to avoid sort errors), and sort
+    sorted_families = sorted([str(f) for f in families if str(f) != 'Unknown'])
 
     # Set up Jinja2 environment
     template_dir = Path(__file__).parent / 'templates'
-    env = Environment(loader=FileSystemLoader(template_dir))
+    env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
     template = env.get_template('interactive_dashboard.html.j2')
 
     # Render template
-    print("Rendering HTML template...")
+    print('Rendering HTML template...')
     html_content = template.render(
         volcano_data=volcano_data,
         outrider_volcano_data=outrider_volcano_data,
@@ -432,7 +445,7 @@ def render_dashboard(
         common_table_data=common_table_data,
         common_table_columns=common_table_columns,
         stats=stats,
-        families=families,
+        families=sorted_families,
         default_pvalue_threshold=pvalue_threshold,
         default_deltapsi_threshold=deltapsi_threshold,
         default_zscore_threshold=zscore_threshold,
@@ -442,12 +455,13 @@ def render_dashboard(
     with open(output_path, 'w') as f:
         f.write(html_content)
 
-    print(f"  Dashboard written to: {output_path}")
+    print(f'  Dashboard written to: {output_path}')
 
 
 # =============================================================================
 # CLI Interface
 # =============================================================================
+
 
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
@@ -472,71 +486,51 @@ Examples:
     # Custom thresholds
     python create_interactive_dashboard.py --fraser results.csv --output dashboard.html \\
         --pvalue-threshold 0.01 --deltapsi-threshold 0.3
-        """
+        """,
     )
 
-    parser.add_argument(
-        '--fraser', '-f',
-        required=True,
-        help='Path to FRASER results file (CSV or tabix-indexed .gz)'
-    )
+    parser.add_argument('--fraser', '-f', required=True, help='Path to FRASER results file (CSV or tabix-indexed .gz)')
 
     parser.add_argument(
-        '--outrider', '-r',
+        '--outrider',
+        '-r',
         required=False,
         default=None,
-        help='Path to OUTRIDER results file (CSV or tabix-indexed .gz)'
+        help='Path to OUTRIDER results file (CSV or tabix-indexed .gz)',
+    )
+
+    parser.add_argument('--output', '-o', required=True, help='Output HTML file path')
+
+    parser.add_argument(
+        '--pvalue-threshold', type=float, default=0.05, help='Default p-value threshold (default: 0.05)'
     )
 
     parser.add_argument(
-        '--output', '-o',
-        required=True,
-        help='Output HTML file path'
+        '--deltapsi-threshold', type=float, default=0.2, help='Default |Delta PSI| threshold (default: 0.2)'
     )
 
     parser.add_argument(
-        '--pvalue-threshold',
-        type=float,
-        default=0.05,
-        help='Default p-value threshold (default: 0.05)'
-    )
-
-    parser.add_argument(
-        '--deltapsi-threshold',
-        type=float,
-        default=0.2,
-        help='Default |Delta PSI| threshold (default: 0.2)'
-    )
-
-    parser.add_argument(
-        '--zscore-threshold',
-        type=float,
-        default=2.0,
-        help='Default |Z-Score| threshold for OUTRIDER (default: 2.0)'
+        '--zscore-threshold', type=float, default=2.0, help='Default |Z-Score| threshold for OUTRIDER (default: 2.0)'
     )
 
     parser.add_argument(
         '--bam-mapping',
         default=None,
-        help='Path to TSV file mapping sample IDs to BAM URLs (columns: sampleID, bam_url, bai_url)'
+        help='Path to TSV file mapping sample IDs to BAM URLs (columns: sampleID, bam_url, bai_url)',
     )
 
     parser.add_argument(
         '--prepare-tabix',
         action='store_true',
-        help='Convert CSV files to tabix-indexed format (keeps the indexed files)'
+        help='Convert CSV files to tabix-indexed format (keeps the indexed files)',
     )
 
     parser.add_argument(
-        '--tabix-output-dir',
-        default=None,
-        help='Directory for tabix output files (default: same as input)'
+        '--tabix-output-dir', default=None, help='Directory for tabix output files (default: same as input)'
     )
 
     parser.add_argument(
-        '--family-mapping',
-        default=None,
-        help='Path to CPG-to-Family mapping CSV (rdnow-export-project-summary format)'
+        '--family-mapping', default=None, help='Path to CPG-to-Family mapping CSV (rdnow-export-project-summary format)'
     )
 
     return parser.parse_args()
@@ -546,9 +540,9 @@ def main() -> None:
     """Main entry point."""
     args = parse_args()
 
-    print("=" * 60)
-    print("FRASER/OUTRIDER Interactive Dashboard Generator")
-    print("=" * 60)
+    print('=' * 60)
+    print('FRASER/OUTRIDER Interactive Dashboard Generator')
+    print('=' * 60)
 
     # Load CPG to Family mapping if provided
     cpg_to_family = {}
@@ -560,34 +554,35 @@ def main() -> None:
     outrider_path = args.outrider
 
     if args.prepare_tabix:
-        print("\nPreparing tabix-indexed files...")
+        print('\nPreparing tabix-indexed files...')
         if args.fraser.endswith('.csv'):
             fraser_path = prepare_tabix_file(args.fraser, args.tabix_output_dir)
         if args.outrider and args.outrider.endswith('.csv'):
             outrider_path = prepare_tabix_file(args.outrider, args.tabix_output_dir)
 
     # Load data
-    print("\nLoading data...")
+    print('\nLoading data...')
     fraser_df = load_fraser_data(args.fraser)  # Use original for full data load
     outrider_df = load_outrider_data(args.outrider) if args.outrider else None
 
     # Add family IDs if mapping was provided
     if cpg_to_family:
-        print("\nAdding family IDs...")
+        print('\nAdding family IDs...')
         fraser_df = add_family_ids(fraser_df, cpg_to_family)
         if outrider_df is not None:
             outrider_df = add_family_ids(outrider_df, cpg_to_family)
-
 
     # Get top positions info
     if len(fraser_df) > 0:
         top_positions = get_top_positions(fraser_df, n=1)
         if top_positions:
-            print(f"\nTop FRASER hit: {top_positions[0]['chr']}:{top_positions[0]['start']}-{top_positions[0]['end']} "
-                  f"(p={top_positions[0]['pValue']:.2e}, gene={top_positions[0]['gene']})")
+            print(
+                f'\nTop FRASER hit: {top_positions[0]["chr"]}:{top_positions[0]["start"]}-{top_positions[0]["end"]} '
+                f'(p={top_positions[0]["pValue"]:.2e}, gene={top_positions[0]["gene"]})'
+            )
 
     # Create dashboard
-    print("\nCreating interactive dashboard...")
+    print('\nCreating interactive dashboard...')
     render_dashboard(
         fraser_df=fraser_df,
         outrider_df=outrider_df,
@@ -596,14 +591,14 @@ def main() -> None:
         deltapsi_threshold=args.deltapsi_threshold,
         zscore_threshold=args.zscore_threshold,
     )
-    print(" Dashboard created successfully!")
-    print(f"\nOutput: {args.output}")
+    print(' Dashboard created successfully!')
+    print(f'\nOutput: {args.output}')
     if args.prepare_tabix:
-        print("\nTabix files created:")
+        print('\nTabix files created:')
         if fraser_path != args.fraser:
-            print(f"  - {fraser_path}")
+            print(f'  - {fraser_path}')
         if outrider_path and outrider_path != args.outrider:
-            print(f"  - {outrider_path}")
+            print(f'  - {outrider_path}')
 
 
 if __name__ == '__main__':
