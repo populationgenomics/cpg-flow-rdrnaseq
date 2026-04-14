@@ -1,6 +1,7 @@
 """
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
+from collections import defaultdict
 
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
@@ -269,34 +270,33 @@ class Outrider(stage.CohortStage):
 @stage.stage(required_stages=[Fraser, Outrider], analysis_type='Dashboard', analysis_keys=['Dashboard_html'])
 class Dashboard(stage.CohortStage):
     """
-    Perform outlier gene expression analysis with Outrider.
+    Create an interactive HTML dashboard from FRASER and OUTRIDER results.
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        """
-        Generate outrider outputs.
-        """
         return {
-            'Dashboard_html': cohort.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna.html',
+            'Dashboard_html': cohort.web_prefix()/'rna_dashboard'/f'{cohort.id}.rna_dashboard.html',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
-        """
-        Queue a job to run outrider.
-        """
         output = self.expected_outputs(cohort)
-        fraser_input = [
-            inputs.as_path(cohort, Fraser, 'sig_results')
-        ]
-        outrider_input = [inputs.as_path(cohort, Outrider, 'results.csv')]
 
-        j = rna_dashboard.make_dashboard(
-            fraser_results=fraser_input,
-            outrider_results=outrider_input,
-            output_dashboard_path=output['Dashboard_html'],
-            output_latest= html_path
-            cohort_id= cohort.id,
+        # Fraser significant results — tracked stage output
+        fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+       # Outrider full results CSV — written by the Outrider resource group
+        outrider_csv = cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv'
+        
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+        for sg in cohort.get_sequencing_groups():
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+
+        jobs = rna_dashboard.make_dashboards(
+            fraser_csv=fraser_csv,
+            outrider_csv=outrider_csv,
+            output_html=output['Dashboard_html'],
+            sg_ids_by_dataset=sg_ids_by_dataset,
+            cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
-        return self.make_outputs(cohort, data=output, jobs=j)
+        return self.make_outputs(cohort, data=output, jobs=jobs)
 
