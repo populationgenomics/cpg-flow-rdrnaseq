@@ -28,7 +28,7 @@ import numpy as np
 import pandas as pd
 from jinja2 import Environment, FileSystemLoader
 
-from src.rdrnaseq.scripts.dashboard_utilities import (
+from rdrnaseq.scripts.dashboard_utilities import (
     _col,
     _genes_match,
     add_family_ids,
