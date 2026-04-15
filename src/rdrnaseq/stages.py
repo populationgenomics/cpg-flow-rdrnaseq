@@ -250,6 +250,7 @@ class Outrider(stage.CohortStage):
             'RData': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData',
             'seqr_out': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.aberrant_genes_per_sample.csv',
             'outrider_csv': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv',
+            'outrider_sig_csv': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.csv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -269,7 +270,7 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=[Fraser, Outrider], analysis_type='Dashboard', analysis_keys=['Dashboard_html'])
+@stage.stage(required_stages=[Fraser, Outrider], analysis_type='web', analysis_keys=['dashboard_html'])
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
@@ -277,7 +278,7 @@ class Dashboard(stage.CohortStage):
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         return {
-            'Dashboard_html': cohort.dataset.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
+            'dashboard_html': cohort.dataset.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -289,11 +290,12 @@ class Dashboard(stage.CohortStage):
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+        logger.info(f'Sequence group IDs by dataset for dashboard: {dict(sg_ids_by_dataset)}')
 
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
-            output_html=output['Dashboard_html'],
+            output_html=output['dashboard_html'],
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),

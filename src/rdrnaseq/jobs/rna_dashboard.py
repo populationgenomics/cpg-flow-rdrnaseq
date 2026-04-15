@@ -56,10 +56,14 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
     if config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
         query_dataset += '-test'
 
+    logger.info(f'Querying metamist project={query_dataset!r} for {len(sg_ids)} SG IDs: {sg_ids}')
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
 
+    returned_sgs = result.get('project', {}).get('sequencingGroups', [])
+    logger.info(f'Metamist returned {len(returned_sgs)} sequencing groups')
+
     cpg_metadata: dict[str, dict[str, str | int]] = {}
-    for group in result.get('project', {}).get('sequencingGroups', []):
+    for group in returned_sgs:
         cpg_id = group.get('id')
         try:
             participant = group['sample']['participant']
@@ -68,11 +72,11 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
                 'external_id': participant['externalId'],
                 'affected': participant['familyParticipants'][0]['affected'],
             }
-        except (KeyError, IndexError, TypeError):
-            if cpg_id in sg_ids:
-                logger.warning(f'Missing metadata for requested ID {cpg_id}')
+        except (KeyError, IndexError, TypeError) as e:
+            logger.warning(f'Missing metadata for {cpg_id}: {type(e).__name__}: {e}')
             continue
 
+    logger.info(f'Built metadata for {len(cpg_metadata)}/{len(sg_ids)} SG IDs')
     return cpg_metadata
 
 
@@ -104,6 +108,7 @@ def make_dashboards(
 
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
+        logger.info(f'Processing dataset {dataset_name} with SG IDs: {sg_ids}')
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
@@ -133,7 +138,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
 
         web_path = (
             f'https://{access_level}-web.populationgenomics.org.au'
-            f'/{dataset_name}/rna_dashboard/{cohort_id}.rna_dashboard.html'
+            f'/{dataset_name}/transcriptome/rna_dashboard/{cohort_id}.rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
