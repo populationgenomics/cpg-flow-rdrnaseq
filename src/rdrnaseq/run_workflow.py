@@ -30,7 +30,7 @@ def cli_main() -> None:
 
     # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
-    stages = [TrimAlignRNA, Count, Fraser, Outrider, dashboard]
+    stages = [TrimAlignRNA, Count, Fraser, Outrider, Dashboard]
     run_workflow(name='rdrnaseq', stages=stages, dry_run=args.dry_run)
 
 
