@@ -53,8 +53,7 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
     Runs at stage construction time (not inside the batch job).
     """
     query_dataset = dataset_name
-    if config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
-        query_dataset += '-test'
+
 
     logger.info(f'Querying metamist project={query_dataset!r} for {len(sg_ids)} SG IDs: {sg_ids}')
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})

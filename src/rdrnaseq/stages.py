@@ -285,7 +285,7 @@ class Dashboard(stage.CohortStage):
         output = self.expected_outputs(cohort)
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
-        outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_csv')
+        outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
