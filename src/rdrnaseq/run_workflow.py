@@ -13,7 +13,7 @@ from argparse import ArgumentParser
 
 from cpg_flow.workflow import run_workflow
 
-from rdrnaseq.stages import Count, Fraser, Outrider, TrimAlignRNA, dashboard
+from rdrnaseq.stages import Count, Dashboard, Fraser, Outrider, TrimAlignRNA
 
 
 def cli_main() -> None:
