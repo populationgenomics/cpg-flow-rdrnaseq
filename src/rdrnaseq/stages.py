@@ -277,8 +277,12 @@ class Dashboard(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        prefix = cohort.dataset.web_prefix() / 'rna_dashboard'
+        base = f'{cohort.id}.rna_dashboard'
         return {
-            'dashboard_html': cohort.dataset.web_prefix() / 'rna_dashboard' / f'{cohort.id}.rna_dashboard.html',
+            'dashboard_html': prefix / f'{base}.html',
+            'fraser_csv': prefix / f'{base}.fraser.csv',
+            'outrider_csv': prefix / f'{base}.outrider.csv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -295,7 +299,7 @@ class Dashboard(stage.CohortStage):
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
-            output_html=output['dashboard_html'],
+            output_paths=output,
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),

@@ -81,7 +81,7 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
 def make_dashboards(
     fraser_csv: str | Path,
     outrider_csv: str | Path,
-    output_html: str | Path,
+    output_paths: dict[str, str | Path],
     sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
     job_attrs: dict,
@@ -91,8 +91,11 @@ def make_dashboards(
 
     Each job localises the full cohort-level Fraser and Outrider CSVs, writes a
     family-mapping CSV scoped to that dataset's SG IDs, and runs the dashboard
-    CLI script. The script itself filters results to matching sample IDs via
-    the family mapping.
+    CLI script. The script writes an HTML file plus companion FRASER/OUTRIDER
+    CSVs in the same directory — the HTML loads them at runtime via relative
+    fetch() + PapaParse.
+
+    output_paths keys: 'dashboard_html', 'fraser_csv', 'outrider_csv'
     """
     b = get_batch()
     access_level = config_retrieve(['workflow', 'access_level'], 'main')
@@ -111,6 +114,13 @@ def make_dashboards(
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
         j.image(config_retrieve(['images', 'rdrnaseq']))
+        j.declare_resource_group(
+            out={
+                'dashboard_html': f'{cohort_id}.rna_dashboard.html',
+                'fraser_csv': f'{cohort_id}.rna_dashboard.fraser.csv',
+                'outrider_csv': f'{cohort_id}.rna_dashboard.outrider.csv',
+            },
+        )
 
         # Build a family-mapping CSV scoped to this dataset's SG IDs
         csv_lines = ['sequencing_group.id,family.external_ids']
@@ -128,16 +138,16 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --fraser {fraser_input} \
     --outrider {outrider_input} \
     --family-mapping /tmp/family_mapping.csv \
-    --output {j.output}
+    --output {j.out.dashboard_html} \
+    --output-fraser-csv {j.out.fraser_csv} \
+    --output-outrider-csv {j.out.outrider_csv}
 """),
         )
 
-        b.write_output(j.output, str(output_html))
+        for k, p in output_paths.items():
+            b.write_output(j.out[k], str(p))
 
-        web_path = (
-            f'https://{access_level}-web.populationgenomics.org.au'
-            f'/{dataset_name}/transcriptome/rna_dashboard/{cohort_id}.rna_dashboard.html'
-        )
+        web_path = f'https://{access_level}-web.populationgenomics.org.au/{dataset_name}/transcriptome/rna_dashboard/'
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
 
