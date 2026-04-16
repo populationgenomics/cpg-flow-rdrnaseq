@@ -54,7 +54,6 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
     """
     query_dataset = dataset_name
 
-
     logger.info(f'Querying metamist project={query_dataset!r} for {len(sg_ids)} SG IDs: {sg_ids}')
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
 

@@ -3,1356 +3,580 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FRASER/OUTRIDER Results Interactive Dashboard</title>
+    <title>FRASER/OUTRIDER Results Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/igv@2.15.8/dist/igv.min.js"></script>
-    <link rel="stylesheet" type="text/css" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.7/css/jquery.dataTables.min.css">
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.datatables.net/1.13.7/js/jquery.dataTables.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
     <script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-    <!-- Select2 for searchable dropdowns -->
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 1600px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            text-align: center;
-            color: #333;
-        }
-        .controls {
-            background-color: #f9f9f9;
-            padding: 20px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-        }
-        .control-group {
-            display: inline-block;
-            margin-right: 30px;
-            margin-bottom: 10px;
-        }
-        .control-group label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: bold;
-            color: #555;
-        }
-        .control-group input {
-            width: 150px;
-            padding: 5px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-        }
-        .control-group select {
-            width: 165px;
-            padding: 5px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            background-color: white;
-        }
-        /* Select2 custom styling */
-        .select2-container {
-            width: 250px !important;
-        }
-        .select2-container--default .select2-selection--single {
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            height: 32px;
-        }
-        .select2-container--default .select2-selection--single .select2-selection__rendered {
-            line-height: 30px;
-        }
-        .select2-container--default .select2-selection--single .select2-selection__arrow {
-            height: 30px;
-        }
-        .control-group button {
-            padding: 8px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-        }
-        .control-group button:hover {
-            background-color: #45a049;
-        }
-        .plot-container {
-            margin-bottom: 30px;
-        }
-        #volcano-plot {
-            width: 100%;
-            height: 600px;
-        }
-        #igv-container {
-            margin-top: 30px;
-            padding: 20px;
-            background-color: #f9f9f9;
-            border-radius: 5px;
-        }
-        #bam-controls {
-            background-color: #e8f5e9;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            border-left: 4px solid #4CAF50;
-        }
-        #bam-controls h4 {
-            margin-top: 0;
-            color: #2e7d32;
-        }
-        .bam-input-group {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 10px;
-            align-items: center;
-        }
-        .bam-input-group input {
-            flex: 1;
-            padding: 8px;
-            border: 1px solid #ddd;
-            border-radius: 3px;
-        }
-        .bam-input-group button {
-            padding: 8px 16px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            white-space: nowrap;
-        }
-        .bam-input-group button:hover {
-            background-color: #45a049;
-        }
-        .bam-input-group button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
-        .sample-bam-button {
-            margin: 5px;
-            padding: 6px 12px;
-            background-color: #2196F3;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .sample-bam-button:hover {
-            background-color: #1976D2;
-        }
-        .info-box {
-            background-color: #e3f2fd;
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 20px;
-            border-left: 4px solid #2196F3;
-        }
-        .stats {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 20px;
-        }
-        .stat-card {
-            background-color: #fff;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-            text-align: center;
-        }
-        .stat-value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2196F3;
-        }
-        .stat-label {
-            font-size: 14px;
-            color: #666;
-            margin-top: 5px;
-        }
-        #details-panel {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #fff3e0;
-            border-radius: 5px;
-            border-left: 4px solid #ff9800;
-            display: none;
-        }
-        #details-panel h3 {
-            margin-top: 0;
-            color: #e65100;
-        }
-        .details-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-        }
-        .details-section {
-            background-color: white;
-            padding: 10px;
-            border-radius: 5px;
-            border: 1px solid #ddd;
-        }
-        .details-section h4 {
-            margin-top: 0;
-            color: #333;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 5px;
-        }
-        .details-row {
-            display: flex;
-            justify-content: space-between;
-            padding: 3px 0;
-            border-bottom: 1px solid #f5f5f5;
-        }
-        .details-key {
-            font-weight: bold;
-            color: #555;
-        }
-        .details-value {
-            color: #333;
-        }
-        .loading {
-            color: #999;
-            font-style: italic;
-        }
-        table.dataTable {
-            width: 100% !important;
-            border-collapse: collapse;
-            font-size: 13px;
-        }
-        table.dataTable thead th {
-            background-color: #4CAF50;
-            color: white;
-            padding: 12px;
-            font-weight: bold;
-            text-align: left;
-        }
-        table.dataTable tbody td {
-            padding: 8px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-        table.dataTable tbody tr:hover {
-            background-color: #f5f5f5;
-        }
-        .dataTables_wrapper .dataTables_filter input {
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            padding: 5px 10px;
-            margin-left: 5px;
-        }
-        .dataTables_wrapper .dataTables_length select {
-            border: 1px solid #ddd;
-            border-radius: 3px;
-            padding: 5px;
-        }
-        div.dataTables_wrapper div.dataTables_info {
-            padding-top: 8px;
-            color: #666;
-        }
-        .dt-buttons {
-            margin-bottom: 10px;
-        }
-        .dt-button {
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            padding: 6px 12px;
-            border-radius: 3px;
-            margin-right: 5px;
-            cursor: pointer;
-        }
-        .dt-button:hover {
-            background-color: #45a049;
-        }
-        .legend-box {
-            background-color: #f9f9f9;
-            padding: 15px 20px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-            border: 1px solid #ddd;
-        }
-        .legend-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #333;
-            font-size: 14px;
-        }
-        .legend-items {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 20px;
-        }
-        .legend-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .legend-color-box {
-            width: 18px;
-            height: 18px;
-            border-radius: 3px;
-            border: 1px solid rgba(0,0,0,0.2);
-        }
-        .legend-label {
-            font-size: 13px;
-            color: #555;
-        }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
+        .container { max-width: 1600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+        h1 { text-align: center; color: #333; }
+        h2 { color: #444; border-bottom: 2px solid #eee; padding-bottom: 8px; }
+        .controls { background: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
+        .control-group { display: inline-block; margin-right: 30px; margin-bottom: 10px; }
+        .control-group label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        .control-group input, .control-group select { width: 160px; padding: 5px; border: 1px solid #ddd; border-radius: 3px; }
+        .plot-container { margin-bottom: 30px; background: #fafafa; padding: 15px; border-radius: 5px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #f0f4ff; border-radius: 8px; padding: 15px; text-align: center; }
+        .stat-card .value { font-size: 2em; font-weight: bold; color: #3b5bdb; }
+        .stat-card .label { color: #666; font-size: 0.9em; }
+        #loading { text-align: center; padding: 40px; font-size: 1.1em; color: #444; }
+        #main-content { display: none; }
+        .spinner { border: 5px solid #eee; border-top: 5px solid #3b5bdb; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        #igv-div { height: 400px; border: 1px solid #ddd; border-radius: 5px; }
+        #load-log { text-align: left; display: inline-block; margin-top: 16px; font-family: monospace; font-size: 0.85em; background: #f5f5f5; border-radius: 5px; padding: 12px 20px; min-width: 400px; }
+        #load-log div { margin: 3px 0; }
+        .log-ok   { color: #2f9e44; }
+        .log-wait { color: #e67700; }
+        .log-err  { color: #c92a2a; font-weight: bold; }
+        #error-detail { background: #fff0f0; border: 1px solid #fcc; border-radius: 5px; padding: 16px; margin: 20px 0; font-family: monospace; white-space: pre-wrap; font-size: 0.9em; color: #c00; display: none; }
+        /* Details panel */
+        #details-panel { display: none; margin-bottom: 30px; padding: 15px; background: #fff3e0; border-radius: 5px; border-left: 4px solid #ff9800; }
+        #details-panel h2 { margin-top: 0; color: #e65100; border-bottom: none; }
+        .details-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .details-section { background: white; padding: 10px; border-radius: 5px; border: 1px solid #ddd; }
+        .details-section h4 { margin-top: 0; color: #333; border-bottom: 1px solid #eee; padding-bottom: 5px; }
+        .detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
+        /* DataTables overrides */
+        table.dataTable thead th { background-color: #3b5bdb; color: white; }
+        .dt-button { background-color: #3b5bdb !important; color: white !important; border: none !important; padding: 6px 12px; border-radius: 3px; margin-right: 5px; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>🧬 FRASER/OUTRIDER Results Interactive Dashboard</h1>
+<div class="container">
+    <h1>FRASER / OUTRIDER Results Dashboard</h1>
 
-        <div class="info-box">
-            <strong>Interactive Features:</strong> Use the controls below to adjust significance thresholds and see colors update in real-time.
-            Click on points in the plots to navigate to that position in the IGV browser and view matching FRASER/OUTRIDER results.
-        </div>
+    <div id="error-detail" style="display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:#fff0f0;border-bottom:3px solid #c00;padding:16px 24px;font-family:monospace;white-space:pre-wrap;font-size:0.85em;color:#c00;max-height:50vh;overflow:auto;"></div>
 
-        <div class="stats">
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.total_variants }}</div>
-                <div class="stat-label">Total FRASER Variants</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.chromosomes }}</div>
-                <div class="stat-label">Chromosomes</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.unique_genes }}</div>
-                <div class="stat-label">Unique Genes</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-value" id="sig-count">{{ stats.significant_count }}</div>
-                <div class="stat-label">Significant Results</div>
-            </div>
-            {% if stats.outrider_total is defined %}
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.outrider_total }}</div>
-                <div class="stat-label">OUTRIDER Results</div>
-            </div>
-            {% endif %}
-            {% if stats.common_count is defined and stats.common_count > 0 %}
-            <div class="stat-card">
-                <div class="stat-value">{{ stats.common_count }}</div>
-                <div class="stat-label">Common Results (Both)</div>
-            </div>
-            {% endif %}
-        </div>
+    <div id="loading">
+        <div class="spinner"></div>
+        <div>Loading data files&hellip;</div>
+        <div id="load-log"></div>
+    </div>
+
+    <div id="main-content">
+        <div class="stats-grid" id="stats-grid"></div>
 
         <div class="controls">
             <div class="control-group">
-                <label for="pvalue-threshold">P-value Threshold:</label>
-                <input type="number" id="pvalue-threshold" value="{{ default_pvalue_threshold }}" step="0.01" min="0.001" max="1">
+                <label>P-value threshold</label>
+                <input type="number" id="pval-thresh" value="{{ default_pvalue_threshold }}" step="0.01" min="0" max="1">
             </div>
             <div class="control-group">
-                <label for="deltapsi-threshold">|Delta PSI| Threshold:</label>
-                <input type="number" id="deltapsi-threshold" value="{{ default_deltapsi_threshold }}" step="0.05" min="0" max="1">
+                <label>|&Delta;PSI| threshold</label>
+                <input type="number" id="dpsi-thresh" value="{{ default_deltapsi_threshold }}" step="0.05" min="0" max="1">
             </div>
-            {% if outrider_volcano_data %}
+            {% if outrider_csv_filename %}
             <div class="control-group">
-                <label for="zscore-threshold">|Z-Score| Threshold:</label>
-                <input type="number" id="zscore-threshold" value="{{ default_zscore_threshold }}" step="0.5" min="0" max="10">
-            </div>
-            {% endif %}
-            {% if families %}
-            <div class="control-group">
-                <label for="family-filter">Filter by Family:</label>
-                <select id="family-filter" class="select2-dropdown" onchange="updateThresholds()">
-                    <option value="">All Families</option>
-                    {% for family in families %}
-                    <option value="{{ family }}">{{ family }}</option>
-                    {% endfor %}
-                </select>
+                <label>|Z-Score| threshold</label>
+                <input type="number" id="zscore-thresh" value="{{ default_zscore_threshold }}" step="0.5" min="0">
             </div>
             {% endif %}
             <div class="control-group">
-                <label>&nbsp;</label>
-                <button onclick="updateThresholds()">Update Plots</button>
+                <label>Filter by Family ID</label>
+                <select id="family-filter"><option value="">All families</option></select>
             </div>
-            <div class="control-group">
-                <label>&nbsp;</label>
-                <button onclick="resetThresholds()">Reset to Defaults</button>
-            </div>
-        </div>
-
-        <div id="details-panel">
-            <h3>🔍 Selected Region Details</h3>
-            <div class="details-grid">
-                <div class="details-section" id="fraser-details">
-                    <h4>FRASER Results</h4>
-                    <div id="fraser-content" class="loading">Click a point to load details...</div>
-                </div>
-                <div class="details-section" id="outrider-details">
-                    <h4>OUTRIDER Results</h4>
-                    <div id="outrider-content" class="loading">Click a point to load details...</div>
-                </div>
+            <div class="control-group" style="margin-top:22px">
+                <button onclick="applyThresholds()" style="padding:6px 18px;border:none;background:#3b5bdb;color:white;border-radius:4px;cursor:pointer">Apply</button>
+                <button onclick="resetFilters()" style="padding:6px 18px;border:1px solid #aaa;border-radius:4px;cursor:pointer;margin-left:8px">Reset</button>
             </div>
         </div>
 
         <div class="plot-container">
-            <h2>Volcano Plot</h2>
-            <div class="legend-box">
-                <div class="legend-title">Color Legend:</div>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #d62728;"></div>
-                        <span class="legend-label">Significant (p-value & |ΔΨ|)</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #ff7f0e;"></div>
-                        <span class="legend-label">P-value only</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #9467bd;"></div>
-                        <span class="legend-label">|ΔΨ| only</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #1f77b4;"></div>
-                        <span class="legend-label">Not significant</span>
-                    </div>
-                </div>
-            </div>
-            <div id="volcano-plot"></div>
+            <h2>FRASER Volcano Plot (&Delta;PSI vs &minus;log10 p-value)</h2>
+            <div id="fraser-volcano"></div>
         </div>
 
-        {% if outrider_volcano_data %}
+        {% if outrider_csv_filename %}
         <div class="plot-container">
-            <h2>OUTRIDER Volcano Plot (Z-Score vs -log10(P-value))</h2>
-            <div class="legend-box">
-                <div class="legend-title">Color Legend:</div>
-                <div class="legend-items">
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #d62728;"></div>
-                        <span class="legend-label">Significant (p-value & |Z-score|)</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #ff7f0e;"></div>
-                        <span class="legend-label">P-value only</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #9467bd;"></div>
-                        <span class="legend-label">|Z-score| only</span>
-                    </div>
-                    <div class="legend-item">
-                        <div class="legend-color-box" style="background-color: #1f77b4;"></div>
-                        <span class="legend-label">Not significant</span>
-                    </div>
-                </div>
-            </div>
-            <div id="outrider-volcano-plot"></div>
+            <h2>OUTRIDER Volcano Plot (log2 FC vs &minus;log10 p-value)</h2>
+            <div id="outrider-volcano"></div>
         </div>
 
-        <div class="plot-container">
-            <h2>OUTRIDER Top 50 Genes by Significance</h2>
-            <div id="outrider-genes-plot"></div>
+        <div class="plot-container" id="common-section" style="display:none">
+            <h2>Common Significant Results (both FRASER &amp; OUTRIDER)</h2>
+            <table id="common-table" class="display" style="width:100%"></table>
         </div>
         {% endif %}
 
-        <div id="igv-container">
-            <h2>🧬 IGV Browser - Top 100 Most Significant Positions</h2>
-            <div id="bam-controls">
-                <h4>📊 Curator Controls - Load Sample BAMs</h4>
-                <div class="bam-input-group">
-                    <input type="text" id="bam-sample-id" placeholder="Sample ID (e.g., CPG12345)">
-                    <input type="text" id="bam-url" placeholder="BAM URL or path (http:// or file://)">
-                    <input type="text" id="bam-index-url" placeholder="BAM Index URL (.bai) - optional">
-                    <button onclick="loadCustomBAM()">Load BAM Track</button>
+        <div id="details-panel">
+            <h2>Selected Region Details</h2>
+            <div class="details-grid">
+                <div class="details-section">
+                    <h4>FRASER Results</h4>
+                    <div id="fraser-details"><em style="color:#999">Click a point in a plot to see details...</em></div>
                 </div>
-                <div id="loaded-bams" style="margin-top: 10px; font-size: 12px; color: #666;">
-                    <strong>Loaded BAMs:</strong> <span id="bam-list">None</span>
+                <div class="details-section">
+                    <h4>OUTRIDER Results</h4>
+                    <div id="outrider-details"><em style="color:#999">Click a point in a plot to see details...</em></div>
                 </div>
-                {% if sample_bam_mapping and sample_bam_mapping|length > 0 %}
-                <div style="margin-top: 15px;">
-                    <strong>Quick Load Samples:</strong><br>
-                    {% for sample_id, bam_info in sample_bam_mapping.items() %}
-                    <button class="sample-bam-button" onclick="loadSampleBAM('{{ sample_id }}', '{{ bam_info.bam_url }}', '{{ bam_info.bai_url }}')">
-                        {{ sample_id }}
-                    </button>
-                    {% endfor %}
-                </div>
-                {% endif %}
             </div>
+        </div>
+
+        <div class="plot-container">
+            <h2>IGV Browser (FRASER hits)</h2>
             <div id="igv-div"></div>
         </div>
 
-        {% if common_table_data and common_table_data|length > 0 %}
         <div class="plot-container">
-            <h2>🎯 Common Significant Results (FRASER + OUTRIDER)</h2>
-            <p>Samples showing significant aberrations in both splicing and expression ({{ common_table_data|length }} results)</p>
-            <table id="common-table" class="display" style="width:100%">
-                <thead>
-                    <tr>
-                        {% for col in common_table_columns %}
-                        <th>{{ col.title }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-            </table>
-        </div>
-        {% endif %}
-
-        <div class="plot-container">
-            <h2>📋 FRASER Results Table</h2>
-            <p>All {{ stats.total_variants }} FRASER splicing analysis results</p>
-            <table id="fraser-table" class="display" style="width:100%">
-                <thead>
-                    <tr>
-                        {% for col in fraser_table_columns %}
-                        <th>{{ col.title }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-            </table>
+            <h2>FRASER Results Table</h2>
+            <table id="fraser-table" class="display" style="width:100%"></table>
         </div>
 
-        {% if outrider_table_data and outrider_table_data|length > 0 %}
+        {% if outrider_csv_filename %}
         <div class="plot-container">
-            <h2>📋 OUTRIDER Results Table</h2>
-            <p>All {{ stats.outrider_total }} OUTRIDER expression analysis results</p>
-            <table id="outrider-table" class="display" style="width:100%">
-                <thead>
-                    <tr>
-                        {% for col in outrider_table_columns %}
-                        <th>{{ col.title }}</th>
-                        {% endfor %}
-                    </tr>
-                </thead>
-            </table>
+            <h2>OUTRIDER Results Table</h2>
+            <table id="outrider-table" class="display" style="width:100%"></table>
         </div>
         {% endif %}
     </div>
+</div>
 
-    <script>
-        // Data from Python (using Jinja2 tojson filter for safe JSON serialization)
-        const volcanoData = {{ volcano_data | tojson }};
-        const topPositions = {{ top_positions | tojson }};
-        const fraserTabixData = {{ fraser_tabix_data | tojson }};
-        const outriderTabixData = {{ outrider_tabix_data | tojson }};
-        const genome = {{ genome | tojson }};
+<script>
+// ─── Config (from Jinja2 — small data only) ─────────────────────────────────
+const FILES = {
+    fraser:  {{ fraser_csv_filename | tojson }},
+    outrider: {{ outrider_csv_filename | tojson }},
+};
+const FAMILY_MAP   = {{ family_map | tojson }};
+const ENSG_TO_HGNC = {{ ensg_to_hgnc | tojson }};
+const GENOME       = {{ genome | tojson }};
+const DEFAULT_PVAL   = {{ default_pvalue_threshold }};
+const DEFAULT_DPSI   = {{ default_deltapsi_threshold }};
+const DEFAULT_ZSCORE = {{ default_zscore_threshold }};
 
-        // Table data
-        const fraserTableData = {{ fraser_table_data | tojson }};
-        const fraserTableColumns = {{ fraser_table_columns | tojson }};
-        {% if outrider_table_data %}
-        const outriderTableData = {{ outrider_table_data | tojson }};
-        const outriderTableColumns = {{ outrider_table_columns | tojson }};
-        {% endif %}
-        {% if common_table_data %}
-        const commonTableData = {{ common_table_data | tojson }};
-        const commonTableColumns = {{ common_table_columns | tojson }};
-        {% endif %}
+// ─── Globals ─────────────────────────────────────────────────────────────────
+let fraserRows = [], outriderRows = [];
+let igvBrowser = null;
+let fraserDT = null, outriderDT = null, commonDT = null;
 
-        {% if outrider_volcano_data %}
-        const outriderVolcanoData = {{ outrider_volcano_data | tojson }};
-        const outriderTopGenesData = {{ outrider_top_genes_data | tojson }};
-        {% endif %}
+// ─── Load log UI ─────────────────────────────────────────────────────────────
+function logLine(id, msg, cls) {
+    let el = document.getElementById('ll-' + id);
+    if (!el) {
+        el = document.createElement('div');
+        el.id = 'll-' + id;
+        document.getElementById('load-log').appendChild(el);
+    }
+    el.className = cls || '';
+    el.textContent = msg;
+}
 
-        let currentPvalueThreshold = {{ default_pvalue_threshold }};
-        let currentDeltaPsiThreshold = {{ default_deltapsi_threshold }};
-        {% if outrider_volcano_data %}
-        let currentZScoreThreshold = {{ default_zscore_threshold }};
-        {% endif %}
-        let currentFamilyFilter = '';
-        let igvBrowser = null;
-        let loadedBAMs = [];
-        {% if sample_bam_mapping %}
-        const sampleBAMMapping = {{ sample_bam_mapping | tojson }};
-        {% else %}
-        const sampleBAMMapping = {};
-        {% endif %}
+// ─── Fetch + parse one CSV via relative URL ──────────────────────────────────
+async function fetchCSV(label, filename) {
+    const url = filename.startsWith('./') ? filename : './' + filename;
+    logLine(label, 'Fetching ' + url + '...', 'log-wait');
 
-        // Get filtered indices based on family filter
-        function getFilteredIndices(familyData) {
-            if (!currentFamilyFilter) {
-                return Array.from({ length: familyData.length }, (_, i) => i);
-            }
-            return familyData.map((family, i) => family === currentFamilyFilter ? i : -1)
-                             .filter(i => i !== -1);
+    let resp;
+    try { resp = await fetch(url); }
+    catch (netErr) {
+        logLine(label, 'Network error for ' + url + ': ' + netErr, 'log-err');
+        throw new Error('Network error fetching ' + url + ': ' + netErr);
+    }
+
+    logLine(label, '  HTTP ' + resp.status + ' ' + resp.statusText +
+        (resp.redirected ? ' (redirected to ' + resp.url + ')' : ''),
+        resp.ok ? 'log-wait' : 'log-err');
+
+    if (!resp.ok) throw new Error('HTTP ' + resp.status + ' ' + resp.statusText + ' — ' + url);
+
+    const ct = resp.headers.get('content-type') || '';
+    if (ct.includes('text/html'))
+        throw new Error('Got HTML instead of CSV for ' + url + ' — file may not exist or auth redirect.');
+
+    logLine(label, 'Parsing ' + url + '...', 'log-wait');
+    const text = await resp.text();
+
+    return new Promise((resolve, reject) => {
+        Papa.parse(text, {
+            header: true, dynamicTyping: true, skipEmptyLines: true,
+            complete: r => { logLine(label, url + ' — ' + r.data.length + ' rows', 'log-ok'); resolve(r.data); },
+            error:   e => { logLine(label, 'Parse error: ' + e, 'log-err'); reject(new Error('CSV parse: ' + e)); },
+        });
+    });
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+function log10p(p) { return -Math.log10(Math.max(p, 5e-324)); }
+
+// ─── Stats ───────────────────────────────────────────────────────────────────
+function renderStats(commonCount) {
+    const pval   = parseFloat(document.getElementById('pval-thresh').value);
+    const dpsi   = parseFloat(document.getElementById('dpsi-thresh').value);
+    const zEl    = document.getElementById('zscore-thresh');
+    const zscore = zEl ? parseFloat(zEl.value) : DEFAULT_ZSCORE;
+
+    const fSig = fraserRows.filter(r => r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi).length;
+    const families = new Set(fraserRows.map(r => r.familyID).filter(f => f && f !== 'Unknown'));
+
+    const cards = [
+        { value: fraserRows.length, label: 'Total FRASER Results' },
+        { value: fSig,              label: 'Significant FRASER' },
+        { value: families.size,     label: 'Families' },
+    ];
+    if (outriderRows.length) {
+        const oSig = outriderRows.filter(r => r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore).length;
+        cards.push({ value: outriderRows.length, label: 'Total OUTRIDER Results' });
+        cards.push({ value: oSig, label: 'Significant OUTRIDER' });
+        if (commonCount !== null) cards.push({ value: commonCount, label: 'Common Significant' });
+    }
+
+    document.getElementById('stats-grid').innerHTML = cards.map(c =>
+        '<div class="stat-card"><div class="value">' + c.value + '</div><div class="label">' + c.label + '</div></div>'
+    ).join('');
+}
+
+// ─── Family filter ───────────────────────────────────────────────────────────
+function populateFamilyFilter() {
+    const families = new Set();
+    fraserRows.forEach(r => { if (r.familyID && r.familyID !== 'Unknown') families.add(r.familyID); });
+    outriderRows.forEach(r => { if (r.familyID && r.familyID !== 'Unknown') families.add(r.familyID); });
+    const sel = document.getElementById('family-filter');
+    [...families].sort().forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f; opt.textContent = f; sel.appendChild(opt);
+    });
+    $('#family-filter').select2({ placeholder: 'Search families...', allowClear: true, width: '250px' });
+}
+
+// ─── FRASER Volcano ──────────────────────────────────────────────────────────
+function renderFraserVolcano(rows, pval, dpsi) {
+    const sig   = rows.filter(r => r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi);
+    const nosig = rows.filter(r => !(r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi));
+    const mkTrace = (pts, color, name) => ({
+        x: pts.map(r => r.deltaPsi),
+        y: pts.map(r => log10p(r.pValue)),
+        mode: 'markers', type: 'scatter', name,
+        marker: { color, size: 5, opacity: 0.7 },
+        text: pts.map(r =>
+            'Gene: ' + (r.hgncSymbol || 'NA') +
+            '<br>Sample: ' + r.sampleID +
+            '<br>Family: ' + (r.familyID || 'NA') +
+            '<br>\u0394\u03A8: ' + (r.deltaPsi || 0).toFixed(3) +
+            '<br>padj: ' + (r.padjust || 0).toExponential(2)),
+        hovertemplate: '%{text}<extra></extra>',
+        customdata: pts.map(r => [r.seqnames, r.start, r.end]),
+    });
+    Plotly.react('fraser-volcano',
+        [mkTrace(nosig, '#aaa', 'Not significant'), mkTrace(sig, '#e03131', 'Significant')],
+        {
+            xaxis: { title: '\u0394\u03A8', zeroline: true },
+            yaxis: { title: '\u2212log10(p-value)' },
+            shapes: [
+                { type:'line', x0:-dpsi, x1:-dpsi, y0:0, y1:1, yref:'paper', line:{color:'#888',dash:'dot'} },
+                { type:'line', x0: dpsi, x1: dpsi, y0:0, y1:1, yref:'paper', line:{color:'#888',dash:'dot'} },
+                { type:'line', x0:-1,    x1:1,     y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
+            ],
+            margin: { t: 20 }, height: 500,
         }
+    );
+}
 
-        // Color function based on thresholds
-        function getColors(pvalues, deltaPsi, pThreshold, deltaPsiThreshold) {
-            return pvalues.map((p, i) => {
-                const meetsP = p <= pThreshold;
-                const meetsDelta = Math.abs(deltaPsi[i]) >= deltaPsiThreshold;
+// ─── OUTRIDER Volcano ────────────────────────────────────────────────────────
+function renderOutriderVolcano(rows, pval, zscore) {
+    const sig   = rows.filter(r => r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore);
+    const nosig = rows.filter(r => !(r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore));
+    const fcVal = r => r.l2fc !== undefined && r.l2fc !== null ? r.l2fc : (r.log2fc !== undefined && r.log2fc !== null ? r.log2fc : 0);
+    const mkTrace = (pts, color, name) => ({
+        x: pts.map(fcVal),
+        y: pts.map(r => log10p(r.pValue)),
+        mode: 'markers', type: 'scatter', name,
+        marker: { color, size: 5, opacity: 0.7 },
+        text: pts.map(r =>
+            'Gene: ' + (r.hgncSymbol || r.geneID || 'NA') +
+            '<br>Sample: ' + r.sampleID +
+            '<br>Family: ' + (r.familyID || 'NA') +
+            '<br>Z: ' + (r.zScore || 0).toFixed(2) +
+            '<br>padj: ' + (r.padjust || 0).toExponential(2)),
+        hovertemplate: '%{text}<extra></extra>',
+    });
+    Plotly.react('outrider-volcano',
+        [mkTrace(nosig, '#aaa', 'Not significant'), mkTrace(sig, '#f76707', 'Significant')],
+        {
+            xaxis: { title: 'log2 Fold Change', zeroline: true },
+            yaxis: { title: '\u2212log10(p-value)' },
+            shapes: [
+                { type:'line', x0:-20, x1:20, y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
+            ],
+            margin: { t: 20 }, height: 500,
+        }
+    );
+}
 
-                if (meetsP && meetsDelta) {
-                    return '#d62728'; // Red - significant
-                } else if (meetsP) {
-                    return '#ff7f0e'; // Orange - significant p-value only
-                } else if (meetsDelta) {
-                    return '#9467bd'; // Purple - large effect only
-                } else {
-                    return '#1f77b4'; // Blue - not significant
-                }
+// ─── Common significant ─────────────────────────────────────────────────────
+function findCommon(fRows, oRows, pval, dpsi, zscore) {
+    if (!oRows.length) return [];
+    const fSig = fRows.filter(r => r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi);
+    const oSig = oRows.filter(r => r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore);
+
+    // Build OUTRIDER lookup by sampleID + hgncSymbol
+    const oLookup = {};
+    oSig.forEach(r => {
+        if (!r.hgncSymbol) return;
+        const key = r.sampleID + '|' + r.hgncSymbol;
+        if (!oLookup[key] || r.pValue < oLookup[key].pValue) oLookup[key] = r;
+    });
+
+    const seen = new Set(), common = [];
+    fSig.forEach(fr => {
+        if (!fr.hgncSymbol) return;
+        const key = fr.sampleID + '|' + fr.hgncSymbol;
+        if (seen.has(key)) return;
+        const or_ = oLookup[key];
+        if (!or_) return;
+        seen.add(key);
+        common.push({
+            gene: fr.hgncSymbol, geneID: or_.geneID, sampleID: fr.sampleID,
+            familyID: fr.familyID || 'NA', chr: fr.seqnames, start: fr.start, end: fr.end,
+            fraser_padjust: fr.padjust, fraser_deltaPsi: fr.deltaPsi,
+            outrider_padjust: or_.padjust, outrider_zScore: or_.zScore,
+        });
+    });
+    return common;
+}
+
+// ─── DataTables ──────────────────────────────────────────────────────────────
+const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
+const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi'];
+const DP2 = ['zScore', 'outrider_zScore'];
+
+function fmt(k, v) {
+    if (v === null || v === undefined || v === '') return 'NA';
+    if (SCI.includes(k) && typeof v === 'number') return v.toExponential(2);
+    if (DP3.includes(k) && typeof v === 'number') return v.toFixed(3);
+    if (DP2.includes(k) && typeof v === 'number') return v.toFixed(2);
+    return v;
+}
+
+function buildDT(tableId, rows, cols, existing) {
+    if (existing) { existing.destroy(); $('#' + tableId).empty(); }
+    if (!rows.length) return null;
+    const avail = cols.filter(c => rows[0][c] !== undefined);
+    return $('#' + tableId).DataTable({
+        data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); return o; }),
+        columns: avail.map(c => ({ title: c, data: c, render: d => fmt(c, d) })),
+        dom: 'Bfrtip', buttons: ['csv', 'excel'], pageLength: 25, scrollX: true,
+    });
+}
+
+const FRASER_COLS  = ['hgncSymbol', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
+const OUTRIDER_COLS = ['geneID', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
+const COMMON_COLS  = ['gene', 'geneID', 'sampleID', 'familyID', 'chr', 'start', 'end', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore'];
+
+// ─── Selected Region Details ─────────────────────────────────────────────────
+function showRegionDetails(chr, start, end) {
+    document.getElementById('details-panel').style.display = 'block';
+    const padding = 1000;
+    const qStart = Math.max(0, start - padding);
+    const qEnd   = end + padding;
+    const chrNorm = String(chr).startsWith('chr') ? String(chr) : 'chr' + chr;
+
+    // Query FRASER
+    const fHits = fraserRows.filter(r => {
+        const rc = String(r.seqnames).startsWith('chr') ? String(r.seqnames) : 'chr' + r.seqnames;
+        return rc === chrNorm && r.start <= qEnd && r.end >= qStart;
+    });
+    const fEl = document.getElementById('fraser-details');
+    if (fHits.length) {
+        let html = '';
+        fHits.slice(0, 5).forEach((r, i) => {
+            if (i > 0) html += '<hr style="border:none;border-top:1px solid #eee;margin:8px 0">';
+            html += '<div>';
+            html += '<div class="detail-row"><b>Gene:</b> <span>' + (r.hgncSymbol || 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>Position:</b> <span>' + r.seqnames + ':' + r.start + '-' + r.end + '</span></div>';
+            html += '<div class="detail-row"><b>P-adjust:</b> <span>' + (r.padjust != null ? r.padjust.toExponential(2) : 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>Delta PSI:</b> <span>' + (r.deltaPsi != null ? r.deltaPsi.toFixed(4) : 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>PSI Value:</b> <span>' + (r.psiValue != null ? r.psiValue.toFixed(4) : 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>Type:</b> <span>' + (r.type || 'NA') + '</span></div>';
+            html += '</div>';
+        });
+        if (fHits.length > 5) html += '<div style="color:#999;font-style:italic;margin-top:8px">...and ' + (fHits.length - 5) + ' more</div>';
+        fEl.innerHTML = html;
+    } else {
+        fEl.innerHTML = '<em style="color:#999">No FRASER results in this region</em>';
+    }
+
+    // Query OUTRIDER (only rows with coordinates)
+    const oHits = outriderRows.filter(r => {
+        if (!r.seqnames || r.start == null || r.end == null) return false;
+        const rc = String(r.seqnames).startsWith('chr') ? String(r.seqnames) : 'chr' + r.seqnames;
+        return rc === chrNorm && r.start <= qEnd && r.end >= qStart;
+    });
+    const oEl = document.getElementById('outrider-details');
+    if (oHits.length) {
+        let html = '';
+        oHits.slice(0, 5).forEach((r, i) => {
+            if (i > 0) html += '<hr style="border:none;border-top:1px solid #eee;margin:8px 0">';
+            html += '<div>';
+            html += '<div class="detail-row"><b>Gene:</b> <span>' + (r.hgncSymbol || r.geneID || 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>Position:</b> <span>' + r.seqnames + ':' + r.start + '-' + r.end + '</span></div>';
+            html += '<div class="detail-row"><b>P-adjust:</b> <span>' + (r.padjust != null ? r.padjust.toExponential(2) : 'NA') + '</span></div>';
+            html += '<div class="detail-row"><b>Z-score:</b> <span>' + (r.zScore != null ? r.zScore.toFixed(2) : 'NA') + '</span></div>';
+            html += '</div>';
+        });
+        if (oHits.length > 5) html += '<div style="color:#999;font-style:italic;margin-top:8px">...and ' + (oHits.length - 5) + ' more</div>';
+        oEl.innerHTML = html;
+    } else {
+        oEl.innerHTML = '<em style="color:#999">No OUTRIDER results in this region</em>';
+    }
+}
+
+// ─── IGV ─────────────────────────────────────────────────────────────────────
+async function initIGV(fraser) {
+    try {
+        const sorted = [...fraser].sort((a, b) => a.pValue - b.pValue);
+        const locus = sorted.length
+            ? sorted[0].seqnames + ':' + Math.max(1, sorted[0].start - 5000) + '-' + (sorted[0].end + 5000)
+            : 'chr1:1-100000';
+
+        igvBrowser = await igv.createBrowser(document.getElementById('igv-div'), {
+            genome: GENOME, locus,
+            tracks: [{
+                name: 'FRASER Results', type: 'annotation', format: 'bed',
+                features: sorted.map(r => ({
+                    chr: String(r.seqnames),
+                    start: r.start - 1,
+                    end: r.end,
+                    name: (r.hgncSymbol || 'NA') + ' (' + r.sampleID + ')',
+                })),
+                displayMode: 'EXPANDED', color: '#e03131',
+            }],
+        });
+    } catch (e) {
+        document.getElementById('igv-div').textContent = 'IGV failed to load: ' + e;
+    }
+}
+
+// ─── Apply / Reset ───────────────────────────────────────────────────────────
+function applyThresholds() {
+    const pval   = parseFloat(document.getElementById('pval-thresh').value) || DEFAULT_PVAL;
+    const dpsi   = parseFloat(document.getElementById('dpsi-thresh').value) || DEFAULT_DPSI;
+    const zEl    = document.getElementById('zscore-thresh');
+    const zscore = zEl ? (parseFloat(zEl.value) || DEFAULT_ZSCORE) : DEFAULT_ZSCORE;
+    const family = document.getElementById('family-filter').value;
+
+    const fView = family ? fraserRows.filter(r => r.familyID === family) : fraserRows;
+    const oView = family ? outriderRows.filter(r => r.familyID === family) : outriderRows;
+
+    renderFraserVolcano(fView, pval, dpsi);
+    if (outriderRows.length) renderOutriderVolcano(oView, pval, zscore);
+
+    fraserDT = buildDT('fraser-table', fView, FRASER_COLS, fraserDT);
+    if (outriderRows.length) outriderDT = buildDT('outrider-table', oView, OUTRIDER_COLS, outriderDT);
+
+    const common = findCommon(fView, oView, pval, dpsi, zscore);
+    if (outriderRows.length) {
+        commonDT = buildDT('common-table', common, COMMON_COLS, commonDT);
+        document.getElementById('common-section').style.display = common.length ? '' : 'none';
+    }
+    renderStats(outriderRows.length ? common.length : null);
+}
+
+function resetFilters() {
+    document.getElementById('pval-thresh').value = DEFAULT_PVAL;
+    document.getElementById('dpsi-thresh').value = DEFAULT_DPSI;
+    const zEl = document.getElementById('zscore-thresh');
+    if (zEl) zEl.value = DEFAULT_ZSCORE;
+    $('#family-filter').val('').trigger('change');
+    applyThresholds();
+}
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
+async function init() {
+    try {
+        logLine('start', 'Starting data load...', 'log-wait');
+
+        // 1. FRASER (required)
+        fraserRows = await fetchCSV('fraser', FILES.fraser);
+        if (!fraserRows.length) throw new Error('FRASER file loaded but contained no rows.');
+
+        // 2. OUTRIDER (optional)
+        if (FILES.outrider) {
+            outriderRows = await fetchCSV('outrider', FILES.outrider);
+            // Map ENSG gene IDs to HGNC symbols for common-significant matching
+            outriderRows.forEach(r => {
+                const mapped = ENSG_TO_HGNC[r.geneID] || null;
+                if (mapped) r.hgncSymbol = mapped;
             });
         }
 
-        // Query FRASER data by region (using pre-loaded indexed data)
-        function queryFraserByRegion(chr, start, end) {
-            const padding = 1000;
-            const queryStart = Math.max(0, start - padding);
-            const queryEnd = end + padding;
+        // Show main content
+        logLine('render', 'Rendering charts...', 'log-wait');
+        document.getElementById('main-content').style.display = 'block';
 
-            // Normalize chromosome name
-            const chrNorm = chr.startsWith('chr') ? chr : 'chr' + chr;
-            const chrNoPrefix = chr.replace('chr', '');
+        // Render
+        const pval = DEFAULT_PVAL, dpsi = DEFAULT_DPSI, zscore = DEFAULT_ZSCORE;
 
-            const results = [];
-            for (const row of fraserTabixData) {
-                const rowChr = row.chr.startsWith('chr') ? row.chr : 'chr' + row.chr;
-                if ((rowChr === chrNorm || row.chr === chrNoPrefix) &&
-                    row.start <= queryEnd && row.end >= queryStart) {
-                    results.push(row);
-                }
-            }
-            return results;
+        logLine('render-fv', 'FRASER volcano...', 'log-wait');
+        renderFraserVolcano(fraserRows, pval, dpsi);
+        logLine('render-fv', 'FRASER volcano', 'log-ok');
+
+        if (outriderRows.length) {
+            logLine('render-ov', 'OUTRIDER volcano...', 'log-wait');
+            renderOutriderVolcano(outriderRows, pval, zscore);
+            logLine('render-ov', 'OUTRIDER volcano', 'log-ok');
         }
 
-        // Query OUTRIDER data by region
-        function queryOutriderByRegion(chr, start, end) {
-            if (!outriderTabixData || outriderTabixData.length === 0) {
-                return [];
-            }
-
-            const padding = 1000;
-            const queryStart = Math.max(0, start - padding);
-            const queryEnd = end + padding;
-
-            // Normalize chromosome name
-            const chrNorm = chr.startsWith('chr') ? chr : 'chr' + chr;
-            const chrNoPrefix = chr.replace('chr', '');
-
-            const results = [];
-            for (const row of outriderTabixData) {
-                const rowChr = row.chr.startsWith('chr') ? row.chr : 'chr' + row.chr;
-                if ((rowChr === chrNorm || row.chr === chrNoPrefix) &&
-                    row.start <= queryEnd && row.end >= queryStart) {
-                    results.push(row);
-                }
-            }
-            return results;
+        logLine('render-tbl', 'Tables...', 'log-wait');
+        populateFamilyFilter();
+        fraserDT = buildDT('fraser-table', fraserRows, FRASER_COLS, null);
+        if (outriderRows.length) {
+            outriderDT = buildDT('outrider-table', outriderRows, OUTRIDER_COLS, null);
+            const common = findCommon(fraserRows, outriderRows, pval, dpsi, zscore);
+            commonDT = buildDT('common-table', common, COMMON_COLS, null);
+            if (common.length) document.getElementById('common-section').style.display = '';
+            renderStats(common.length);
+        } else {
+            renderStats(null);
         }
+        logLine('render-tbl', 'Tables', 'log-ok');
 
-        // Display details for a region
-        function showRegionDetails(chr, start, end) {
-            const detailsPanel = document.getElementById('details-panel');
-            detailsPanel.style.display = 'block';
-
-            // Query and display FRASER results
-            const fraserResults = queryFraserByRegion(chr, start, end);
-            const fraserContent = document.getElementById('fraser-content');
-
-            if (fraserResults.length > 0) {
-                let html = '';
-                fraserResults.slice(0, 5).forEach((row, i) => {
-                    html += `<div style="margin-bottom: 10px; ${i > 0 ? 'border-top: 1px solid #eee; padding-top: 10px;' : ''}">`;
-                    html += `<div class="details-row"><span class="details-key">Gene:</span><span class="details-value">${row.gene || 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Position:</span><span class="details-value">${row.chr}:${row.start}-${row.end}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">P-value:</span><span class="details-value">${row.pValue ? row.pValue.toExponential(2) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">P-adjust:</span><span class="details-value">${row.padjust ? row.padjust.toExponential(2) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Delta PSI:</span><span class="details-value">${row.deltaPsi ? row.deltaPsi.toFixed(4) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">PSI Value:</span><span class="details-value">${row.psiValue ? row.psiValue.toFixed(4) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Type:</span><span class="details-value">${row.type || 'NA'}</span></div>`;
-                    html += '</div>';
-                });
-                if (fraserResults.length > 5) {
-                    html += `<div style="color: #999; font-style: italic;">...and ${fraserResults.length - 5} more</div>`;
-                }
-                fraserContent.innerHTML = html;
-            } else {
-                fraserContent.innerHTML = '<span class="loading">No FRASER results found in this region</span>';
+        // Attach click handlers to plots (once, after initial render)
+        document.getElementById('fraser-volcano').on('plotly_click', function(data) {
+            const cd = data.points[0].customdata;
+            if (cd) {
+                showRegionDetails(cd[0], cd[1], cd[2]);
+                if (igvBrowser) igvBrowser.search(cd[0] + ':' + Math.max(1, cd[1] - 5000) + '-' + (cd[2] + 5000));
             }
-
-            // Query and display OUTRIDER results
-            const outriderResults = queryOutriderByRegion(chr, start, end);
-            const outriderContent = document.getElementById('outrider-content');
-
-            if (outriderResults.length > 0) {
-                let html = '';
-                outriderResults.slice(0, 5).forEach((row, i) => {
-                    html += `<div style="margin-bottom: 10px; ${i > 0 ? 'border-top: 1px solid #eee; padding-top: 10px;' : ''}">`;
-                    html += `<div class="details-row"><span class="details-key">Gene:</span><span class="details-value">${row.gene || row.geneID || 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Position:</span><span class="details-value">${row.chr}:${row.start}-${row.end}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">P-value:</span><span class="details-value">${row.pValue ? row.pValue.toExponential(2) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">P-adjust:</span><span class="details-value">${row.padjust ? row.padjust.toExponential(2) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Z-score:</span><span class="details-value">${row.zScore ? row.zScore.toFixed(4) : 'NA'}</span></div>`;
-                    html += `<div class="details-row"><span class="details-key">Log2FC:</span><span class="details-value">${row.log2fc ? row.log2fc.toFixed(4) : 'NA'}</span></div>`;
-                    html += '</div>';
-                });
-                if (outriderResults.length > 5) {
-                    html += `<div style="color: #999; font-style: italic;">...and ${outriderResults.length - 5} more</div>`;
-                }
-                outriderContent.innerHTML = html;
-            } else {
-                outriderContent.innerHTML = '<span class="loading">No OUTRIDER results found in this region</span>';
-            }
-        }
-
-        // Create volcano plot
-        function createVolcanoPlot() {
-            // Get filtered indices
-            const filteredIndices = getFilteredIndices(volcanoData.familyID || []);
-
-            // Filter data
-            const filteredDeltaPsi = filteredIndices.map(i => volcanoData.deltaPsi[i]);
-            const filteredLog10p = filteredIndices.map(i => volcanoData.log10pValue[i]);
-            const filteredPadjust = filteredIndices.map(i => volcanoData.padjust[i]);
-            const filteredGene = filteredIndices.map(i => volcanoData.gene[i]);
-            const filteredChr = filteredIndices.map(i => volcanoData.chr[i]);
-            const filteredStart = filteredIndices.map(i => volcanoData.start[i]);
-            const filteredEnd = filteredIndices.map(i => volcanoData.end[i]);
-            const filteredPsi = filteredIndices.map(i => volcanoData.psiValue[i]);
-            const filteredType = filteredIndices.map(i => volcanoData.type[i]);
-            const filteredSampleID = filteredIndices.map(i => volcanoData.sampleID[i]);
-            const filteredFamilyID = filteredIndices.map(i => (volcanoData.familyID || [])[i] || 'Unknown');
-
-            const colors = getColors(filteredPadjust, filteredDeltaPsi,
-                                    currentPvalueThreshold, currentDeltaPsiThreshold);
-
-            const hoverText = filteredGene.map((g, i) => {
-                let text = `Gene: ${g}<br>` +
-                    `Position: ${filteredChr[i]}:${filteredStart[i]}-${filteredEnd[i]}<br>` +
-                    `Sample: ${filteredSampleID[i]}<br>` +
-                    `Family: ${filteredFamilyID[i]}<br>` +
-                    `P-value: ${filteredPadjust[i].toExponential(2)}<br>` +
-                    `Delta PSI: ${filteredDeltaPsi[i].toFixed(3)}<br>` +
-                    `PSI Value: ${filteredPsi[i].toFixed(3)}<br>` +
-                    `Type: ${filteredType[i]}`;
-
-                // Add variant proximity information if available
-                if (volcanoData.closest_variant_pos && volcanoData.closest_variant_pos[i] > 0) {
-                    const distance = volcanoData.closest_variant_distance[i];
-                    const distanceKb = (distance / 1000).toFixed(1);
-                    text += `<br><b>Closest Variant:</b><br>` +
-                        `  ${volcanoData.closest_variant_chr[i]}:${volcanoData.closest_variant_pos[i]}<br>` +
-                        `  ${volcanoData.closest_variant_ref[i]} > ${volcanoData.closest_variant_alt[i]}<br>` +
-                        `  Distance: ${distanceKb} kb`;
-                }
-
-                return text;
-            });
-
-            const trace = {
-                x: filteredDeltaPsi,
-                y: filteredLog10p,
-                mode: 'markers',
-                type: 'scatter',
-                marker: {
-                    size: 6,
-                    color: colors,
-                    opacity: 0.7,
-                    line: {
-                        width: 0.5,
-                        color: 'white'
-                    }
-                },
-                text: hoverText,
-                hovertemplate: '%{text}<extra></extra>',
-                customdata: filteredChr.map((chr, i) => [chr, filteredStart[i], filteredEnd[i]])
-            };
-
-            const layout = {
-                title: 'Volcano Plot: Delta PSI vs -log10(P-value)' + (currentFamilyFilter ? ` (Family: ${currentFamilyFilter})` : ''),
-                xaxis: {
-                    title: 'Delta PSI',
-                    zeroline: true,
-                    zerolinewidth: 1,
-                    zerolinecolor: 'gray'
-                },
-                yaxis: {
-                    title: '-log10(P-value)'
-                },
-                hovermode: 'closest',
-                shapes: filteredDeltaPsi.length > 0 ? [
-                    // Horizontal line for p-value threshold
-                    {
-                        type: 'line',
-                        x0: Math.min(...filteredDeltaPsi),
-                        x1: Math.max(...filteredDeltaPsi),
-                        y0: -Math.log10(currentPvalueThreshold),
-                        y1: -Math.log10(currentPvalueThreshold),
-                        line: {
-                            color: 'gray',
-                            width: 2,
-                            dash: 'dash'
-                        }
-                    },
-                    // Vertical line for negative delta PSI threshold
-                    {
-                        type: 'line',
-                        x0: -currentDeltaPsiThreshold,
-                        x1: -currentDeltaPsiThreshold,
-                        y0: 0,
-                        y1: filteredLog10p.length > 0 ? Math.max(...filteredLog10p) : 10,
-                        line: {
-                            color: 'lightgray',
-                            width: 1,
-                            dash: 'dot'
-                        }
-                    },
-                    // Vertical line for positive delta PSI threshold
-                    {
-                        type: 'line',
-                        x0: currentDeltaPsiThreshold,
-                        x1: currentDeltaPsiThreshold,
-                        y0: 0,
-                        y1: filteredLog10p.length > 0 ? Math.max(...filteredLog10p) : 10,
-                        line: {
-                            color: 'lightgray',
-                            width: 1,
-                            dash: 'dot'
-                        }
-                    }
-                ] : []
-            };
-
-            Plotly.newPlot('volcano-plot', [trace], layout);
-
-            // Add click event
-            document.getElementById('volcano-plot').on('plotly_click', function(data) {
-                const point = data.points[0];
-                const chr = point.customdata[0];
-                const start = point.customdata[1];
-                const end = point.customdata[2];
-
-                // Show details panel
-                showRegionDetails(chr, start, end);
-
-                // Navigate in IGV
-                if (igvBrowser) {
-                    igvBrowser.search(`${chr}:${start}-${end}`);
-                }
-            });
-        }
-
-        {% if outrider_volcano_data %}
-        // Create OUTRIDER volcano plot
-        function createOutriderVolcanoPlot() {
-            // Get filtered indices
-            const filteredIndices = getFilteredIndices(outriderVolcanoData.familyID || []);
-
-            // Filter data
-            const filteredZScore = filteredIndices.map(i => outriderVolcanoData.zScore[i]);
-            const filteredLog10p = filteredIndices.map(i => outriderVolcanoData.log10pValue[i]);
-            const filteredPadjust = filteredIndices.map(i => outriderVolcanoData.padjust[i]);
-            const filteredGene = filteredIndices.map(i => outriderVolcanoData.gene[i]);
-            const filteredGeneID = filteredIndices.map(i => outriderVolcanoData.geneID[i]);
-            const filteredLog2FC = filteredIndices.map(i => outriderVolcanoData.log2fc[i]);
-            const filteredSampleID = filteredIndices.map(i => outriderVolcanoData.sampleID[i]);
-            const filteredFamilyID = filteredIndices.map(i => (outriderVolcanoData.familyID || [])[i] || 'Unknown');
-
-            // Color by significance (p-value and z-score for OUTRIDER)
-            const colors = filteredPadjust.map((p, i) => {
-                const meetsP = p <= currentPvalueThreshold;
-                const meetsZ = Math.abs(filteredZScore[i]) >= currentZScoreThreshold;
-
-                if (meetsP && meetsZ) {
-                    return 'rgb(214, 39, 40)'; // Red - both significant
-                } else if (meetsP) {
-                    return 'rgb(255, 127, 14)'; // Orange - p-value only
-                } else if (meetsZ) {
-                    return 'rgb(148, 103, 189)'; // Purple - z-score only
-                } else {
-                    return 'rgb(31, 119, 180)'; // Blue - not significant
-                }
-            });
-
-            const hoverText = filteredGene.map((g, i) =>
-                `Gene: ${g}<br>` +
-                `Gene ID: ${filteredGeneID[i]}<br>` +
-                `Sample: ${filteredSampleID[i]}<br>` +
-                `Family: ${filteredFamilyID[i]}<br>` +
-                `P-value: ${filteredPadjust[i].toExponential(2)}<br>` +
-                `Z-Score: ${filteredZScore[i].toFixed(3)}<br>` +
-                `Log2FC: ${filteredLog2FC[i].toFixed(3)}`
-            );
-
-            const trace = {
-                x: filteredZScore,
-                y: filteredLog10p,
-                mode: 'markers',
-                type: 'scatter',
-                marker: {
-                    size: 6,
-                    color: colors,
-                    opacity: 0.7,
-                    line: {
-                        width: 0.5,
-                        color: 'white'
-                    }
-                },
-                text: hoverText,
-                hovertemplate: '%{text}<extra></extra>'
-            };
-
-            const layout = {
-                title: 'OUTRIDER: Z-Score vs -log10(P-value)' + (currentFamilyFilter ? ` (Family: ${currentFamilyFilter})` : ''),
-                xaxis: {
-                    title: 'Z-Score',
-                    zeroline: true,
-                    zerolinewidth: 1,
-                    zerolinecolor: 'gray'
-                },
-                yaxis: {
-                    title: '-log10(P-value)'
-                },
-                hovermode: 'closest',
-                shapes: filteredZScore.length > 0 ? [
-                    // Horizontal line for p-value threshold
-                    {
-                        type: 'line',
-                        x0: Math.min(...filteredZScore),
-                        x1: Math.max(...filteredZScore),
-                        y0: -Math.log10(currentPvalueThreshold),
-                        y1: -Math.log10(currentPvalueThreshold),
-                        line: {
-                            color: 'gray',
-                            width: 2,
-                            dash: 'dash'
-                        }
-                    },
-                    // Vertical line for positive z-score threshold
-                    {
-                        type: 'line',
-                        x0: currentZScoreThreshold,
-                        x1: currentZScoreThreshold,
-                        y0: 0,
-                        y1: Math.max(...filteredLog10p),
-                        line: {
-                            color: 'lightgray',
-                            width: 1,
-                            dash: 'dot'
-                        }
-                    },
-                    // Vertical line for negative z-score threshold
-                    {
-                        type: 'line',
-                        x0: -currentZScoreThreshold,
-                        x1: -currentZScoreThreshold,
-                        y0: 0,
-                        y1: Math.max(...filteredLog10p),
-                        line: {
-                            color: 'lightgray',
-                            width: 1,
-                            dash: 'dot'
-                        }
-                    }
-                ] : []
-            };
-
-            Plotly.newPlot('outrider-volcano-plot', [trace], layout);
-        }
-
-        // Create OUTRIDER top genes plot
-        function createOutriderGenesPlot() {
-            // Get filtered indices
-            const filteredIndices = getFilteredIndices(outriderTopGenesData.familyID || []);
-
-            // Filter data
-            const filteredGenes = filteredIndices.map(i => outriderTopGenesData.genes[i]);
-            const filteredLog10p = filteredIndices.map(i => outriderTopGenesData.log10pValue[i]);
-            const filteredPadjust = filteredIndices.map(i => outriderTopGenesData.padjust[i]);
-            const filteredZScore = filteredIndices.map(i => outriderTopGenesData.zScore[i]);
-            const filteredLog2FC = filteredIndices.map(i => outriderTopGenesData.log2fc[i]);
-            const filteredSampleID = filteredIndices.map(i => outriderTopGenesData.sampleID[i]);
-            const filteredFamilyID = filteredIndices.map(i => (outriderTopGenesData.familyID || [])[i] || 'Unknown');
-
-            // Color by significance (p-value and z-score)
-            const colors = filteredPadjust.map((p, i) => {
-                const meetsP = p <= currentPvalueThreshold;
-                const meetsZ = Math.abs(filteredZScore[i]) >= currentZScoreThreshold;
-
-                if (meetsP && meetsZ) {
-                    return 'rgb(214, 39, 40)'; // Red - both significant
-                } else if (meetsP) {
-                    return 'rgb(255, 127, 14)'; // Orange - p-value only
-                } else if (meetsZ) {
-                    return 'rgb(148, 103, 189)'; // Purple - z-score only
-                } else {
-                    return 'rgb(31, 119, 180)'; // Blue - not significant
-                }
-            });
-
-            const hoverText = filteredGenes.map((g, i) =>
-                `Gene: ${g}<br>` +
-                `Sample: ${filteredSampleID[i]}<br>` +
-                `Family: ${filteredFamilyID[i]}<br>` +
-                `P-value: ${filteredPadjust[i].toExponential(2)}<br>` +
-                `Z-Score: ${filteredZScore[i].toFixed(3)}<br>` +
-                `Log2FC: ${filteredLog2FC[i].toFixed(3)}`
-            );
-
-            const trace = {
-                x: filteredGenes,
-                y: filteredLog10p,
-                mode: 'markers',
-                type: 'scatter',
-                marker: {
-                    size: 8,
-                    color: colors,
-                    opacity: 0.8,
-                    line: {
-                        width: 0.5,
-                        color: 'white'
-                    }
-                },
-                text: hoverText,
-                hovertemplate: '%{text}<extra></extra>'
-            };
-
-            const layout = {
-                title: 'OUTRIDER: Top Genes by Significance' + (currentFamilyFilter ? ` (Family: ${currentFamilyFilter})` : ''),
-                xaxis: {
-                    title: 'Gene',
-                    tickangle: -45
-                },
-                yaxis: {
-                    title: '-log10(P-value)'
-                },
-                hovermode: 'closest',
-                margin: {
-                    b: 150  // Make room for rotated labels
-                },
-                shapes: [
-                    {
-                        type: 'line',
-                        x0: -0.5,
-                        x1: filteredGenes.length - 0.5,
-                        y0: -Math.log10(currentPvalueThreshold),
-                        y1: -Math.log10(currentPvalueThreshold),
-                        line: {
-                            color: 'gray',
-                            width: 2,
-                            dash: 'dash'
-                        }
-                    }
-                ]
-            };
-
-            Plotly.newPlot('outrider-genes-plot', [trace], layout);
-        }
-        {% endif %}
-
-        // Initialize IGV
-        async function initIGV() {
-            try {
-                console.log('Initializing IGV browser...');
-
-                // Basic tracks that always work
-                const tracks = [
-                    {
-                        name: "Genes",
-                        type: "annotation",
-                        format: "refgene",
-                        sourceType: "refgene",
-                        url: `https://s3.amazonaws.com/igv.org.genomes/${genome}/refGene.txt.gz`,
-                        indexURL: `https://s3.amazonaws.com/igv.org.genomes/${genome}/refGene.txt.gz.tbi`,
-                        order: Number.MAX_VALUE,
-                        visibilityWindow: 300000000,
-                        displayMode: "COLLAPSED"
-                    }
-                ];
-
-                // Add FRASER results track if we have positions
-                if (topPositions && topPositions.length > 0) {
-                    console.log(`Adding ${topPositions.length} FRASER positions to IGV...`);
-
-                    // Add Delta PSI track if data exists
-                    const deltaPsiFeatures = topPositions
-                        .filter(pos => pos.deltaPsi !== undefined && !isNaN(pos.deltaPsi))
-                        .map(pos => ({
-                            chr: pos.chr,
-                            start: pos.start,
-                            end: pos.end,
-                            value: pos.deltaPsi,
-                            name: `${pos.gene || 'Unknown'} (ΔΨ=${pos.deltaPsi.toFixed(2)})`
-                        }));
-
-                    if (deltaPsiFeatures.length > 0) {
-                        tracks.push({
-                            name: "Delta PSI Scores",
-                            type: "wig",
-                            format: "wig",
-                            sourceType: "file",
-                            features: deltaPsiFeatures,
-                            min: -1,
-                            max: 1,
-                            color: function(feature) {
-                                return feature.value > 0 ? "rgb(214, 39, 40)" : "rgb(31, 119, 180)";
-                            },
-                            graphType: "bar",
-                            height: 80,
-                            autoscale: false
-                        });
-                    }
-
-                    // Add annotation track for FRASER results
-                    tracks.push({
-                        name: "FRASER Results",
-                        type: "annotation",
-                        format: "bed",
-                        sourceType: "file",
-                        features: topPositions.map((pos, i) => ({
-                            chr: pos.chr,
-                            start: pos.start,
-                            end: pos.end,
-                            name: `${pos.gene || 'Unknown'} (p=${pos.pValue ? pos.pValue.toExponential(2) : 'NA'}, ΔΨ=${pos.deltaPsi ? pos.deltaPsi.toFixed(2) : 'NA'})`,
-                            score: pos.pValue ? -Math.log10(pos.pValue) : 0
-                        })),
-                        displayMode: "EXPANDED",
-                        color: "rgb(214, 39, 40)",
-                        height: 100
-                    });
-                }
-
-                // Determine initial locus
-                let initialLocus = "chr1:1-1000000"; // Default fallback
-                if (topPositions && topPositions.length > 0 && topPositions[0].chr) {
-                    const pos = topPositions[0];
-                    const center = Math.floor((pos.start + pos.end) / 2);
-                    const window = 50000; // 50kb window
-                    initialLocus = `${pos.chr}:${Math.max(1, center - window)}-${center + window}`;
-                }
-
-                const options = {
-                    genome: 'hg38',
-                    locus: initialLocus,
-                    tracks: tracks
-                };
-
-                console.log('Creating IGV browser with options:', options);
-                const igvDiv = document.getElementById('igv-div');
-                if (!igvDiv) {
-                    throw new Error('IGV container div not found');
-                }
-
-                igvBrowser = await igv.createBrowser(igvDiv, options);
-                console.log('IGV browser initialized successfully!');
-
-                // Add some styling to make it clear IGV is ready
-                igvDiv.style.border = '2px solid #4CAF50';
-                igvDiv.style.borderRadius = '5px';
-
-            } catch (error) {
-                console.error('Error initializing IGV:', error);
-                const igvDiv = document.getElementById('igv-div');
-                if (igvDiv) {
-                    igvDiv.innerHTML = `
-                        <div style="padding: 20px; background-color: #fff3cd; border: 1px solid #ffc107; border-radius: 5px; margin: 10px 0;">
-                            <h4 style="color: #856404; margin-top: 0;">⚠️ IGV Browser Initialization Issue</h4>
-                            <p style="color: #856404; margin-bottom: 10px;">There was a problem loading the IGV browser. This might be due to:</p>
-                            <ul style="color: #856404; margin-bottom: 10px;">
-                                <li>Network connectivity issues</li>
-                                <li>Browser security settings blocking external resources</li>
-                                <li>Invalid genome reference</li>
-                            </ul>
-                            <p style="color: #856404; margin-bottom: 0;"><strong>Error:</strong> ${error.message}</p>
-                            <button onclick="initIGV()" style="margin-top: 10px; padding: 5px 15px; background-color: #4CAF50; color: white; border: none; border-radius: 3px; cursor: pointer;">
-                                Retry IGV Initialization
-                            </button>
-                        </div>
-                    `;
-                }
-            }
-        }
-
-        // Initialize DataTables
-        function initDataTables() {
-            {% if common_table_data and common_table_data|length > 0 %}
-            $('#common-table').DataTable({
-                data: commonTableData,
-                columns: commonTableColumns,
-                pageLength: 25,
-                order: [[0, 'asc']],
-                dom: 'Bfrtip',
-                buttons: ['copy', 'csv', 'excel'],
-                scrollX: true
-            });
-            {% endif %}
-
-            $('#fraser-table').DataTable({
-                data: fraserTableData,
-                columns: fraserTableColumns,
-                pageLength: 25,
-                order: [[0, 'asc']],
-                dom: 'Bfrtip',
-                buttons: ['copy', 'csv', 'excel'],
-                scrollX: true
-            });
-
-            {% if outrider_table_data and outrider_table_data|length > 0 %}
-            $('#outrider-table').DataTable({
-                data: outriderTableData,
-                columns: outriderTableColumns,
-                pageLength: 25,
-                order: [[0, 'asc']],
-                dom: 'Bfrtip',
-                buttons: ['copy', 'csv', 'excel'],
-                scrollX: true
-            });
-            {% endif %}
-        }
-
-        // Update thresholds
-        function updateThresholds() {
-            currentPvalueThreshold = parseFloat(document.getElementById('pvalue-threshold').value);
-            currentDeltaPsiThreshold = parseFloat(document.getElementById('deltapsi-threshold').value);
-
-            {% if outrider_volcano_data %}
-            const zScoreElement = document.getElementById('zscore-threshold');
-            if (zScoreElement) {
-                currentZScoreThreshold = parseFloat(zScoreElement.value);
-            }
-            {% endif %}
-
-            // Update family filter if element exists
-            const familyFilterElement = document.getElementById('family-filter');
-            if (familyFilterElement) {
-                currentFamilyFilter = familyFilterElement.value;
-            }
-
-            createVolcanoPlot();
-
-            {% if outrider_volcano_data %}
-            createOutriderVolcanoPlot();
-            createOutriderGenesPlot();
-            {% endif %}
-
-            // Update significant count (only count filtered data)
-            const filteredIndices = getFilteredIndices(volcanoData.familyID || []);
-            let sigCount = 0;
-            for (const i of filteredIndices) {
-                if (volcanoData.padjust[i] <= currentPvalueThreshold &&
-                    Math.abs(volcanoData.deltaPsi[i]) >= currentDeltaPsiThreshold) {
-                    sigCount++;
-                }
-            }
-            document.getElementById('sig-count').textContent = sigCount;
-        }
-
-        // Reset thresholds
-        function resetThresholds() {
-            document.getElementById('pvalue-threshold').value = {{ default_pvalue_threshold }};
-            document.getElementById('deltapsi-threshold').value = {{ default_deltapsi_threshold }};
-            {% if outrider_volcano_data %}
-            const zScoreElement = document.getElementById('zscore-threshold');
-            if (zScoreElement) {
-                zScoreElement.value = {{ default_zscore_threshold }};
-            }
-            {% endif %}
-            updateThresholds();
-        }
-
-        // BAM loading functions
-        async function loadCustomBAM() {
-            if (!igvBrowser) {
-                alert('⚠️ IGV browser not initialized yet. Please wait for it to load, or click "Retry IGV Initialization" above.');
-                return;
-            }
-
-            const sampleId = document.getElementById('bam-sample-id').value.trim();
-            const bamUrl = document.getElementById('bam-url').value.trim();
-            const baiUrl = document.getElementById('bam-index-url').value.trim();
-
-            if (!sampleId || !bamUrl) {
-                alert('Please enter both Sample ID and BAM URL');
-                return;
-            }
-
-            await loadBAMTrack(sampleId, bamUrl, baiUrl || bamUrl + '.bai');
-        }
-
-        async function loadSampleBAM(sampleId, bamUrl, baiUrl) {
-            if (!igvBrowser) {
-                alert('⚠️ IGV browser not initialized yet. Please wait for it to load.');
-                return;
-            }
-
-            await loadBAMTrack(sampleId, bamUrl, baiUrl);
-        }
-
-        async function loadBAMTrack(sampleId, bamUrl, baiUrl) {
-            try {
-                console.log(`Loading BAM track for ${sampleId}...`);
-                console.log(`BAM URL: ${bamUrl}`);
-                console.log(`BAI URL: ${baiUrl}`);
-
-                const track = {
-                    name: `${sampleId} - Alignments`,
-                    type: "alignment",
-                    format: "bam",
-                    url: bamUrl,
-                    indexURL: baiUrl,
-                    visibilityWindow: 300000,
-                    alignmentRowHeight: 14,
-                    colorBy: "strand",
-                    showCoverage: true,
-                    coverageColor: "rgb(150, 150, 150)"
-                };
-
-                await igvBrowser.loadTrack(track);
-                loadedBAMs.push(sampleId);
-
-                // Update loaded BAMs list
-                document.getElementById('bam-list').textContent = loadedBAMs.join(', ');
-
-                // Clear input fields
-                document.getElementById('bam-sample-id').value = '';
-                document.getElementById('bam-url').value = '';
-                document.getElementById('bam-index-url').value = '';
-
-                console.log(`✅ Successfully loaded BAM track for ${sampleId}`);
-
-                // Show success message
-                const bamControls = document.getElementById('bam-controls');
-                const successMsg = document.createElement('div');
-                successMsg.style.cssText = 'background-color: #d4edda; color: #155724; padding: 10px; margin-top: 10px; border-radius: 5px; border: 1px solid #c3e6cb;';
-                successMsg.innerHTML = `✅ Successfully loaded BAM track for <strong>${sampleId}</strong>`;
-                bamControls.appendChild(successMsg);
-                setTimeout(() => successMsg.remove(), 5000);
-
-            } catch (error) {
-                console.error('Error loading BAM track:', error);
-                alert(`❌ Failed to load BAM track for ${sampleId}:\n\n${error.message}\n\nPlease check:\n- The BAM URL is accessible\n- The BAM index (.bai) file exists\n- CORS is configured if loading from a server\n- The file format is correct`);
-            }
-        }
-
-        // Initialize everything
-        window.onload = function() {
-            // Initialize Select2 for family filter
-            $('.select2-dropdown').select2({
-                placeholder: 'All Families',
-                allowClear: true,
-                width: '250px'
-            });
-
-            createVolcanoPlot();
-
-            {% if outrider_volcano_data %}
-            createOutriderVolcanoPlot();
-            createOutriderGenesPlot();
-            {% endif %}
-            initIGV();
-            initDataTables();
-        };
-    </script>
+        });
+
+        // Hide loading
+        document.getElementById('loading').style.display = 'none';
+
+        // IGV (non-blocking)
+        initIGV(fraserRows);
+
+    } catch (err) {
+        showError('Load error: ' + err.message + '\n\nFiles expected next to this HTML:\n  ./' + FILES.fraser +
+            (FILES.outrider ? '\n  ./' + FILES.outrider : ''));
+    }
+}
+
+function showError(msg) {
+    logLine('fatal', msg.split('\n')[0], 'log-err');
+    const box = document.getElementById('error-detail');
+    box.style.display = 'block';
+    box.textContent = 'ERROR: ' + msg;
+}
+
+window.onerror = function(msg, src, line, col) {
+    showError('Uncaught JS error: ' + msg + '\n  at ' + src + ':' + line + ':' + col);
+};
+window.onunhandledrejection = function(e) {
+    showError('Unhandled promise rejection: ' + (e.reason || e));
+};
+
+window.addEventListener('load', init);
+</script>
 </body>
 </html>
