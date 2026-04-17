@@ -22,7 +22,10 @@ from jinja2 import Environment, FileSystemLoader
 
 from rdrnaseq.scripts.dashboard_utilities import (
     add_family_ids,
+    build_ensg_to_hgnc_subset,
+    enrich_with_gene_mapping,
     load_cpg_to_family_mapping,
+    load_ensg_to_symbol,
     load_fraser_data,
     load_outrider_data,
 )
@@ -124,6 +127,9 @@ Examples:
     parser.add_argument(
         '--family-mapping', default=None, help='Path to CPG-to-Family mapping CSV (rdnow-export-project-summary format)'
     )
+    parser.add_argument(
+        '--ensg-to-symbol', required=True, help='Path to ENSG-to-HGNC-symbol TSV mapping file (two columns, no header)'
+    )
 
     return parser.parse_args()
 
@@ -132,12 +138,7 @@ def main() -> None:
     """Main entry point."""
     args = parse_args()
 
-    print('=' * 60)
-    print('FRASER/OUTRIDER Interactive Dashboard Generator')
-    print('=' * 60)
-
     # ── Load data ────────────────────────────────────────────────────────────
-    print('\nLoading data...')
     fraser_df = load_fraser_data(args.fraser)
     outrider_df = load_outrider_data(args.outrider) if args.outrider else None
 
@@ -160,6 +161,12 @@ def main() -> None:
         fraser_df = add_family_ids(fraser_df, cpg_to_family)
         if outrider_df is not None:
             outrider_df = add_family_ids(outrider_df, cpg_to_family)
+
+    # ── Load ENSG-to-symbol mapping and enrich DataFrames ──────────────────
+    print('\nLoading ENSG-to-symbol mapping...')
+    ensg_to_symbol = load_ensg_to_symbol(args.ensg_to_symbol)
+    print('\nEnriching DataFrames with gene name/ID columns...')
+    fraser_df, outrider_df = enrich_with_gene_mapping(fraser_df, outrider_df, ensg_to_symbol)
 
     # ── Determine output paths ───────────────────────────────────────────────
     output_html = Path(args.output)
@@ -187,8 +194,8 @@ def main() -> None:
     for cpg_id, family_id in cpg_to_family.items():
         family_map[cpg_id] = {'familyID': family_id}
 
-    # ENSG-to-HGNC mapping: placeholder — populated when --ensg-to-symbol is added
-    ensg_to_hgnc: dict[str, str] = {}
+    if outrider_df is not None and ensg_to_symbol:
+        ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
 
     # ── Render dashboard HTML ────────────────────────────────────────────────
     print('\nRendering dashboard...')

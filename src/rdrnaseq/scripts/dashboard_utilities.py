@@ -51,13 +51,87 @@ def _col(df: pd.DataFrame, col: str, default=None, fill=None) -> list:
 # =============================================================================
 
 
-def _genes_match(fraser_row: pd.Series, outrider_row: pd.Series) -> bool:
-    """Check if a FRASER row's HGNC symbol matches an OUTRIDER row's gene ID."""
-    fraser_gene = str(fraser_row.get('hgncSymbol', '')).upper() if pd.notna(fraser_row.get('hgncSymbol')) else ''
-    outrider_gene = str(outrider_row.get('geneID', outrider_row.get('hgncSymbol', ''))).upper()
-    if not fraser_gene:
-        return False
-    return fraser_gene in outrider_gene or any(fraser_gene in part for part in outrider_gene.split(';'))
+def load_ensg_to_symbol(filepath: str) -> dict[str, str]:
+    """
+    Load the ENSG-to-HGNC-symbol mapping from a two-column TSV (no header).
+
+    Returns a dict mapping ENSG IDs to HGNC symbols.  Each entry is stored
+    twice — with and without the version suffix — so lookups work regardless
+    of whether the caller's gene IDs include versions.
+
+    Example return: {"ENSG00000001461.17": "NIPAL3", "ENSG00000001461": "NIPAL3", ...}
+    """
+    mapping: dict[str, str] = {}
+    with open(filepath) as fh:
+        for raw_line in fh:
+            stripped = raw_line.strip()
+            if not stripped:
+                continue
+            parts = stripped.split('\t')
+            if len(parts) < 2:
+                continue
+            ensg_id, symbol = parts[0], parts[1]
+            mapping[ensg_id] = symbol
+            base_id = ensg_id.split('.')[0]
+            if base_id != ensg_id:
+                mapping[base_id] = symbol
+    print(f'  Loaded {len(mapping)} ENSG-to-symbol entries from {filepath}')
+    return mapping
+
+
+def build_ensg_to_hgnc_subset(df_outrider: pd.DataFrame, ensg_to_symbol: dict[str, str]) -> dict[str, str]:
+    """
+    Build a small ENSG→HGNC mapping limited to genes present in the OUTRIDER data.
+
+    This subset is embedded in the HTML template as a JS object so the browser
+    can match OUTRIDER (ENSG) genes with FRASER (HGNC) genes for common
+    significant results.
+    """
+    if 'geneID' not in df_outrider.columns:
+        return {}
+    unique_gene_ids = df_outrider['geneID'].dropna().unique()
+    subset: dict[str, str] = {}
+    for gid in unique_gene_ids:
+        gid_str = str(gid)
+        if gid_str in ensg_to_symbol:
+            subset[gid_str] = ensg_to_symbol[gid_str]
+    print(f'  Built ENSG-to-HGNC subset: {len(subset)} of {len(unique_gene_ids)} OUTRIDER genes mapped')
+    return subset
+
+
+def enrich_with_gene_mapping(
+    fraser_df: pd.DataFrame,
+    outrider_df: pd.DataFrame | None,
+    ensg_to_symbol: dict[str, str],
+) -> tuple[pd.DataFrame, pd.DataFrame | None]:
+    """
+    Add both gene name and gene ID columns to FRASER and OUTRIDER DataFrames.
+
+    - OUTRIDER: adds ``hgncSymbol`` by looking up ``geneID`` in the mapping.
+    - FRASER: adds ``geneID`` using the reverse (HGNC→ENSG) mapping.
+    """
+    # Build reverse mapping: HGNC symbol -> ENSG ID (prefer versioned IDs)
+    symbol_to_ensg: dict[str, str] = {}
+    for ensg_id, symbol in ensg_to_symbol.items():
+        # Only use the versioned (longer) ID so reverse lookups are unambiguous
+        if '.' in ensg_id:
+            symbol_to_ensg[symbol] = ensg_id
+
+    # OUTRIDER: geneID -> hgncSymbol
+    if outrider_df is not None and 'geneID' in outrider_df.columns:
+        outrider_df['hgncSymbol'] = outrider_df['geneID'].map(ensg_to_symbol).fillna('')
+        mapped = (outrider_df['hgncSymbol'] != '').sum()
+        print(f'  OUTRIDER: mapped {mapped}/{len(outrider_df)} rows to HGNC symbols')
+
+    # FRASER: hgncSymbol -> geneID
+    if 'hgncSymbol' in fraser_df.columns:
+        fraser_df['geneID'] = fraser_df['hgncSymbol'].map(symbol_to_ensg).fillna('')
+        mapped = (fraser_df['geneID'] != '').sum()
+        print(f'  FRASER: mapped {mapped}/{len(fraser_df)} rows to ENSG gene IDs')
+    else:
+        fraser_df['geneID'] = ''
+
+    return fraser_df, outrider_df
 
 
 # =============================================================================
@@ -170,11 +244,10 @@ def load_outrider_data(filepath: str) -> pd.DataFrame | None:
 
     validate_dataframe(df, OUTRIDER_REQUIRED_COLUMNS, OUTRIDER_OPTIONAL_COLUMNS, 'OUTRIDER')
 
-    # Standardize gene column name
-    if 'hgncSymbol' not in df.columns and 'geneID' in df.columns:
-        df['hgncSymbol'] = df['geneID']
-    elif 'hgncSymbol' not in df.columns:
-        df['hgncSymbol'] = 'NA'
+    # Ensure hgncSymbol column exists (will be properly populated by
+    # enrich_with_gene_mapping() when the ENSG-to-symbol mapping is available)
+    if 'hgncSymbol' not in df.columns:
+        df['hgncSymbol'] = ''
 
     print(f'  Loaded {len(df)} OUTRIDER rows')
     return df

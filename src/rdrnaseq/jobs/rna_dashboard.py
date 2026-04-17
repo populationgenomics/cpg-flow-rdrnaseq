@@ -107,6 +107,9 @@ def make_dashboards(
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
 
+    ensg_to_symbol_path = config_retrieve(['references', 'ensg_to_symbol'])
+    ensg_input = b.read_input(ensg_to_symbol_path)
+
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Processing dataset {dataset_name} with SG IDs: {sg_ids}')
@@ -138,6 +141,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --fraser {fraser_input} \
     --outrider {outrider_input} \
     --family-mapping /tmp/family_mapping.csv \
+    --ensg-to-symbol {ensg_input}\
     --output {j.out.dashboard_html} \
     --output-fraser-csv {j.out.fraser_csv} \
     --output-outrider-csv {j.out.outrider_csv}
