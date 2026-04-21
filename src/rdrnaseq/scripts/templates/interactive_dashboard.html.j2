@@ -369,8 +369,8 @@ function buildDT(tableId, rows, cols, existing) {
     });
 }
 
-const FRASER_COLS  = ['hgncSymbol', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
-const OUTRIDER_COLS = ['geneID', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
+const FRASER_COLS  = ['hgncSymbol', 'geneID', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
+const OUTRIDER_COLS = ['geneID', 'hgncSymbol', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'sampleID', 'familyID', 'chr', 'start', 'end', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
