@@ -7,19 +7,12 @@ via family-mapping metadata, and runs the dashboard CLI script to produce a
 self-contained HTML file.
 """
 
-from __future__ import annotations
-
-from typing import TYPE_CHECKING
-
+from cpg_utils import Path
 from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command, get_batch
+from hailtop.batch.job import Job
 from loguru import logger
 from metamist.graphql import gql, query
-
-if TYPE_CHECKING:
-    from cpg_utils import Path
-    from hailtop.batch.job import Job
-
 
 METADATA_QUERY = gql(
     """

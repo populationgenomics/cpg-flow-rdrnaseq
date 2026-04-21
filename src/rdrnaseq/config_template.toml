@@ -3,7 +3,7 @@ sequencing_type = 'transcriptome'
 
 # used to make sure we don't repeat previously completed stages
 check_expected_outputs = true
-
+populate_assays=true
 # the method to register outputs, can be missing - will not generate metamist analysis entries
 status_reporter = 'metamist'
 
@@ -12,6 +12,7 @@ adapter_type = "ILLUMINA_TRUSEQ"
 
 [references]
 ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
+ensg_to_symbol = "gs://cpg-rdnow-test-web/transcriptome/rna_dashboard/ensg_to_symbol.tsv"
 
 [references.star]
 ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"

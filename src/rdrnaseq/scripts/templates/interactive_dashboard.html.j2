@@ -251,8 +251,12 @@ function populateFamilyFilter() {
 
 // ─── FRASER Volcano ──────────────────────────────────────────────────────────
 function renderFraserVolcano(rows, pval, dpsi) {
-    const sig   = rows.filter(r => r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi);
-    const nosig = rows.filter(r => !(r.padjust <= pval && Math.abs(r.deltaPsi) >= dpsi));
+    const passP = r => r.padjust <= pval;
+    const passE = r => Math.abs(r.deltaPsi) >= dpsi;
+    const both    = rows.filter(r => passP(r) && passE(r));
+    const pOnly   = rows.filter(r => passP(r) && !passE(r));
+    const eOnly   = rows.filter(r => !passP(r) && passE(r));
+    const neither = rows.filter(r => !passP(r) && !passE(r));
     const mkTrace = (pts, color, name) => ({
         x: pts.map(r => r.deltaPsi),
         y: pts.map(r => log10p(r.pValue)),
@@ -268,7 +272,12 @@ function renderFraserVolcano(rows, pval, dpsi) {
         customdata: pts.map(r => [r.seqnames, r.start, r.end]),
     });
     Plotly.react('fraser-volcano',
-        [mkTrace(nosig, '#aaa', 'Not significant'), mkTrace(sig, '#e03131', 'Significant')],
+        [
+            mkTrace(neither, '#aaa',     'Not significant'),
+            mkTrace(pOnly,   '#f76707',  'Sig. p-value only'),
+            mkTrace(eOnly,   '#3b5bdb',  'Large \u0394\u03A8 only'),
+            mkTrace(both,    '#e03131',  'Fully significant'),
+        ],
         {
             xaxis: { title: '\u0394\u03A8', zeroline: true },
             yaxis: { title: '\u2212log10(p-value)' },
@@ -284,8 +293,12 @@ function renderFraserVolcano(rows, pval, dpsi) {
 
 // ─── OUTRIDER Volcano ────────────────────────────────────────────────────────
 function renderOutriderVolcano(rows, pval, zscore) {
-    const sig   = rows.filter(r => r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore);
-    const nosig = rows.filter(r => !(r.padjust <= pval && Math.abs(r.zScore || 0) >= zscore));
+    const passP = r => r.padjust <= pval;
+    const passE = r => Math.abs(r.zScore || 0) >= zscore;
+    const both    = rows.filter(r => passP(r) && passE(r));
+    const pOnly   = rows.filter(r => passP(r) && !passE(r));
+    const eOnly   = rows.filter(r => !passP(r) && passE(r));
+    const neither = rows.filter(r => !passP(r) && !passE(r));
     const fcVal = r => r.l2fc !== undefined && r.l2fc !== null ? r.l2fc : (r.log2fc !== undefined && r.log2fc !== null ? r.log2fc : 0);
     const mkTrace = (pts, color, name) => ({
         x: pts.map(fcVal),
@@ -297,11 +310,17 @@ function renderOutriderVolcano(rows, pval, zscore) {
             '<br>Sample: ' + r.sampleID +
             '<br>Family: ' + (r.familyID || 'NA') +
             '<br>Z: ' + (r.zScore || 0).toFixed(2) +
+            '<br>l2fc: ' + fcVal(r).toFixed(3) +
             '<br>padj: ' + (r.padjust || 0).toExponential(2)),
         hovertemplate: '%{text}<extra></extra>',
     });
     Plotly.react('outrider-volcano',
-        [mkTrace(nosig, '#aaa', 'Not significant'), mkTrace(sig, '#f76707', 'Significant')],
+        [
+            mkTrace(neither, '#aaa',     'Not significant'),
+            mkTrace(pOnly,   '#f76707',  'Sig. p-value only'),
+            mkTrace(eOnly,   '#3b5bdb',  'Large |Z| only'),
+            mkTrace(both,    '#e03131',  'Fully significant'),
+        ],
         {
             xaxis: { title: 'log2 Fold Change', zeroline: true },
             yaxis: { title: '\u2212log10(p-value)' },
