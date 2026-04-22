@@ -178,13 +178,13 @@ def validate_dataframe(df: pd.DataFrame, required_cols: list, optional_cols: lis
 
 def load_cpg_to_family_mapping(mapping_file: str) -> dict:
     """
-    Load CPG ID to Family ID mapping from project summary CSV.
+    Load CPG ID to Family ID mapping from a two-column CSV.
 
-    Args:
-        mapping_file: Path to rdnow-export-project-summary CSV file
+    Expected columns: ``sequencing_group.id``, ``family.external_ids``.
+    In the batch job this CSV is built on the fly from metamist query results.
 
     Returns:
-        Dictionary mapping CPG IDs (sequencing_group.id) to family.external_ids
+        Dictionary mapping sequencing group IDs to family external IDs.
     """
     print(f'Loading CPG to Family mapping from {mapping_file}...')
 

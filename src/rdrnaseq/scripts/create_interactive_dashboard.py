@@ -125,7 +125,7 @@ Examples:
     )
 
     parser.add_argument(
-        '--family-mapping', default=None, help='Path to CPG-to-Family mapping CSV (rdnow-export-project-summary format)'
+        '--family-mapping', default=None, help='Path to CSV with sequencing_group.id and family.external_ids columns'
     )
     parser.add_argument(
         '--ensg-to-symbol', required=True, help='Path to ENSG-to-HGNC-symbol TSV mapping file (two columns, no header)'
