@@ -2,6 +2,8 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
+from collections import defaultdict
+
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
     BamPath,
@@ -13,7 +15,7 @@ from cpg_utils import Path
 from hailtop.batch.job import Job
 from loguru import logger
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -247,6 +249,8 @@ class Outrider(stage.CohortStage):
         return {
             'RData': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.RData',
             'seqr_out': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.aberrant_genes_per_sample.csv',
+            'outrider_csv': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.all.csv',
+            'outrider_sig_csv': cohort.dataset.prefix() / 'outrider' / f'{cohort.id}.outrider.results.csv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -264,3 +268,42 @@ class Outrider(stage.CohortStage):
             job_attrs=self.get_job_attrs(),
         )
         return self.make_outputs(cohort, data=output, jobs=j)
+
+
+@stage.stage(required_stages=[Fraser, Outrider], analysis_type='web', analysis_keys=['dashboard_html'])
+class Dashboard(stage.CohortStage):
+    """
+    Create an interactive HTML dashboard from FRASER and OUTRIDER results.
+    """
+
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        prefix = cohort.dataset.web_prefix() / 'rna_dashboard'
+        base = f'{cohort.id}.rna_dashboard'
+        return {
+            'dashboard_html': prefix / f'{base}.html',
+            'fraser_csv': prefix / f'{base}.fraser.csv',
+            'outrider_csv': prefix / f'{base}.outrider.csv',
+        }
+
+    def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+        output = self.expected_outputs(cohort)
+
+        fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+        outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
+
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+        for sg in cohort.get_sequencing_groups():
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
+        logger.info(f'Sequence group IDs by dataset for dashboard: {dict(sg_ids_by_dataset)}')
+
+        jobs = rna_dashboard.make_dashboards(
+            fraser_csv=fraser_csv,
+            outrider_csv=outrider_csv,
+            output_paths=output,
+            sg_ids_by_dataset=sg_ids_by_dataset,
+            cohort_id=cohort.id,
+            job_attrs=self.get_job_attrs(),
+        )
+        return self.make_outputs(cohort, data=output, jobs=jobs)
