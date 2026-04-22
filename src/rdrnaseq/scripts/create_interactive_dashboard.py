@@ -194,6 +194,7 @@ def main() -> None:
     for cpg_id, family_id in cpg_to_family.items():
         family_map[cpg_id] = {'familyID': family_id}
 
+    ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
         ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
 

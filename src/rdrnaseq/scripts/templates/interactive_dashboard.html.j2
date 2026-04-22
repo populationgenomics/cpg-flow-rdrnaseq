@@ -84,7 +84,7 @@
             {% endif %}
             <div class="control-group">
                 <label>Filter by Family ID</label>
-                <select id="family-filter"><option value="">All families</option></select>
+                <select id="family-filter" multiple></select>
             </div>
             <div class="control-group" style="margin-top:22px">
                 <button onclick="applyThresholds()" style="padding:6px 18px;border:none;background:#3b5bdb;color:white;border-radius:4px;cursor:pointer">Apply</button>
@@ -246,7 +246,7 @@ function populateFamilyFilter() {
         const opt = document.createElement('option');
         opt.value = f; opt.textContent = f; sel.appendChild(opt);
     });
-    $('#family-filter').select2({ placeholder: 'Search families...', allowClear: true, width: '250px' });
+    $('#family-filter').select2({ placeholder: 'Search families...', allowClear: true, width: '350px' });
 }
 
 // ─── FRASER Volcano ──────────────────────────────────────────────────────────
@@ -482,10 +482,10 @@ function applyThresholds() {
     const dpsi   = parseFloat(document.getElementById('dpsi-thresh').value) || DEFAULT_DPSI;
     const zEl    = document.getElementById('zscore-thresh');
     const zscore = zEl ? (parseFloat(zEl.value) || DEFAULT_ZSCORE) : DEFAULT_ZSCORE;
-    const family = document.getElementById('family-filter').value;
+    const families = $('#family-filter').val() || [];
 
-    const fView = family ? fraserRows.filter(r => r.familyID === family) : fraserRows;
-    const oView = family ? outriderRows.filter(r => r.familyID === family) : outriderRows;
+    const fView = families.length ? fraserRows.filter(r => families.includes(r.familyID)) : fraserRows;
+    const oView = families.length ? outriderRows.filter(r => families.includes(r.familyID)) : outriderRows;
 
     renderFraserVolcano(fView, pval, dpsi);
     if (outriderRows.length) renderOutriderVolcano(oView, pval, zscore);
@@ -506,7 +506,7 @@ function resetFilters() {
     document.getElementById('dpsi-thresh').value = DEFAULT_DPSI;
     const zEl = document.getElementById('zscore-thresh');
     if (zEl) zEl.value = DEFAULT_ZSCORE;
-    $('#family-filter').val('').trigger('change');
+    $('#family-filter').val([]).trigger('change');
     applyThresholds();
 }
 

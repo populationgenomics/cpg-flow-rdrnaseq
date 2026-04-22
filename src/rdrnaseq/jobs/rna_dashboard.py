@@ -7,8 +7,7 @@ via family-mapping metadata, and runs the dashboard CLI script to produce a
 self-contained HTML file.
 """
 
-from cpg_utils import Path
-from cpg_utils.config import config_retrieve
+from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 from loguru import logger
@@ -95,7 +94,7 @@ def make_dashboards(
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
 
-    ensg_to_symbol_path = config_retrieve(['references', 'ensg_to_symbol'])
+    ensg_to_symbol_path = config.config_retrieve(['references', 'ensg_to_symbol'])
     ensg_input = b.read_input(ensg_to_symbol_path)
 
     jobs: list[Job] = []
@@ -104,7 +103,7 @@ def make_dashboards(
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
-        j.image(workflow.driver_image)
+        j.image(config.config_retrieve('workflow')['driver_image'])
         j.declare_resource_group(
             out={
                 'dashboard_html': f'{cohort_id}.rna_dashboard.html',
@@ -129,7 +128,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --fraser {fraser_input} \
     --outrider {outrider_input} \
     --family-mapping /tmp/family_mapping.csv \
-    --ensg-to-symbol {ensg_input}\
+    --ensg-to-symbol {ensg_input} \
     --output {j.out.dashboard_html} \
     --output-fraser-csv {j.out.fraser_csv} \
     --output-outrider-csv {j.out.outrider_csv}
@@ -140,8 +139,10 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
         for k, p in output_paths.items():
             b.write_output(j.out[k], str(p))
 
-        web_path = (f'https://main-web.populationgenomics.org.au/{dataset_name}'
-                    f'/transcriptome/rna_dashboard/{j.out.dashboard_html}')
+        web_path = (
+            f'https://main-web.populationgenomics.org.au/{dataset_name}'
+            f'/transcriptome/rna_dashboard/{j.out.dashboard_html}'
+        )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
 
