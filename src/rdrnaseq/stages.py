@@ -294,6 +294,8 @@ class Dashboard(stage.CohortStage):
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
         logger.info(f'Sequence group IDs by dataset for dashboard: {dict(sg_ids_by_dataset)}')
 
         jobs = rna_dashboard.make_dashboards(

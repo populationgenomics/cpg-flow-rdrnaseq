@@ -91,11 +91,6 @@ def make_dashboards(
     output_paths keys: 'dashboard_html', 'fraser_csv', 'outrider_csv'
     """
     b = get_batch()
-    access_level = config_retrieve(['workflow', 'access_level'], 'main')
-
-    if access_level == 'test':
-        fraser_csv = str(fraser_csv).replace('main', 'test')
-        outrider_csv = str(outrider_csv).replace('main', 'test')
 
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
@@ -109,7 +104,7 @@ def make_dashboards(
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
-        j.image(config_retrieve(['images', 'rdrnaseq']))
+        j.image(workflow.driver_image)
         j.declare_resource_group(
             out={
                 'dashboard_html': f'{cohort_id}.rna_dashboard.html',
@@ -140,11 +135,13 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --output-outrider-csv {j.out.outrider_csv}
 """),
         )
-
+        # TODO: When working with a Cohort across multiple datasets,
+        #  we will need multiple dashboards to be registered and written so this will need refactoring
         for k, p in output_paths.items():
             b.write_output(j.out[k], str(p))
 
-        web_path = f'https://{access_level}-web.populationgenomics.org.au/{dataset_name}/transcriptome/rna_dashboard/'
+        web_path = (f'https://main-web.populationgenomics.org.au/{dataset_name}'
+                    f'/transcriptome/rna_dashboard/{j.out.dashboard_html}')
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
 
