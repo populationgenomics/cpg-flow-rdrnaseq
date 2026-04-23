@@ -1,7 +1,7 @@
 # ruff: noqa: PLR0912
 # ruff: noqa: PLR0915
 import hailtop.batch as hb
-from cpg_flow.resources import HIGHMEM, STANDARD, MachineType
+from cpg_flow.resources import HIGHMEM, MachineType
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
@@ -247,7 +247,7 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
         base_storage_gb=BASE_STORAGE_GB_SAMPLE,
         per_bam_storage=PER_BAM_STORAGE_SAMPLE,
         ncpu=NCPU_SAMPLE,
-        machine_required=STANDARD,
+        machine_required=HIGHMEM,
     )
 
     j.command('mkdir -p /io/batch/input_bams')
@@ -338,7 +338,7 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
         base_storage_gb=BASE_STORAGE_GB_SAMPLE,
         per_bam_storage=PER_BAM_STORAGE_SAMPLE,
         ncpu=NCPU_SAMPLE,
-        machine_required=STANDARD,
+        machine_required=HIGHMEM,
     )
 
     j.command('mkdir -p /io/batch/input_bams')
