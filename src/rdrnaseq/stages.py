@@ -11,7 +11,7 @@ from cpg_flow.filetypes import (
     FastqPair,
     FastqPairs,
 )
-from cpg_utils import Path
+from cpg_utils import Path, config
 from hailtop.batch.job import Job
 from loguru import logger
 
@@ -257,6 +257,7 @@ class Outrider(stage.CohortStage):
         """
         Queue a job to run outrider.
         """
+        requested_nthreads: int = config.config_retrieve(['cohort_job_resources', 'ncpu'])
         output = self.expected_outputs(cohort)
         count_inputs = [
             inputs.as_path(sequencing_group, Count, 'count') for sequencing_group in cohort.get_sequencing_groups()
@@ -266,6 +267,7 @@ class Outrider(stage.CohortStage):
             output_rdata_path=output['RData'],
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            requested_nthreads=requested_nthreads,
         )
         return self.make_outputs(cohort, data=output, jobs=j)
 
