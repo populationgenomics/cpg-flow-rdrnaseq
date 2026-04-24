@@ -6,7 +6,7 @@ from os.path import basename
 from textwrap import dedent
 
 import hailtop.batch as hb
-from cpg_flow.resources import STANDARD
+from cpg_flow.resources import HIGHMEM
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
@@ -321,7 +321,7 @@ def outrider(
 
     # Set resource requirements
     nthreads = requested_nthreads or 8
-    res = STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=50)
+    res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     j.declare_resource_group(
         output={
