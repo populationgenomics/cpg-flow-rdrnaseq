@@ -1,13 +1,14 @@
 # ruff: noqa: PLR0912
 # ruff: noqa: PLR0915
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+from loguru import logger
+
 from cpg_flow.resources import HIGHMEM, MachineType
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
 from cpg_utils.config import config_retrieve, get_config
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch.job import Job
-from loguru import logger
 
 R_INIT = 'RDrnaseq/fraser_init.R'
 R_COUNT_SPLIT = 'RDrnaseq/fraser_count_split.R'
