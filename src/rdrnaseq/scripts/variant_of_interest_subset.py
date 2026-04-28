@@ -108,7 +108,7 @@ def main():  # noqa: PLR0915
     parser.add_argument('--mt', required=True, help='GCS path to the seqr-loader MatrixTable')
     parser.add_argument('--csv', required=True, help='Path to FRASER significant results CSV')
     parser.add_argument('--rna_ids', required=True, help='RNA sample IDs', nargs='+')
-    parser.add_argument('--query_dataset', help='Metamist project name', default='rdnow')
+    parser.add_argument('--query_dataset', required=True, help='Metamist project name')
     parser.add_argument('--output', required=True, help='Output path for BED-like TSV')
     args = parser.parse_args()
 
