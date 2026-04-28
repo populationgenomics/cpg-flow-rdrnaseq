@@ -7,10 +7,11 @@ via family-mapping metadata, and runs the dashboard CLI script to produce a
 self-contained HTML file.
 """
 
-from cpg_utils import Path, config
-from cpg_utils.hail_batch import command, get_batch
 from hailtop.batch.job import Job
 from loguru import logger
+
+from cpg_utils import Path, config
+from cpg_utils.hail_batch import command, get_batch
 from metamist.graphql import gql, query
 
 METADATA_QUERY = gql(

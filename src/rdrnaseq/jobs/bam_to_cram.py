@@ -3,11 +3,12 @@ Convert BAM to CRAM.
 """
 
 # ruff: noqa: E501
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
+
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
 
 
 def bam_to_cram(

@@ -4,6 +4,9 @@ Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 
 from collections import defaultdict
 
+from hailtop.batch.job import Job
+from loguru import logger
+
 from cpg_flow import stage, targets, utils
 from cpg_flow.filetypes import (
     BamPath,
@@ -12,8 +15,6 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
-from hailtop.batch.job import Job
-from loguru import logger
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim
 

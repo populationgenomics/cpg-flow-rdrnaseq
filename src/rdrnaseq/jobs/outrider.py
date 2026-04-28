@@ -6,11 +6,12 @@ from os.path import basename
 from textwrap import dedent
 
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+
 from cpg_flow.resources import HIGHMEM
 from cpg_utils import Path, to_path
 from cpg_utils.config import get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch.job import Job
 
 
 class Outrider:

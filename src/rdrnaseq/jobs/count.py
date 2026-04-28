@@ -3,10 +3,11 @@ Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
 """
 
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+
 from cpg_flow.filetypes import BamPath
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path, config, hail_batch
-from hailtop.batch.job import Job
 
 
 class FeatureCounts:

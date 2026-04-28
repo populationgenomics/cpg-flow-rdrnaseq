@@ -5,14 +5,15 @@ Trim raw FASTQ reads using fastp
 from dataclasses import dataclass
 from enum import Enum
 
+from hailtop.batch import ResourceGroup
+from hailtop.batch.job import Job
+
 from cpg_flow.filetypes import FastqPair
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
 from cpg_utils import config
 from cpg_utils.config import image_path
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch import ResourceGroup
-from hailtop.batch.job import Job
 
 # Default configuration constants
 DEFAULT_MIN_LENGTH = 50

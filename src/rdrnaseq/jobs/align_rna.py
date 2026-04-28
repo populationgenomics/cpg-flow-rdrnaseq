@@ -6,6 +6,8 @@ within a Hail Batch workflow.
 """
 
 import hailtop.batch as hb
+from hailtop.batch.job import Job
+
 from cpg_flow.filetypes import (
     BamPath,
     CramPath,
@@ -15,7 +17,6 @@ from cpg_flow.filetypes import (
 from cpg_flow.resources import HIGHMEM, STANDARD
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
-from hailtop.batch.job import Job
 
 from rdrnaseq.jobs.bam_to_cram import bam_to_cram
 from rdrnaseq.jobs.markdups import markdup
