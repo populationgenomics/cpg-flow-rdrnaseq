@@ -313,8 +313,8 @@ def outrider(
     gtf_file_rg = b.read_input_group(gtf=str(gtf_file))
 
     # Get Outrider parameters
-    pval_cutoff = get_config().get('outrider', {}).get('pval_cutoff', 0.1)
-    z_cutoff = get_config().get('outrider', {}).get('z_cutoff', 0.0)
+    pval_cutoff = get_config()['outrider']['pval_cutoff']
+    z_cutoff = get_config()['outrider']['z_cutoff']
 
     # Create job
     j = b.new_job(f'outrider_{cohort_id}', attributes=job_attrs | {'tool': 'outrider'})

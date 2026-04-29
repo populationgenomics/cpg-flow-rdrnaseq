@@ -481,8 +481,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
         machine_required=HIGHMEM,
     )
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
-    cfg = get_config().get('fraser', {})
-    z_cutoff_arg = f'--z_cutoff {cfg["z_cutoff"]}' if 'z_cutoff' in cfg else ''
+    cfg = get_config()['fraser']
 
     j.command(
         command(f"""
@@ -490,10 +489,10 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
         tar -xzf {fds_tar} -C /io/work/savedObjects/
 
         Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
-            --pval_cutoff {cfg.get('pval_cutoff', 0.1)} \\
-            --delta_psi_cutoff {cfg.get('delta_psi_cutoff', 0.1)} \\
-            --min_count {cfg.get('min_count', 5)} \\
-            --nthreads {threads} {z_cutoff_arg}
+            --pval_cutoff {cfg['pval_cutoff']} \\
+            --delta_psi_cutoff {cfg['delta_psi_cutoff']} \\
+            --min_count {cfg['min_count']} \\
+            --nthreads {threads} --z_cutoff {cfg['z_cutoff']}
 
         tar -czvf {j.out.plots} qc_plots
         cp {cohort_id}.significant.csv {j.out.significant_results}
