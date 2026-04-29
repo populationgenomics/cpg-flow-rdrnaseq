@@ -8,11 +8,12 @@ Exports as a BED-like TSV with all variant annotations.
 import argparse
 
 import pandas as pd
-from cpg_utils import hail_batch
 from loguru import logger
-from metamist.graphql import gql, query
 
 import hail as hl
+
+from cpg_utils import hail_batch
+from metamist.graphql import gql, query
 
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
