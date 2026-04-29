@@ -490,7 +490,7 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
             --pval_cutoff {config_retrieve(['fraser', 'pval_cutoff'])} \\
             --delta_psi_cutoff {config_retrieve(['fraser', 'delta_psi_cutoff'])} \\
             --min_count {config_retrieve(['fraser', 'min_count'])} \\
-            --nthreads {threads} --z_cutoff {config_retrieve(['fraser', 'z_cutoff'])}
+            --nthreads {threads}
 
         tar -czvf {j.out.plots} qc_plots
         cp {cohort_id}.significant.csv {j.out.significant_results}
