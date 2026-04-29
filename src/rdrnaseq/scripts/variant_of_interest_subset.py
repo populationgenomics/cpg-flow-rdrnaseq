@@ -21,22 +21,17 @@ MAX_POPMAX_AF = 0.01
 
 query_ids = gql(
     """
-query Pedigree($project: String!, $sampleExternalIds: [String!]!) {
-  project(name: $project) {
+        query Pedigree($project: String!, $sample_external_IDs: [String!]!) {
+      project(name: $project) {
     sequencingGroups(
-      id: {in_: $sampleExternalIds}) {
+      id: {in_: $sample_external_IDs}) {
       id
-      meta
       sample {
-        meta
-        id
         participant {
-          externalId
           samples {
-            id
-            externalId
             sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}) {
               id
+              technology
               type
             }
           }
