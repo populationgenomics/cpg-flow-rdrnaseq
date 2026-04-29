@@ -25,7 +25,7 @@ class Outrider:
         output: hb.ResourceGroup,
         gtf_file: str | Path | None = None,
         nthreads: int = 8,
-        pval_cutoff: float = 0.05,
+        pval_cutoff: float = 0.1,
         z_cutoff: float = 0.0,
     ) -> None:
         self.input_counts = input_counts
@@ -313,7 +313,7 @@ def outrider(
     gtf_file_rg = b.read_input_group(gtf=str(gtf_file))
 
     # Get Outrider parameters
-    pval_cutoff = get_config().get('outrider', {}).get('pval_cutoff', 0.05)
+    pval_cutoff = get_config().get('outrider', {}).get('pval_cutoff', 0.1)
     z_cutoff = get_config().get('outrider', {}).get('z_cutoff', 0.0)
 
     # Create job
