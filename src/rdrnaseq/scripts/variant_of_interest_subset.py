@@ -120,7 +120,7 @@ def main():  # noqa: PLR0915
     logger.info(f'Input RNA sample IDs: {relevant_ids}')
     variables = {'project': args.query_dataset, 'sample_external_IDs': relevant_ids}
 
-    # build a dictionary mapping from RNA sample ID to set of genome sample IDs for that participant
+    # build a dictionary mapping from RNA sample ID to set of genome SG IDs for that participant
     result = query(query_ids, variables=variables)
     rna_to_genome_ids = {}
     for group in result['project']['sequencingGroups']:
