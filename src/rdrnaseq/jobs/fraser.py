@@ -7,7 +7,7 @@ from loguru import logger
 from cpg_flow.resources import HIGHMEM, MachineType
 from cpg_flow.utils import exists
 from cpg_utils import Path, to_path
-from cpg_utils.config import config_retrieve, get_config
+from cpg_utils.config import config_retrieve
 from cpg_utils.hail_batch import command, get_batch
 
 R_INIT = 'RDrnaseq/fraser_init.R'
@@ -481,18 +481,16 @@ def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples)
         machine_required=HIGHMEM,
     )
     j.declare_resource_group(out={k: v.name for k, v in output_paths.items()})
-    cfg = get_config()['fraser']
-
     j.command(
         command(f"""
         mkdir -p /io/work/savedObjects
         tar -xzf {fds_tar} -C /io/work/savedObjects/
 
         Rscript {R_ANALYSIS} --fds_dir "/io/work/savedObjects" --cohort_id "{cohort_id}" \\
-            --pval_cutoff {cfg['pval_cutoff']} \\
-            --delta_psi_cutoff {cfg['delta_psi_cutoff']} \\
-            --min_count {cfg['min_count']} \\
-            --nthreads {threads} --z_cutoff {cfg['z_cutoff']}
+            --pval_cutoff {config_retrieve(['fraser', 'pval_cutoff'])} \\
+            --delta_psi_cutoff {config_retrieve(['fraser', 'delta_psi_cutoff'])} \\
+            --min_count {config_retrieve(['fraser', 'min_count'])} \\
+            --nthreads {threads} --z_cutoff {config_retrieve(['fraser', 'z_cutoff'])}
 
         tar -czvf {j.out.plots} qc_plots
         cp {cohort_id}.significant.csv {j.out.significant_results}

@@ -10,7 +10,7 @@ from hailtop.batch.job import Job
 
 from cpg_flow.resources import HIGHMEM
 from cpg_utils import Path, to_path
-from cpg_utils.config import get_config, image_path
+from cpg_utils.config import config_retrieve, get_config, image_path
 from cpg_utils.hail_batch import command, get_batch
 
 
@@ -313,8 +313,8 @@ def outrider(
     gtf_file_rg = b.read_input_group(gtf=str(gtf_file))
 
     # Get Outrider parameters
-    pval_cutoff = get_config()['outrider']['pval_cutoff']
-    z_cutoff = get_config()['outrider']['z_cutoff']
+    pval_cutoff = config_retrieve(['outrider', 'pval_cutoff'])
+    z_cutoff = config_retrieve(['outrider', 'z_cutoff'])
 
     # Create job
     j = b.new_job(f'outrider_{cohort_id}', attributes=job_attrs | {'tool': 'outrider'})
