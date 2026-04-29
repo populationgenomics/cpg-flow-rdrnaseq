@@ -114,7 +114,7 @@ def main():  # noqa: PLR0915
     args = parser.parse_args()
 
     hail_batch.init_batch()
-    # Step 0: RNA sample ids to a set of their Genome sample IDs
+    # Step 0: RNA SG IDs to a set of genome SG IDs from the same participants
 
     relevant_ids = list(set(args.rna_ids))
     logger.info(f'Input RNA sample IDs: {relevant_ids}')
