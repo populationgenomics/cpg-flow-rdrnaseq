@@ -7,7 +7,7 @@ name='rdrnaseq'
 description='Rare Disease RNAseq workflow, implemented in CPG-Flow'
 readme = "README.md"
 requires-python = ">=3.10,<3.12"
-version="2.0.3"
+version='2.0.3'
 license={ "file" = "LICENSE" }
 classifiers=[
     'Environment :: Console',
