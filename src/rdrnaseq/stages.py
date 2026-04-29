@@ -189,7 +189,7 @@ class Fraser(stage.CohortStage):
         """
         return {
             'Rds_data': str(cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fds.tar.gz'),
-            'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv',
+            'seqr_data': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.all.csv.gz',
             'sig_results': cohort.dataset.prefix() / 'fraser' / f'{cohort.id}.results.significant.csv',
             'temp_data': str(cohort.dataset.tmp_prefix() / 'fraser' / f'{cohort.id}.fraser_temp_data'),
         }
