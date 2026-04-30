@@ -1,10 +1,6 @@
 [workflow]
 sequencing_type = 'transcriptome'
 
-input_cohorts = ["COH12026"]
-
-force_stages= ["Outrider", "Dashboard"]
-
 # used to make sure we don't repeat previously completed stages
 check_expected_outputs = true
 populate_assays=true
