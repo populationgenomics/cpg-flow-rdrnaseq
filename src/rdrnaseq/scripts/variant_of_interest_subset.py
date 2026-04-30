@@ -63,11 +63,13 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
             'start': rows[0]['buf_start'],
             'end': rows[0]['buf_end'],
             'sample_ids': set(rows[0]['genome_ids']),
+            'fraser_regions': [(rows[0]['start'], rows[0]['end'])],
         }
         for row in rows[1:]:
             if row['buf_start'] <= current['end']:
                 current['end'] = max(current['end'], row['buf_end'])
                 current['sample_ids'].update(row['genome_ids'])
+                current['fraser_regions'].append((row['start'], row['end']))
             else:
                 merged.append(current)
                 current = {
@@ -75,6 +77,7 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
                     'start': row['buf_start'],
                     'end': row['buf_end'],
                     'sample_ids': set(row['genome_ids']),
+                    'fraser_regions': [(row['start'], row['end'])],
                 }
         merged.append(current)
 
@@ -105,19 +108,32 @@ def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval
         )
         for iv in merged_intervals
     ]
+    fraser_region_schema = hl.tstruct(start=hl.tint32, end=hl.tint32)
     rows = [
-        hl.Struct(chrom=iv['chrom'], start=iv['start'], end=iv['end'], sample_ids=sorted(iv['sample_ids']))
+        hl.Struct(
+            chrom=iv['chrom'],
+            start=iv['start'],
+            end=iv['end'],
+            sample_ids=sorted(iv['sample_ids']),
+            fraser_regions=[hl.Struct(start=s, end=e) for s, e in iv['fraser_regions']],
+        )
         for iv in merged_intervals
     ]
     ht = hl.Table.parallelize(
         rows,
-        schema=hl.tstruct(chrom=hl.tstr, start=hl.tint32, end=hl.tint32, sample_ids=hl.tarray(hl.tstr)),
+        schema=hl.tstruct(
+            chrom=hl.tstr,
+            start=hl.tint32,
+            end=hl.tint32,
+            sample_ids=hl.tarray(hl.tstr),
+            fraser_regions=hl.tarray(fraser_region_schema),
+        ),
     )
     ht = ht.annotate(
         interval=hl.locus_interval(ht.chrom, ht.start, ht.end, includes_end=True, reference_genome=REFERENCE_GENOME),
         csv_sample_ids=hl.set(ht.sample_ids),
     )
-    ht = ht.select('interval', 'csv_sample_ids')
+    ht = ht.select('interval', 'csv_sample_ids', 'fraser_regions')
     return hail_intervals, ht.key_by('interval')
 
 
@@ -145,7 +161,11 @@ def subset_mt_to_variants_of_interest(
     ht = mt.rows()
 
     logger.info('Annotating variants with CSV region sample IDs')
-    ht = ht.annotate(csv_sample_ids=interval_ht.index(ht.locus).csv_sample_ids)
+    interval_annot = interval_ht.index(ht.locus)
+    ht = ht.annotate(
+        csv_sample_ids=interval_annot.csv_sample_ids,
+        fraser_regions=interval_annot.fraser_regions,
+    )
 
     ht = ht.annotate(
         carriers=ht.samples_num_alt['1'].union(ht.samples_num_alt['2']),
@@ -162,13 +182,37 @@ def subset_mt_to_variants_of_interest(
         & (hl.is_missing(gnomad_exomes_af) | (gnomad_exomes_af < MAX_POPMAX_AF)),
     )
 
-    # BED is 0-based half-open: start = pos - 1, end = pos - 1 + len(ref)
+    pos = ht.locus.position
     ht = ht.annotate(
+        fraser_distance=hl.min(
+            ht.fraser_regions.map(
+                lambda r: hl.if_else(
+                    (pos >= r.start) & (pos <= r.end),
+                    0,
+                    hl.min(hl.abs(pos - r.start), hl.abs(pos - r.end)),
+                )
+            )
+        ),
         bed_chrom=ht.locus.contig,
         bed_start=ht.locus.position - 1,
-        bed_end=ht.locus.position - 1 + ht.alleles[0].length(),
+        bed_end=ht.locus.position - 1 + hl.max(ht.alleles[0].length(), ht.alleles[1].length()),
     )
-    return ht.drop('csv_sample_ids', 'carriers')
+
+    fields = {
+        'gene_symbol': ht.mainTranscript.gene_symbol,
+        'major_consequence': ht.mainTranscript.major_consequence,
+        'splice_ai_delta_score': ht.splice_ai.delta_score,
+        'splice_ai_consequence': ht.splice_ai.splice_consequence,
+        'matching_samples': ht.matching_samples,
+        'fraser_distance': ht.fraser_distance,
+        'bed_chrom': ht.bed_chrom,
+        'bed_start': ht.bed_start,
+        'bed_end': ht.bed_end,
+    }
+    if 'avis_phred' in ht.row:
+        fields['avis_phred'] = ht.avis_phred
+
+    return ht.select(**fields)
 
 
 def read_fraser_csv(csv_path: str, rna_to_genome_ids: dict[str, set[str]]) -> pd.DataFrame:
@@ -217,20 +261,19 @@ def main():
 
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht)
 
-    # --- Export full TSV with all annotations ---
+    # --- Export TSV ---
     tsv_path = args.output.replace('.bed', '.tsv') if args.output.endswith('.bed') else args.output + '.tsv'
-    ht_flat = ht.flatten()
-    logger.info(f'Exporting full TSV to {tsv_path}')
-    ht_flat.export(tsv_path, delimiter='\t')
+    logger.info(f'Exporting TSV to {tsv_path}')
+    ht.export(tsv_path, delimiter='\t')
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(
         bed_chrom=ht.bed_chrom,
         bed_start=ht.bed_start,
         bed_end=ht.bed_end,
-        name=hl.or_else(ht.mainTranscript.gene_symbol, 'intergenic')
+        name=hl.or_else(ht.gene_symbol, 'intergenic')
         + '|'
-        + hl.or_else(ht.mainTranscript.major_consequence, 'unknown'),
+        + hl.or_else(ht.major_consequence, 'unknown'),
     )
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
