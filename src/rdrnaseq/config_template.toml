@@ -30,6 +30,16 @@ samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0
 samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
 subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"
 
+[fraser]
+pval_cutoff = 0.1
+delta_psi_cutoff = 0.1
+min_count = 5
+
+
+[outrider]
+pval_cutoff = 0.1
+z_cutoff = 0.0
+
 [cohort_job_resources]
 base_storage_gb=100
 per_bam_storage=10
