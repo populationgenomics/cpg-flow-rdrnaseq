@@ -16,7 +16,7 @@ from cpg_flow.filetypes import (
 )
 from cpg_utils import Path, config
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_annotation
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -273,7 +273,43 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=[Fraser, Outrider], analysis_type='web', analysis_keys=['dashboard_html'])
+@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['annotation_bed'])
+class VariantAnnotation(stage.CohortStage):
+    """
+    Annotate FRASER significant regions (determined using rna data)
+     with rare variants from a seqr-loader MatrixTable (by finding their corresponding genome data).
+    """
+
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        return {
+            'annotation_bed': cohort.dataset.prefix() / 'variant_annotation' / f'{cohort.id}.variants_of_interest.bed',
+        }
+
+    def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+        output = self.expected_outputs(cohort)
+
+        fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+        mt_path: str = config.config_retrieve(['variant_annotation', 'mt_path'])
+
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+        for sg in cohort.get_sequencing_groups():
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
+        jobs = variant_annotation.annotate_variants(
+            fraser_csv=fraser_csv,
+            mt_path=mt_path, # using a manual path rn, gotta find out how to get this from dataset name
+            sg_ids_by_dataset=sg_ids_by_dataset,
+            output_bed=output['annotation_bed'],
+            cohort_id=cohort.id,
+            job_attrs=self.get_job_attrs(),
+        )
+        return self.make_outputs(cohort, data=output, jobs=jobs)
+
+
+@stage.stage(
+    required_stages=[Fraser, Outrider, VariantAnnotation], analysis_type='web', analysis_keys=['dashboard_html']
+)
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
