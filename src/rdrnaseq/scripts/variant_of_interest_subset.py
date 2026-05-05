@@ -1,7 +1,8 @@
 """Subset a seqr-loader MatrixTable to FRASER significant regions and extract variants of interest.
 
 For each FRASER significant region (±200bp buffer), finds variants where at least one
-carrier sample (het or hom-alt) matches the FRASER sampleID for that region.
+carrier (het or hom-alt) has a genome SG ID matching the RNA SG ID flagged by FRASER (which has a rna sg id and
+is mapped to the same participant via Metamist).
 Exports as a BED-like TSV with all variant annotations.
 """
 
@@ -21,10 +22,10 @@ MAX_POPMAX_AF = 0.01
 
 query_ids = gql(
     """
-        query Pedigree($project: String!, $sample_external_IDs: [String!]!) {
+        query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
       project(name: $project) {
     sequencingGroups(
-      id: {in_: $sample_external_IDs}) {
+      id: {in_: $RnaSequencingGroupIds}) {
       id
       sample {
         participant {
@@ -48,7 +49,7 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
     """Merge overlapping buffered intervals, unioning their sequencing group ID sets.
 
     Takes a DataFrame with columns: seqnames, start, end, genome_sg_ids (set per row).
-    Returns a list of dicts with keys: chrom, start, end, sample_sg_ids (set of genome IDs).
+    Returns a list of dicts with keys: chrom, start, end, genome_sg_ids (set of genome IDs).
     """
     df = df.copy()
     df['buf_start'] = df['start'] - BUFFER_BP
@@ -62,13 +63,13 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
             'chrom': chrom,
             'start': rows[0]['buf_start'],
             'end': rows[0]['buf_end'],
-            'sample_ids': set(rows[0]['genome_ids']),
+            'genome_sg_ids': set(rows[0]['genome_ids']),
             'fraser_regions': [(rows[0]['start'], rows[0]['end'])],
         }
         for row in rows[1:]:
             if row['buf_start'] <= current['end']:
                 current['end'] = max(current['end'], row['buf_end'])
-                current['sample_ids'].update(row['genome_ids'])
+                current['genome_sg_ids'].update(row['genome_ids'])
                 current['fraser_regions'].append((row['start'], row['end']))
             else:
                 merged.append(current)
@@ -76,7 +77,7 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
                     'chrom': chrom,
                     'start': row['buf_start'],
                     'end': row['buf_end'],
-                    'sample_ids': set(row['genome_ids']),
+                    'genome_sg_ids': set(row['genome_ids']),
                     'fraser_regions': [(row['start'], row['end'])],
                 }
         merged.append(current)
@@ -100,7 +101,7 @@ def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
 
 
 def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval], hl.Table]:
-    """Build Hail interval list for filtering and a keyed Table for sample ID annotation."""
+    """Build Hail interval list for filtering and a keyed Table for SG ID annotation."""
     hail_intervals = [
         hl.parse_locus_interval(
             f'[{iv["chrom"]}:{iv["start"]}-{iv["end"]}]',
@@ -114,7 +115,7 @@ def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval
             chrom=iv['chrom'],
             start=iv['start'],
             end=iv['end'],
-            sample_ids=sorted(iv['sample_ids']),
+            genome_sg_ids=sorted(iv['genome_sg_ids']),
             fraser_regions=[hl.Struct(start=s, end=e) for s, e in iv['fraser_regions']],
         )
         for iv in merged_intervals
@@ -125,15 +126,15 @@ def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval
             chrom=hl.tstr,
             start=hl.tint32,
             end=hl.tint32,
-            sample_ids=hl.tarray(hl.tstr),
+            genome_sg_ids=hl.tarray(hl.tstr),
             fraser_regions=hl.tarray(fraser_region_schema),
         ),
     )
     ht = ht.annotate(
         interval=hl.locus_interval(ht.chrom, ht.start, ht.end, includes_end=True, reference_genome=REFERENCE_GENOME),
-        csv_sample_ids=hl.set(ht.sample_ids),
+        genome_sg_ids=hl.set(ht.genome_sg_ids),
     )
-    ht = ht.select('interval', 'csv_sample_ids', 'fraser_regions')
+    ht = ht.select('interval', 'genome_sg_ids', 'fraser_regions')
     return hail_intervals, ht.key_by('interval')
 
 
@@ -141,7 +142,7 @@ def map_to_genome_ids(rna_id: str, rna_to_genome_ids: dict[str, set[str]]) -> se
     """Look up genome SG IDs for a given RNA SG ID."""
     genome_ids = rna_to_genome_ids.get(rna_id)
     if genome_ids is None:
-        logger.warning(f'RNA sample ID {rna_id} not found in query results, skipping')
+        logger.warning(f'RNA Sequencing Group ID {rna_id} not found in query results, skipping')
         return set()
     return genome_ids
 
@@ -160,10 +161,10 @@ def subset_mt_to_variants_of_interest(
 
     ht = mt.rows()
 
-    logger.info('Annotating variants with CSV region sample IDs')
+    logger.info('Annotating variants with CSV region SG IDs')
     interval_annot = interval_ht.index(ht.locus)
     ht = ht.annotate(
-        csv_sample_ids=interval_annot.csv_sample_ids,
+        genome_sg_ids=interval_annot.genome_sg_ids,
         fraser_regions=interval_annot.fraser_regions,
     )
 
@@ -171,7 +172,7 @@ def subset_mt_to_variants_of_interest(
         carriers=ht.samples_num_alt['1'].union(ht.samples_num_alt['2']),
     )
     ht = ht.annotate(
-        matching_samples=ht.carriers.intersection(ht.csv_sample_ids),
+        matching_samples=ht.carriers.intersection(ht.genome_sg_ids),
     )
     ht = ht.filter(ht.matching_samples.length() > 0)
 
@@ -216,7 +217,7 @@ def subset_mt_to_variants_of_interest(
 
 
 def read_fraser_csv(csv_path: str, rna_to_genome_ids: dict[str, set[str]]) -> pd.DataFrame:
-    """Read FRASER CSV, validate columns, and remap sampleIDs to genome SG IDs."""
+    """Read FRASER CSV, validate columns, and remap sampleIDs (which are rna_sg_ids) to genome SG IDs."""
     logger.info(f'Reading FRASER CSV: {csv_path}')
     df = pd.read_csv(csv_path)
     required_cols = {'seqnames', 'start', 'end', 'sampleID'}
@@ -240,10 +241,10 @@ def main():
     # Step 0: RNA SG IDs to a set of genome SG IDs from the same participants
 
     relevant_ids = list(set(args.rna_ids))
-    logger.info(f'Input RNA sample IDs: {relevant_ids}')
-    variables = {'project': args.query_dataset, 'sample_external_IDs': relevant_ids}
+    logger.info(f'Input RNA Sequencing Group IDs: {relevant_ids}')
+    variables = {'project': args.query_dataset, 'RnaSequencingGroupIds': relevant_ids}
 
-    # build a dictionary mapping from RNA sample ID to set of genome SG IDs for that participant
+    # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
     result = query(query_ids, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
 
@@ -251,7 +252,7 @@ def main():
     df = read_fraser_csv(args.csv, rna_to_genome_ids)
 
     cpg_ids = set().union(*df['genome_ids'])
-    logger.info(f'Found {len(cpg_ids)} unique genome sample IDs after mapping from RNA IDs')
+    logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
     logger.info(f'Found {len(df)} FRASER significant regions')
 
     merged = merge_overlapping_intervals(df)
