@@ -17,8 +17,7 @@ def annotate_variants(
     fraser_csv: str | Path,
     mt_path: str,
     sg_ids_by_dataset: dict[str, list[str]],
-    output_bed: str | Path,
-    output_tsv: str | Path,
+    output: str,
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -29,7 +28,7 @@ def annotate_variants(
     directly from GCS by Hail), and writes a BED + TSV output.
     """
     b = get_batch()
-    fraser_input = b.read_input(str(fraser_csv))
+    fraser_input = b.read_input(fraser_csv)
 
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
@@ -42,8 +41,8 @@ def annotate_variants(
         j.image(config.config_retrieve('workflow')['driver_image'])
         j.declare_resource_group(
             out={
-                'bed': f'{cohort_id}.variants_of_interest.bed',
-                'tsv': f'{cohort_id}.variants_of_interest.tsv',
+                'bed': '{root}.bed',
+                'tsv': '{root}.tsv',
             },
         )
 
@@ -56,13 +55,11 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {j.out.bed} \
-    --output-tsv {j.out.tsv}
+    --output {j.out} \
 """),
         )
 
-        b.write_output(j.out['bed'], str(output_bed))
-        b.write_output(j.out['tsv'], str(output_tsv))
+        b.write_output(j.out, output)
         jobs.append(j)
 
     return jobs
