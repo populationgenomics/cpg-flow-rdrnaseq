@@ -273,7 +273,7 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['annotation_bed'])
+@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['annotation_bed', 'annotation_tsv'])
 class VariantAnnotation(stage.CohortStage):
     """
     Annotate FRASER significant regions (determined using rna data)
@@ -281,8 +281,11 @@ class VariantAnnotation(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        prefix = cohort.dataset.prefix() / 'variant_annotation'
+        base = f'{cohort.id}.variants_of_interest'
         return {
-            'annotation_bed': cohort.dataset.prefix() / 'variant_annotation' / f'{cohort.id}.variants_of_interest.bed',
+            'annotation_bed': prefix / f'{base}.bed',
+            'annotation_tsv': prefix / f'{base}.tsv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -298,9 +301,10 @@ class VariantAnnotation(stage.CohortStage):
 
         jobs = variant_annotation.annotate_variants(
             fraser_csv=fraser_csv,
-            mt_path=mt_path, # using a manual path rn, gotta find out how to get this from dataset name
+            mt_path=mt_path,
             sg_ids_by_dataset=sg_ids_by_dataset,
             output_bed=output['annotation_bed'],
+            output_tsv=output['annotation_tsv'],
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
@@ -322,6 +326,8 @@ class Dashboard(stage.CohortStage):
             'dashboard_html': prefix / f'{base}.html',
             'fraser_csv': prefix / f'{base}.fraser.csv',
             'outrider_csv': prefix / f'{base}.outrider.csv',
+            'variant_bed': prefix / f'{base}.variants.bed',
+            'variant_tsv': prefix / f'{base}.variants.tsv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -329,6 +335,8 @@ class Dashboard(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
+        variant_bed = inputs.as_path(cohort, VariantAnnotation, 'annotation_bed')
+        variant_tsv = inputs.as_path(cohort, VariantAnnotation, 'annotation_tsv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
@@ -340,6 +348,8 @@ class Dashboard(stage.CohortStage):
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
+            variant_bed=variant_bed,
+            variant_tsv=variant_tsv,
             output_paths=output,
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
