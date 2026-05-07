@@ -42,8 +42,8 @@ def annotate_variants(
         j.image(config.config_retrieve('workflow')['driver_image'])
         j.declare_resource_group(
             out={
-                'bed': 'variants_of_interest.bed',
-                'tsv': 'variants_of_interest.tsv',
+                'bed': f'{cohort_id}.variants_of_interest.bed',
+                'tsv': f'{cohort_id}.variants_of_interest.tsv',
             },
         )
 
@@ -56,7 +56,8 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {j.out.bed}
+    --output {j.out.bed} \
+    --output-tsv {j.out.tsv}
 """),
         )
 

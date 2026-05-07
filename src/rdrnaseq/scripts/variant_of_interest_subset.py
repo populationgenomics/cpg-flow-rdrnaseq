@@ -241,7 +241,8 @@ def main():
     parser.add_argument('--csv', required=True, help='Path to FRASER significant results CSV')
     parser.add_argument('--rna_ids', required=True, help='RNA sequencing group IDs', nargs='+')
     parser.add_argument('--query_dataset', required=True, help='Metamist project name')
-    parser.add_argument('--output', required=True, help='Output path for BED-like TSV')
+    parser.add_argument('--output', required=True, help='Output path for BED file')
+    parser.add_argument('--output-tsv', default=None, help='Output path for annotated tsv')
     args = parser.parse_args()
 
     hail_batch.init_batch()
@@ -275,7 +276,7 @@ def main():
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
     # --- Export TSV ---
-    tsv_path = args.output.replace('.bed', '.tsv') if args.output.endswith('.bed') else args.output + '.tsv'
+    tsv_path = args.output_tsv
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.export(tsv_path, delimiter='\t')
 
