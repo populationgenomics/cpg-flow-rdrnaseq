@@ -202,7 +202,7 @@ def subset_mt_to_variants_of_interest(
 
     genome_to_rna_hl = hl.literal(genome_to_rna)
     ht = ht.annotate(
-        rna_sg_ids=ht.matching_samples.map(lambda gid: genome_to_rna_hl.get(gid)),
+        rna_sg_ids=ht.matching_samples.map(genome_to_rna_hl.get),
     )
 
     fields = {
