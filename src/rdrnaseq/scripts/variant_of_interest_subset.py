@@ -244,7 +244,7 @@ def main():
     parser.add_argument('--output', required=True, help='Output path for BED-like TSV')
     args = parser.parse_args()
 
-    hl.init()
+    hail_batch.init_batch()
     # Step 0: RNA SG IDs to a set of genome SG IDs from the same participants
 
     relevant_ids = list(set(args.rna_ids))
@@ -284,9 +284,7 @@ def main():
         bed_chrom=ht.bed_chrom,
         bed_start=ht.bed_start,
         bed_end=ht.bed_end,
-        name=hl.or_else(ht.gene_symbol, 'intergenic')
-        + '|'
-        + hl.delimit(ht.rna_sg_ids, ','),
+        name=hl.or_else(ht.gene_symbol, 'intergenic') + '|' + hl.delimit(ht.rna_sg_ids, ','),
     )
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
