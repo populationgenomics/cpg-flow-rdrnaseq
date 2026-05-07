@@ -128,6 +128,19 @@
             <div id="igv-div"></div>
         </div>
 
+        {% if variant_tsv_filename %}
+        <div class="plot-container">
+            <h2>Rare Variants of Interest</h2>
+            <div style="margin-bottom:12px">
+                <label style="font-weight:bold;color:#555">Max FRASER distance (bp): </label>
+                <input type="number" id="fraser-dist-thresh" value="200" step="50" min="0" style="width:100px;padding:5px;border:1px solid #ddd;border-radius:3px">
+                <button onclick="applyVariantFilter()" style="padding:6px 18px;border:none;background:#3b5bdb;color:white;border-radius:4px;cursor:pointer;margin-left:8px">Filter</button>
+                <button onclick="resetVariantFilter()" style="padding:6px 18px;border:1px solid #aaa;border-radius:4px;cursor:pointer;margin-left:4px">Show All</button>
+            </div>
+            <table id="variant-table" class="display" style="width:100%"></table>
+        </div>
+        {% endif %}
+
         <div class="plot-container">
             <h2>FRASER Results Table</h2>
             <table id="fraser-table" class="display" style="width:100%"></table>
@@ -147,6 +160,8 @@
 const FILES = {
     fraser:  {{ fraser_csv_filename | tojson }},
     outrider: {{ outrider_csv_filename | tojson }},
+    variant_bed: {{ variant_bed_filename | tojson }},
+    variant_tsv: {{ variant_tsv_filename | tojson }},
 };
 const FAMILY_MAP   = {{ family_map | tojson }};
 const ENSG_TO_HGNC = {{ ensg_to_hgnc | tojson }};
@@ -156,9 +171,9 @@ const DEFAULT_DPSI   = {{ default_deltapsi_threshold }};
 const DEFAULT_ZSCORE = {{ default_zscore_threshold }};
 
 // ─── Globals ─────────────────────────────────────────────────────────────────
-let fraserRows = [], outriderRows = [];
+let fraserRows = [], outriderRows = [], variantRows = [];
 let igvBrowser = null;
-let fraserDT = null, outriderDT = null, commonDT = null;
+let fraserDT = null, outriderDT = null, commonDT = null, variantDT = null;
 
 // ─── Load log UI ─────────────────────────────────────────────────────────────
 function logLine(id, msg, cls) {
@@ -197,9 +212,10 @@ async function fetchCSV(label, filename) {
     logLine(label, 'Parsing ' + url + '...', 'log-wait');
     const text = await resp.text();
 
+    const delimiter = filename.endsWith('.tsv') ? '\t' : ',';
     return new Promise((resolve, reject) => {
         Papa.parse(text, {
-            header: true, dynamicTyping: true, skipEmptyLines: true,
+            header: true, dynamicTyping: true, skipEmptyLines: true, delimiter: delimiter,
             complete: r => { logLine(label, url + ' — ' + r.data.length + ' rows', 'log-ok'); resolve(r.data); },
             error:   e => { logLine(label, 'Parse error: ' + e, 'log-err'); reject(new Error('CSV parse: ' + e)); },
         });
@@ -264,7 +280,7 @@ function renderFraserVolcano(rows, pval, dpsi) {
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || 'NA') +
-            '<br>Sample: ' + r.sampleID +
+            '<br>SG ID: ' + r.sampleID +
             '<br>Family: ' + (r.familyID || 'NA') +
             '<br>\u0394\u03A8: ' + (r.deltaPsi || 0).toFixed(3) +
             '<br>padj: ' + (r.padjust || 0).toExponential(2)),
@@ -307,7 +323,7 @@ function renderOutriderVolcano(rows, pval, zscore) {
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || r.geneID || 'NA') +
-            '<br>Sample: ' + r.sampleID +
+            '<br>SG ID: ' + r.sampleID +
             '<br>Family: ' + (r.familyID || 'NA') +
             '<br>Z: ' + (r.zScore || 0).toFixed(2) +
             '<br>l2fc: ' + fcVal(r).toFixed(3) +
@@ -369,11 +385,25 @@ const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
 const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi'];
 const DP2 = ['zScore', 'outrider_zScore'];
 
+const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_ids: 'Genome SG IDs'};
+const WRAP_COLS = new Set(['rna_sg_ids', 'matching_genome_sg_ids']);
+
+function colTitle(c) {
+    if (COL_TITLES[c]) return COL_TITLES[c];
+    return c.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+}
+
+function isNA(v) { return v === null || v === undefined || v === '' || v === 'NA'; }
+
 function fmt(k, v) {
-    if (v === null || v === undefined || v === '') return 'NA';
+    if (isNA(v)) return 'NA';
     if (SCI.includes(k) && typeof v === 'number') return v.toExponential(2);
     if (DP3.includes(k) && typeof v === 'number') return v.toFixed(3);
     if (DP2.includes(k) && typeof v === 'number') return v.toFixed(2);
+    if (WRAP_COLS.has(k) && typeof v === 'string') {
+        const items = v.replace(/^\[|\]$/g, '').replace(/"/g, '').split(',').map(s => s.trim()).filter(Boolean);
+        return items.join('<br>');
+    }
     return v;
 }
 
@@ -383,14 +413,43 @@ function buildDT(tableId, rows, cols, existing) {
     const avail = cols.filter(c => rows[0][c] !== undefined);
     return $('#' + tableId).DataTable({
         data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); return o; }),
-        columns: avail.map(c => ({ title: c, data: c, render: d => fmt(c, d) })),
+        columns: avail.map(c => ({ title: colTitle(c), data: c, type: 'na-bottom', render: d => fmt(c, d) })),
         dom: 'Bfrtip', buttons: ['csv', 'excel'], pageLength: 25, scrollX: true,
     });
 }
 
+// Sort NA values to the bottom regardless of sort direction.
+// No -pre function: DataTables 1.x falls back to default < / > on preprocessed
+// values when -pre is defined, and JS coerces null to 0 in numeric comparisons,
+// making NAs and real 0s indistinguishable. Omitting -pre forces DT to use the
+// -asc / -desc comparators which handle null explicitly.
+function parseSortVal(d) {
+    if (d === null || d === undefined) return null;
+    if (typeof d === 'number') return isNaN(d) ? null : d;
+    const s = String(d).replace(/<[^>]*>/g, '').trim();
+    if (s === 'NA' || s === '' || s === 'null' || s === 'undefined' || s === 'NaN') return null;
+    const n = parseFloat(s);
+    return isNaN(n) ? s : n;
+}
+$.fn.dataTable.ext.type.order['na-bottom-asc'] = function(a, b) {
+    const x = parseSortVal(a), y = parseSortVal(b);
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x < y) ? -1 : (x > y) ? 1 : 0;
+};
+$.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
+    const x = parseSortVal(a), y = parseSortVal(b);
+    if (x === null && y === null) return 0;
+    if (x === null) return 1;
+    if (y === null) return -1;
+    return (x > y) ? -1 : (x < y) ? 1 : 0;
+};
+
 const FRASER_COLS  = ['hgncSymbol', 'geneID', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
 const OUTRIDER_COLS = ['geneID', 'hgncSymbol', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'sampleID', 'familyID', 'chr', 'start', 'end', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore'];
+const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'bed_chrom', 'bed_start', 'bed_end', 'rna_sg_ids', 'matching_genome_sg_ids'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {
@@ -450,6 +509,17 @@ function showRegionDetails(chr, start, end) {
     }
 }
 
+// ─── Variant table filter ───────────────────────────────────────────────────
+function applyVariantFilter() {
+    const maxDist = parseFloat(document.getElementById('fraser-dist-thresh').value);
+    const filtered = variantRows.filter(r => r.fraser_distance !== null && r.fraser_distance <= maxDist);
+    variantDT = buildDT('variant-table', filtered, VARIANT_COLS, variantDT);
+}
+function resetVariantFilter() {
+    document.getElementById('fraser-dist-thresh').value = 200;
+    variantDT = buildDT('variant-table', variantRows, VARIANT_COLS, variantDT);
+}
+
 // ─── IGV ─────────────────────────────────────────────────────────────────────
 async function initIGV(fraser) {
     try {
@@ -458,18 +528,27 @@ async function initIGV(fraser) {
             ? sorted[0].seqnames + ':' + Math.max(1, sorted[0].start - 5000) + '-' + (sorted[0].end + 5000)
             : 'chr1:1-100000';
 
+        const tracks = [{
+            name: 'FRASER Results', type: 'annotation', format: 'bed',
+            features: sorted.map(r => ({
+                chr: String(r.seqnames),
+                start: r.start - 1,
+                end: r.end,
+                name: (r.hgncSymbol || 'NA') + ' (' + r.sampleID + ')',
+            })),
+            displayMode: 'EXPANDED', color: '#e03131',
+        }];
+
+        if (FILES.variant_bed) {
+            tracks.push({
+                name: 'Rare Variants', type: 'annotation', format: 'bed',
+                url: './' + FILES.variant_bed,
+                displayMode: 'EXPANDED', color: '#3b5bdb',
+            });
+        }
+
         igvBrowser = await igv.createBrowser(document.getElementById('igv-div'), {
-            genome: GENOME, locus,
-            tracks: [{
-                name: 'FRASER Results', type: 'annotation', format: 'bed',
-                features: sorted.map(r => ({
-                    chr: String(r.seqnames),
-                    start: r.start - 1,
-                    end: r.end,
-                    name: (r.hgncSymbol || 'NA') + ' (' + r.sampleID + ')',
-                })),
-                displayMode: 'EXPANDED', color: '#e03131',
-            }],
+            genome: GENOME, locus, tracks,
         });
     } catch (e) {
         document.getElementById('igv-div').textContent = 'IGV failed to load: ' + e;
@@ -497,6 +576,7 @@ function applyThresholds() {
     if (outriderRows.length) {
         commonDT = buildDT('common-table', common, COMMON_COLS, commonDT);
         document.getElementById('common-section').style.display = common.length ? '' : 'none';
+        if (common.length && commonDT) commonDT.columns.adjust().draw();
     }
     renderStats(outriderRows.length ? common.length : null);
 }
@@ -546,6 +626,11 @@ async function init() {
             logLine('render-ov', 'OUTRIDER volcano', 'log-ok');
         }
 
+        // 3. Variant annotations (optional)
+        if (FILES.variant_tsv) {
+            variantRows = await fetchCSV('variants', FILES.variant_tsv);
+        }
+
         logLine('render-tbl', 'Tables...', 'log-wait');
         populateFamilyFilter();
         fraserDT = buildDT('fraser-table', fraserRows, FRASER_COLS, null);
@@ -553,10 +638,16 @@ async function init() {
             outriderDT = buildDT('outrider-table', outriderRows, OUTRIDER_COLS, null);
             const common = findCommon(fraserRows, outriderRows, pval, dpsi, zscore);
             commonDT = buildDT('common-table', common, COMMON_COLS, null);
-            if (common.length) document.getElementById('common-section').style.display = '';
+            if (common.length) {
+                document.getElementById('common-section').style.display = '';
+                if (commonDT) commonDT.columns.adjust().draw();
+            }
             renderStats(common.length);
         } else {
             renderStats(null);
+        }
+        if (variantRows.length) {
+            variantDT = buildDT('variant-table', variantRows, VARIANT_COLS, null);
         }
         logLine('render-tbl', 'Tables', 'log-ok');
 
