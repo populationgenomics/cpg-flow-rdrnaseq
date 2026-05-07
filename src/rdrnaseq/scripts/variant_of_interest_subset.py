@@ -151,6 +151,7 @@ def subset_mt_to_variants_of_interest(
     mt_path: str,
     hail_intervals: list[hl.Interval],
     interval_ht: hl.Table,
+    genome_to_rna: dict[str, str],
 ) -> hl.Table:
     """Subset MT to FRASER regions, filter to carrier-matched rare variants, and annotate BED fields."""
     logger.info(f'Reading MatrixTable: {mt_path}')
@@ -199,12 +200,18 @@ def subset_mt_to_variants_of_interest(
         bed_end=ht.locus.position - 1 + hl.max(ht.alleles[0].length(), ht.alleles[1].length()),
     )
 
+    genome_to_rna_hl = hl.literal(genome_to_rna)
+    ht = ht.annotate(
+        rna_sg_ids=ht.matching_samples.map(lambda gid: genome_to_rna_hl.get(gid)),
+    )
+
     fields = {
         'gene_symbol': ht.mainTranscript.gene_symbol,
         'major_consequence': ht.mainTranscript.major_consequence,
         'splice_ai_delta_score': ht.splice_ai.delta_score,
         'splice_ai_consequence': ht.splice_ai.splice_consequence,
-        'matching_samples': ht.matching_samples,
+        'matching_genome_sg_ids': ht.matching_samples,
+        'rna_sg_ids': ht.rna_sg_ids,
         'fraser_distance': ht.fraser_distance,
         'bed_chrom': ht.bed_chrom,
         'bed_start': ht.bed_start,
@@ -237,7 +244,7 @@ def main():
     parser.add_argument('--output', required=True, help='Output path for BED-like TSV')
     args = parser.parse_args()
 
-    hail_batch.init_batch()
+    hl.init()
     # Step 0: RNA SG IDs to a set of genome SG IDs from the same participants
 
     relevant_ids = list(set(args.rna_ids))
@@ -247,6 +254,11 @@ def main():
     # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
     result = query(query_ids, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
+
+    genome_to_rna: dict[str, str] = {}
+    for rna_id, genome_ids in rna_to_genome_ids.items():
+        for gid in genome_ids:
+            genome_to_rna[gid] = rna_id
 
     # --- Step 1: Parse CSV and build merged intervals ---
     df = read_fraser_csv(args.csv, rna_to_genome_ids)
@@ -260,7 +272,7 @@ def main():
 
     hail_intervals, interval_ht = build_hail_intervals(merged)
 
-    ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht)
+    ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
     # --- Export TSV ---
     tsv_path = args.output.replace('.bed', '.tsv') if args.output.endswith('.bed') else args.output + '.tsv'
@@ -274,7 +286,7 @@ def main():
         bed_end=ht.bed_end,
         name=hl.or_else(ht.gene_symbol, 'intergenic')
         + '|'
-        + hl.or_else(ht.major_consequence, 'unknown'),
+        + hl.delimit(ht.rna_sg_ids, ','),
     )
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')

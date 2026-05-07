@@ -18,6 +18,7 @@ def annotate_variants(
     mt_path: str,
     sg_ids_by_dataset: dict[str, list[str]],
     output_bed: str | Path,
+    output_tsv: str | Path,
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -39,6 +40,12 @@ def annotate_variants(
             attributes=job_attrs | {'tool': 'variant_annotation'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
+        j.declare_resource_group(
+            out={
+                'bed': 'variants_of_interest.bed',
+                'tsv': 'variants_of_interest.tsv',
+            },
+        )
 
         rna_ids_str = ' '.join(sg_ids)
 
@@ -49,11 +56,12 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {j.ofile}
+    --output {j.out.bed}
 """),
         )
 
-        b.write_output(j.ofile, str(output_bed))
+        b.write_output(j.out['bed'], str(output_bed))
+        b.write_output(j.out['tsv'], str(output_tsv))
         jobs.append(j)
 
     return jobs
