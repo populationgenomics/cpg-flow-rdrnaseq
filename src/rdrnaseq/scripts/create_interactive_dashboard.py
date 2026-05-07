@@ -44,6 +44,8 @@ def render_dashboard(
     pvalue_threshold: float = 0.05,
     deltapsi_threshold: float = 0.2,
     zscore_threshold: float = 2.0,
+    variant_bed_filename: str | None = None,
+    variant_tsv_filename: str | None = None,
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
 
@@ -57,6 +59,8 @@ def render_dashboard(
     html_content = template.render(
         fraser_csv_filename=fraser_csv_filename,
         outrider_csv_filename=outrider_csv_filename,
+        variant_bed_filename=variant_bed_filename,
+        variant_tsv_filename=variant_tsv_filename,
         family_map=family_map,
         ensg_to_hgnc=ensg_to_hgnc,
         default_pvalue_threshold=pvalue_threshold,
@@ -129,6 +133,17 @@ Examples:
     )
     parser.add_argument(
         '--ensg-to-symbol', required=True, help='Path to ENSG-to-HGNC-symbol TSV mapping file (two columns, no header)'
+    )
+
+    parser.add_argument(
+        '--variant-bed-filename',
+        default=None,
+        help='Filename of variant annotation BED (already in output dir, for IGV.js track)',
+    )
+    parser.add_argument(
+        '--variant-tsv-filename',
+        default=None,
+        help='Filename of variant annotation TSV (already in output dir, for data table)',
     )
 
     return parser.parse_args()
@@ -209,6 +224,8 @@ def main() -> None:
         pvalue_threshold=args.pvalue_threshold,
         deltapsi_threshold=args.deltapsi_threshold,
         zscore_threshold=args.zscore_threshold,
+        variant_bed_filename=args.variant_bed_filename,
+        variant_tsv_filename=args.variant_tsv_filename,
     )
 
     print('\nDashboard created successfully!')
