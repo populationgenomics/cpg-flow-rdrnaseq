@@ -245,7 +245,7 @@ def main():
     parser.add_argument('--output', required=True, help='Output root for BED and TSV files')
     args = parser.parse_args()
 
-    hail_batch.init_batch()
+    hail_batch.init_batch(driver_memory='highmem', driver_cores=2)
     # Step 0: RNA SG IDs to a set of genome SG IDs from the same participants
 
     relevant_ids = list(set(args.rna_ids))
@@ -275,10 +275,16 @@ def main():
 
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
+    # --- Collect to pandas for preview ---
+    tsv_df = ht.to_pandas()
+    logger.info(f'Collected {len(tsv_df)} variant rows')
+    logger.info(f'TSV columns: {list(tsv_df.columns)}')
+    logger.info(f'TSV preview:\n{tsv_df.head(5).to_string()}')
+
     # --- Export TSV ---
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
-    ht.to_pandas().to_csv(tsv_path, sep='\t', index=False)
+    tsv_df.to_csv(tsv_path, sep='\t', index=False)
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(
@@ -290,9 +296,12 @@ def main():
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
 
+    bed_df = bed_ht.to_pandas()
+    logger.info(f'BED preview:\n{bed_df.head(5).to_string()}')
+
     bed_path = f'{args.output}.bed'
     logger.info(f'Exporting IGV BED to {bed_path}')
-    bed_ht.export(bed_path, delimiter='\t', header=False)
+    bed_df.to_csv(bed_path, sep='\t', index=False, header=False)
 
     output_dir = os.path.dirname(args.output)
     logger.info(f'TSV exists={os.path.isfile(tsv_path)}, BED exists={os.path.isfile(bed_path)}')
