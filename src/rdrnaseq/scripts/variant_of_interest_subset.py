@@ -277,7 +277,7 @@ def main():
     # --- Export TSV ---
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
-    ht.export(tsv_path, delimiter='\t')
+    ht.to_pandas().to_csv(tsv_path, sep='\t', index=False)
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(
