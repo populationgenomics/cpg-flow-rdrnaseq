@@ -7,7 +7,6 @@ Exports as a BED-like TSV with all variant annotations.
 """
 
 import argparse
-import os
 
 import pandas as pd
 from loguru import logger
@@ -208,6 +207,8 @@ def subset_mt_to_variants_of_interest(
 
     fields = {
         'gene_symbol': ht.mainTranscript.gene_symbol,
+        'transcript_id': ht.mainTranscript.transcript_id,
+        'hgvsc': ht.mainTranscript.hgvsc,
         'major_consequence': ht.mainTranscript.major_consequence,
         'splice_ai_delta_score': ht.splice_ai.delta_score,
         'splice_ai_consequence': ht.splice_ai.splice_consequence,
@@ -275,37 +276,27 @@ def main():
 
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
-    # --- Collect to pandas for preview ---
-    tsv_df = ht.to_pandas()
-    logger.info(f'Collected {len(tsv_df)} variant rows')
-    logger.info(f'TSV columns: {list(tsv_df.columns)}')
-    logger.info(f'TSV preview:\n{tsv_df.head(5).to_string()}')
-
     # --- Export TSV ---
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
-    tsv_df.to_csv(tsv_path, sep='\t', index=False)
+    ht.export(tsv_path, delimiter='\t')
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(
         bed_chrom=ht.bed_chrom,
         bed_start=ht.bed_start,
         bed_end=ht.bed_end,
-        name=hl.or_else(ht.gene_symbol, 'intergenic') + '|' + hl.delimit(ht.rna_sg_ids, ','),
+        name=hl.or_else(
+            ht.transcript_id + '(' + ht.gene_symbol + '):' + ht.hgvsc,
+            ht.bed_chrom + ':' + hl.str(ht.bed_start) + ':' + ht.alleles[0] + '>' + ht.alleles[1],
+        ),
     )
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
 
-    bed_df = bed_ht.to_pandas()
-    logger.info(f'BED preview:\n{bed_df.head(5).to_string()}')
-
     bed_path = f'{args.output}.bed'
     logger.info(f'Exporting IGV BED to {bed_path}')
-    bed_df.to_csv(bed_path, sep='\t', index=False, header=False)
-
-    output_dir = os.path.dirname(args.output)
-    logger.info(f'TSV exists={os.path.isfile(tsv_path)}, BED exists={os.path.isfile(bed_path)}')
-    logger.info(f'Directory listing of {output_dir}: {os.listdir(output_dir)}')
+    bed_ht.export(bed_path, delimiter='\t', header=False)
     logger.info('Done.')
 
 

@@ -39,12 +39,6 @@ def annotate_variants(
             attributes=job_attrs | {'tool': 'variant_annotation'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
-        j.declare_resource_group(
-            out={
-                'bed': '{root}.bed',
-                'tsv': '{root}.tsv',
-            },
-        )
 
         rna_ids_str = ' '.join(sg_ids)
 
@@ -55,14 +49,9 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {j.out}
-
-echo "=== ls output directory ==="
-ls -la $(dirname {j.out})
+    --output {output}
 """),
         )
-
-        b.write_output(j.out, output)
         jobs.append(j)
 
     return jobs
