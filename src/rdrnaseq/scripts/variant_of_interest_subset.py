@@ -7,6 +7,7 @@ Exports as a BED-like TSV with all variant annotations.
 """
 
 import argparse
+import os
 
 import pandas as pd
 from loguru import logger
@@ -292,6 +293,10 @@ def main():
     bed_path = f'{args.output}.bed'
     logger.info(f'Exporting IGV BED to {bed_path}')
     bed_ht.export(bed_path, delimiter='\t', header=False)
+
+    output_dir = os.path.dirname(args.output)
+    logger.info(f'TSV exists={os.path.isfile(tsv_path)}, BED exists={os.path.isfile(bed_path)}')
+    logger.info(f'Directory listing of {output_dir}: {os.listdir(output_dir)}')
     logger.info('Done.')
 
 

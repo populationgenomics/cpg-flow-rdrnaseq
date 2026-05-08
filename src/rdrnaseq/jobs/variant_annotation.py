@@ -55,7 +55,10 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {j.out} \
+    --output {j.out}
+
+echo "=== ls output directory ==="
+ls -la $(dirname {j.out})
 """),
         )
 
