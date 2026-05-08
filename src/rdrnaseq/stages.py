@@ -290,9 +290,11 @@ class VariantAnnotation(stage.CohortStage):
         output = self.expected_outputs(cohort)
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+        # TODO needs phasing out
         mt_path: str = config.config_retrieve(['variant_annotation', 'mt_path'])
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+        # todo this doesn't correctly identify `dataset-test`
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
             # TODO: if this is more than one dataset per cohort, this will need to be refactored
@@ -332,8 +334,8 @@ class Dashboard(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
-        variant_bed = inputs.as_path(cohort, VariantAnnotation, 'annotation_bed')
-        variant_tsv = inputs.as_path(cohort, VariantAnnotation, 'annotation_tsv')
+        variant_bed = inputs.as_path(cohort, VariantAnnotation, 'bed')
+        variant_tsv = inputs.as_path(cohort, VariantAnnotation, 'tsv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
