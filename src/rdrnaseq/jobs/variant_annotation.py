@@ -58,6 +58,9 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --query_dataset {dataset_name} \
     --output {j.out.bed} \
     --output-tsv {j.out.tsv}
+
+echo "=== ls output directory ==="
+ls -la $(dirname {j.out.bed})
 """),
         )
 
