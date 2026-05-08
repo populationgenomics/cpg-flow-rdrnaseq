@@ -241,8 +241,7 @@ def main():
     parser.add_argument('--csv', required=True, help='Path to FRASER significant results CSV')
     parser.add_argument('--rna_ids', required=True, help='RNA sequencing group IDs', nargs='+')
     parser.add_argument('--query_dataset', required=True, help='Metamist project name')
-    parser.add_argument('--output', required=True, help='Output path for BED file')
-    parser.add_argument('--output-tsv', default=None, help='Output path for annotated tsv')
+    parser.add_argument('--output', required=True, help='Output root for BED and TSV files')
     args = parser.parse_args()
 
     hail_batch.init_batch()
@@ -276,7 +275,7 @@ def main():
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
     # --- Export TSV ---
-    tsv_path = args.output_tsv
+    tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.to_pandas().to_csv(tsv_path, sep='\t', index=False)
 
@@ -289,8 +288,10 @@ def main():
     )
     bed_ht = bed_ht.key_by()
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
-    logger.info(f'Exporting IGV BED to {args.output}')
-    bed_ht.to_pandas().to_csv(args.output, sep='\t', index=False, header=False)
+
+    bed_path = f'{args.output}.bed'
+    logger.info(f'Exporting IGV BED to {bed_path}')
+    bed_ht.export(bed_path, delimiter='\t', header=False)
     logger.info('Done.')
 
 
