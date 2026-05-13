@@ -97,7 +97,7 @@ def annotate_variants(
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
-        mt_path = config.config_retrieve(['variant_annotation.mt_path', str(dataset_name)])
+        mt_path = config.config_retrieve(['variant_annotation', 'mt_path', str(dataset_name)])
         if mt_path is None:
             logger.warning(f'MT path is None, skipping variant annotation for dataset {dataset_name}')
             mt_path=query_for_latest_analysis(
