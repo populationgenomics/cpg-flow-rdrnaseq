@@ -300,19 +300,18 @@ def main():
 
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
-    # --- Export TSV ---
+    # --- Annotate with participant metadata and export TSV ---
+    meta_hl = hl.literal(rna_to_metadata)
+    first_rna_id = hl.or_missing(ht.rna_sg_ids.length() > 0, ht.rna_sg_ids[0])
+    meta_entry = meta_hl.get(first_rna_id, hl.struct(family_id='', participant_external_id='', affected=''))
+    ht = ht.annotate(
+        family_id=meta_entry.family_id,
+        participant_external_id=meta_entry.participant_external_id,
+        affected=meta_entry.affected,
+    )
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.export(tsv_path, delimiter='\t')
-
-    # --- Enrich TSV with participant metadata ---
-    tsv_df = pd.read_csv(tsv_path, sep='\t')
-    first_rna_id = tsv_df['rna_sg_ids'].astype(str).str.strip('[]"').str.split(',').str[0].str.strip().str.strip('"')
-    meta_lookup = pd.DataFrame.from_dict(rna_to_metadata, orient='index')
-    for col in ['family_id', 'participant_external_id', 'affected']:
-        tsv_df[col] = first_rna_id.map(meta_lookup[col]).fillna('')
-    tsv_df.to_csv(tsv_path, sep='\t', index=False)
-    logger.info(f'Enriched TSV with participant metadata ({len(rna_to_metadata)} mappings)')
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(
