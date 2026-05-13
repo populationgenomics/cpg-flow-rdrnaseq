@@ -190,12 +190,25 @@ def load_cpg_to_family_mapping(mapping_file: str) -> dict:
     return mapping
 
 
+def affected_status_label(value) -> str:
+    """Map numeric affected status to a human-readable label."""
+    match value:
+        case 1:
+            return 'Unaffected'
+        case 2:
+            return 'Affected'
+        case _:
+            return 'Unknown'
+
+
 def add_family_ids(df: pd.DataFrame, cpg_to_metadata: dict) -> pd.DataFrame:
     """Add familyID, participantExternalId, and affected columns by mapping sampleID."""
     meta_df = pd.DataFrame.from_dict(cpg_to_metadata, orient='index')
     joined = df.join(meta_df, on='sampleID', how='left')
     joined['familyID'] = joined['familyID'].fillna('Unknown')
-    return joined.fillna({'participantExternalId': '', 'affected': ''})
+    joined = joined.fillna({'participantExternalId': '', 'affected': ''})
+    joined['affected'] = joined['affected'].apply(affected_status_label)
+    return joined
 
 
 # =============================================================================

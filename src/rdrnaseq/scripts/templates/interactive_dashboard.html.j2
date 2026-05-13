@@ -375,10 +375,13 @@ function findCommon(fRows, oRows, pval, dpsi, zscore) {
         if (!or_) return;
         seen.add(key);
         common.push({
-            gene: fr.hgncSymbol, geneID: or_.geneID, sampleID: fr.sampleID,
-            familyID: fr.familyID || 'NA', chr: fr.seqnames, start: fr.start, end: fr.end,
+            gene: fr.hgncSymbol, geneID: or_.geneID,
             fraser_padjust: fr.padjust, fraser_deltaPsi: fr.deltaPsi,
             outrider_padjust: or_.padjust, outrider_zScore: or_.zScore,
+            participantExternalId: fr.participantExternalId || 'NA',
+            affected: fr.affected || 'NA',
+            sampleID: fr.sampleID, familyID: fr.familyID || 'NA',
+            chr: fr.seqnames, start: fr.start, end: fr.end,
         });
     });
     return common;
@@ -450,10 +453,10 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
     return (x > y) ? -1 : (x < y) ? 1 : 0;
 };
 
-const FRASER_COLS  = ['hgncSymbol', 'geneID', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
-const OUTRIDER_COLS = ['geneID', 'hgncSymbol', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
-const COMMON_COLS  = ['gene', 'geneID', 'sampleID', 'familyID', 'chr', 'start', 'end', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore'];
-const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'family_id', 'participant_external_id', 'affected', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'bed_chrom', 'bed_start', 'bed_end', 'rna_sg_ids', 'matching_genome_sg_ids'];
+const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
+const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
+const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
+const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids', 'bed_chrom', 'bed_start', 'bed_end'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {

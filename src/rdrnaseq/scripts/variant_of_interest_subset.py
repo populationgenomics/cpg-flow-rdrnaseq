@@ -305,10 +305,11 @@ def main():
     rna_sg_array = hl.array(ht.rna_sg_ids)
     first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
     meta_entry = meta_hl.get(first_rna_id, hl.struct(participant_external_id='', family_id='', affected=0))
+    affected_labels = hl.literal({1: 'Unaffected', 2: 'Affected'})
     ht = ht.annotate(
         family_id=meta_entry.family_id,
         participant_external_id=meta_entry.participant_external_id,
-        affected=meta_entry.affected,
+        affected=affected_labels.get(meta_entry.affected, 'Unknown'),
     )
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
