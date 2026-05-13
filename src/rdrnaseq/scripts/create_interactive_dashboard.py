@@ -158,7 +158,7 @@ def main() -> None:
     outrider_df = load_outrider_data(args.outrider) if args.outrider else None
 
     # ── Load and apply family mapping ────────────────────────────────────────
-    cpg_to_family: dict[str, str] = {}
+    cpg_to_family: dict[str, dict] = {}
     if args.family_mapping:
         cpg_to_family = load_cpg_to_family_mapping(args.family_mapping)
         sg_ids = set(cpg_to_family.keys())
@@ -204,10 +204,7 @@ def main() -> None:
         print(f'  OUTRIDER CSV: {outrider_csv_path} ({len(outrider_df)} rows)')
 
     # ── Build embedded data for JS ───────────────────────────────────────────
-    # Family map: small dict embedded in the HTML for JS-side use
-    family_map: dict[str, dict] = {}
-    for cpg_id, family_id in cpg_to_family.items():
-        family_map[cpg_id] = {'familyID': family_id}
+    family_map = cpg_to_family
 
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
