@@ -29,6 +29,13 @@ query_ids = gql(
       id
       sample {
         participant {
+            externalId
+            families {
+                externalId
+                        }
+                familyParticipants {
+                    affected
+                        }
           samples {
             sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
               id
@@ -43,6 +50,23 @@ query_ids = gql(
 }
         """
 )
+
+
+def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
+    """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
+    rna_to_metadata: dict[str, dict[str, str | int]] = {}
+    for group in query_result['project']['sequencingGroups']:
+        rna_id = group['id']
+        participant = group['sample']['participant']
+        try:
+            rna_to_metadata[rna_id] = {
+                'participant_external_id': participant['externalId'],
+                'family_id': participant['families'][0]['externalId'],
+                'affected': participant['familyParticipants'][0]['affected'],
+            }
+        except (KeyError, IndexError, TypeError):
+            pass
+    return rna_to_metadata
 
 
 def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
@@ -256,6 +280,7 @@ def main():
     # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
     result = query(query_ids, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
+    rna_to_metadata = build_rna_to_metadata_map(result)
 
     genome_to_rna: dict[str, str] = {}
     for rna_id, genome_ids in rna_to_genome_ids.items():
@@ -280,6 +305,23 @@ def main():
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.export(tsv_path, delimiter='\t')
+
+    # --- Enrich TSV with participant metadata ---
+    tsv_df = pd.read_csv(tsv_path, sep='\t')
+    metadata_rows = []
+    for _, row in tsv_df.iterrows():
+        rna_ids = str(row.get('rna_sg_ids', ''))
+        first_rna_id = rna_ids.strip('[]"').split(',')[0].strip().strip('"')
+        meta = rna_to_metadata.get(first_rna_id, {})
+        metadata_rows.append({
+            'family_id': meta.get('family_id', ''),
+            'participant_external_id': meta.get('participant_external_id', ''),
+            'affected': meta.get('affected', ''),
+        })
+    meta_df = pd.DataFrame(metadata_rows)
+    tsv_df = pd.concat([tsv_df, meta_df], axis=1)
+    tsv_df.to_csv(tsv_path, sep='\t', index=False)
+    logger.info(f'Enriched TSV with participant metadata ({len(rna_to_metadata)} mappings)')
 
     # --- Export minimal IGV-compatible BED ---
     bed_ht = ht.select(

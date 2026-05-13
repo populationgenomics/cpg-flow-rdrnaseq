@@ -281,7 +281,9 @@ function renderFraserVolcano(rows, pval, dpsi) {
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || 'NA') +
             '<br>SG ID: ' + r.sampleID +
+            '<br>Participant: ' + (r.participantExternalId || 'NA') +
             '<br>Family: ' + (r.familyID || 'NA') +
+            '<br>Affected: ' + (r.affected != null ? r.affected : 'NA') +
             '<br>\u0394\u03A8: ' + (r.deltaPsi || 0).toFixed(3) +
             '<br>padj: ' + (r.padjust || 0).toExponential(2)),
         hovertemplate: '%{text}<extra></extra>',
@@ -324,7 +326,9 @@ function renderOutriderVolcano(rows, pval, zscore) {
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || r.geneID || 'NA') +
             '<br>SG ID: ' + r.sampleID +
+            '<br>Participant: ' + (r.participantExternalId || 'NA') +
             '<br>Family: ' + (r.familyID || 'NA') +
+            '<br>Affected: ' + (r.affected != null ? r.affected : 'NA') +
             '<br>Z: ' + (r.zScore || 0).toFixed(2) +
             '<br>l2fc: ' + fcVal(r).toFixed(3) +
             '<br>padj: ' + (r.padjust || 0).toExponential(2)),
@@ -449,7 +453,7 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
 const FRASER_COLS  = ['hgncSymbol', 'geneID', 'seqnames', 'start', 'end', 'type', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'sampleID', 'familyID'];
 const OUTRIDER_COLS = ['geneID', 'hgncSymbol', 'sampleID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'sampleID', 'familyID', 'chr', 'start', 'end', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore'];
-const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'bed_chrom', 'bed_start', 'bed_end', 'rna_sg_ids', 'matching_genome_sg_ids'];
+const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'family_id', 'participant_external_id', 'affected', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'bed_chrom', 'bed_start', 'bed_end', 'rna_sg_ids', 'matching_genome_sg_ids'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {
