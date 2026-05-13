@@ -11,6 +11,23 @@ from loguru import logger
 
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
+from metamist import graphql
+
+LONG_READ_STRING = 'LongRead'
+METAMIST_ANALYSIS_QUERY = graphql.gql(
+    """
+    query MyQuery($dataset: String!, $type: String!) {
+        project(name: $dataset) {
+            analyses(active: {eq: true}, type: {eq: $type}, status: {eq: COMPLETED}) {
+                output
+                timestampCompleted
+                meta
+            }
+        }
+    }
+""",
+)
+
 
 def query_for_latest_analysis(
     dataset: str,
