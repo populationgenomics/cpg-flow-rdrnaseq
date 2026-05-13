@@ -192,7 +192,11 @@ def load_cpg_to_family_mapping(mapping_file: str) -> dict:
 
 def affected_status_label(value) -> str:
     """Map numeric affected status to a human-readable label."""
-    match value:
+    try:
+        numeric = int(value)
+    except (ValueError, TypeError):
+        return 'Unknown'
+    match numeric:
         case 1:
             return 'Unaffected'
         case 2:

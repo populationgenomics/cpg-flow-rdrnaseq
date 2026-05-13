@@ -120,11 +120,9 @@ def make_dashboards(
         )
 
         # Build a family-mapping CSV scoped to this dataset's SG IDs
-        affected_map = {1: 'Unaffected', 2: 'Affected'}
         csv_lines = ['sequencing_group.id,family.external_ids,participant.external_id,affected']
         for cpg_id, meta in cpg_metadata.items():
-            affected_label = affected_map.get(meta['affected'], 'Unknown')
-            csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{affected_label}')
+            csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{meta["affected"]}')
         family_csv_content = '\n'.join(csv_lines)
 
         j.command(
