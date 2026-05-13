@@ -22,33 +22,32 @@ MAX_POPMAX_AF = 0.01
 
 query_ids = gql(
     """
-        query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
+    query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
       project(name: $project) {
-    sequencingGroups(
-      id: {in_: $RnaSequencingGroupIds}) {
-      id
-      sample {
-        participant {
-            externalId
-            families {
+        sequencingGroups(id: {in_: $RnaSequencingGroupIds}) {
+          id
+          sample {
+            participant {
+              externalId
+              families {
                 externalId
-                        }
-                familyParticipants {
-                    affected
-                        }
-          samples {
-            sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
-              id
-              technology
-              type
+              }
+              familyParticipants {
+                affected
+              }
+              samples {
+                sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
+                  id
+                  technology
+                  type
+                }
+              }
             }
           }
         }
       }
     }
-  }
-}
-        """
+    """
 )
 
 
@@ -65,7 +64,7 @@ def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | i
                 'affected': participant['familyParticipants'][0]['affected'],
             }
         except (KeyError, IndexError, TypeError):
-            pass
+            logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
     return rna_to_metadata
 
 
@@ -308,18 +307,10 @@ def main():
 
     # --- Enrich TSV with participant metadata ---
     tsv_df = pd.read_csv(tsv_path, sep='\t')
-    metadata_rows = []
-    for _, row in tsv_df.iterrows():
-        rna_ids = str(row.get('rna_sg_ids', ''))
-        first_rna_id = rna_ids.strip('[]"').split(',')[0].strip().strip('"')
-        meta = rna_to_metadata.get(first_rna_id, {})
-        metadata_rows.append({
-            'family_id': meta.get('family_id', ''),
-            'participant_external_id': meta.get('participant_external_id', ''),
-            'affected': meta.get('affected', ''),
-        })
-    meta_df = pd.DataFrame(metadata_rows)
-    tsv_df = pd.concat([tsv_df, meta_df], axis=1)
+    first_rna_id = tsv_df['rna_sg_ids'].astype(str).str.strip('[]"').str.split(',').str[0].str.strip().str.strip('"')
+    meta_lookup = pd.DataFrame.from_dict(rna_to_metadata, orient='index')
+    for col in ['family_id', 'participant_external_id', 'affected']:
+        tsv_df[col] = first_rna_id.map(meta_lookup[col]).fillna('')
     tsv_df.to_csv(tsv_path, sep='\t', index=False)
     logger.info(f'Enriched TSV with participant metadata ({len(rna_to_metadata)} mappings)')
 
