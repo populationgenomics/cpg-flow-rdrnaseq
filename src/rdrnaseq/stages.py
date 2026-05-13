@@ -291,7 +291,7 @@ class VariantAnnotation(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         # TODO needs phasing out
-        mt_path: str = config.config_retrieve(['variant_annotation', 'mt_path'])
+        mt_path: str = ''
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         # todo this doesn't correctly identify `dataset-test`

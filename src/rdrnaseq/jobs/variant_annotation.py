@@ -12,6 +12,70 @@ from loguru import logger
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 
+def query_for_latest_analysis(
+    dataset: str,
+    analysis_type: str,
+    sequencing_type: str = 'all',
+    long_read: bool = False,
+    stage_name: str | None = None,
+) -> str | None:
+    """
+    Query for the latest analysis object of a given type in the requested project.
+
+    Analysis entries for Talos all have unique types, so we can use this generic query method
+
+    Args:
+        dataset (str):         project to query for
+        analysis_type (str):   analysis type to query for - rd_combiner writes MTs to metamist as 'matrixtable',
+                               seqr_loader used 'custom': using a config entry we can decide which type to use
+        sequencing_type (str): optional, if set, only return entries with meta.sequencing_type == this
+        long_read (bool):      if True, will skip over any entries that are not LongRead (SNPsIndels/SV)
+        stage_name (str):      optional, if set, will only return entries with meta.stage == this
+    Returns:
+        str, the path to the latest object for the given type, or log a warning and return None
+    """
+
+    # swapping to a string we can freely modify
+    query_dataset = dataset
+    if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
+        query_dataset += '-test'
+
+    loguru.logger.info(f'Querying for {analysis_type} in {query_dataset}')
+
+    result = graphql.query(METAMIST_ANALYSIS_QUERY, variables={'dataset': query_dataset, 'type': analysis_type})
+
+    # get all the relevant entries, and bin by date
+    analysis_by_date = {}
+    for analysis in result['project']['analyses']:
+        if analysis['output'] and (sequencing_type in {'all', analysis['meta'].get('sequencing_type')}):
+            # skip over the partial-cohort AnnotateDataset objects
+            if '_families-' in analysis['output']:
+                loguru.logger.debug(
+                    f'Skipping analysis {analysis["output"]} for dataset {query_dataset}. '
+                    f'It is a partial-cohort AnnotateDataset object',
+                )
+                continue
+
+            # manually implementing an XOR check - long read (bool) and LongRead in output must match
+            if long_read != (LONG_READ_STRING in analysis['output']):
+                loguru.logger.debug(
+                    f'Skipping analysis {analysis["output"]} for dataset {query_dataset}. '
+                    f'It does not match query parameter long_read={long_read}',
+                )
+                continue
+
+            if stage_name is not None and analysis['meta'].get('stage') != stage_name:
+                continue
+
+            analysis_by_date[analysis['timestampCompleted']] = analysis['output']
+
+    if not analysis_by_date:
+        loguru.logger.warning(f'No Analysis Entries found for dataset {query_dataset}')
+        return None
+
+    # return the latest, determined by a sort on timestamp
+    # 2023-10-10... > 2023-10-09..., so sort on strings
+    return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 def annotate_variants(
     fraser_csv: str | Path,
@@ -33,6 +97,17 @@ def annotate_variants(
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
+        mt_path = config.config_retrieve(['variant_annotation.mt_path', str(dataset_name)])
+        if mt_path is None:
+            logger.warning(f'MT path is None, skipping variant annotation for dataset {dataset_name}')
+            mt_path=query_for_latest_analysis(
+                dataset=dataset_name,
+                analysis_type=config.config_retrieve(['workflow', 'variant_annotation_mt_analysis_type'],default='matrixtable'),
+                sequencing_type=config.config_retrieve(['workflow', 'sequencing_type'], default="genome"),
+                long_read=config.config_retrieve(['workflow', 'long_read'],default= False ),
+                stage_name=config.config_retrieve(['workflow', 'variant_annotation_stage_name'],default="AnnotateDataset"),
+
+            )
 
         j = b.new_job(
             f'variant_annotation_{dataset_name}_{cohort_id}',
