@@ -302,8 +302,9 @@ def main():
 
     # --- Annotate with participant metadata and export TSV ---
     meta_hl = hl.literal(rna_to_metadata)
-    first_rna_id = hl.or_missing(ht.rna_sg_ids.length() > 0, ht.rna_sg_ids[0])
-    meta_entry = meta_hl.get(first_rna_id, hl.struct(family_id='', participant_external_id='', affected=''))
+    rna_sg_array = hl.array(ht.rna_sg_ids)
+    first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
+    meta_entry = meta_hl.get(first_rna_id, hl.struct(family_id='', participant_external_id='', affected=0))
     ht = ht.annotate(
         family_id=meta_entry.family_id,
         participant_external_id=meta_entry.participant_external_id,
