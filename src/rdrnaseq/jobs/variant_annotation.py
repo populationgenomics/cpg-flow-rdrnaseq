@@ -40,7 +40,7 @@ def query_for_latest_analysis(
     if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
         query_dataset += '-test'
 
-    loguru.logger.info(f'Querying for {analysis_type} in {query_dataset}')
+    logger.info(f'Querying for {analysis_type} in {query_dataset}')
 
     result = graphql.query(METAMIST_ANALYSIS_QUERY, variables={'dataset': query_dataset, 'type': analysis_type})
 
@@ -50,7 +50,7 @@ def query_for_latest_analysis(
         if analysis['output'] and (sequencing_type in {'all', analysis['meta'].get('sequencing_type')}):
             # skip over the partial-cohort AnnotateDataset objects
             if '_families-' in analysis['output']:
-                loguru.logger.debug(
+                logger.debug(
                     f'Skipping analysis {analysis["output"]} for dataset {query_dataset}. '
                     f'It is a partial-cohort AnnotateDataset object',
                 )
@@ -58,7 +58,7 @@ def query_for_latest_analysis(
 
             # manually implementing an XOR check - long read (bool) and LongRead in output must match
             if long_read != (LONG_READ_STRING in analysis['output']):
-                loguru.logger.debug(
+                logger.debug(
                     f'Skipping analysis {analysis["output"]} for dataset {query_dataset}. '
                     f'It does not match query parameter long_read={long_read}',
                 )
@@ -70,7 +70,7 @@ def query_for_latest_analysis(
             analysis_by_date[analysis['timestampCompleted']] = analysis['output']
 
     if not analysis_by_date:
-        loguru.logger.warning(f'No Analysis Entries found for dataset {query_dataset}')
+        logger.warning(f'No Analysis Entries found for dataset {query_dataset}')
         return None
 
     # return the latest, determined by a sort on timestamp
@@ -99,7 +99,7 @@ def annotate_variants(
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
         mt_path = config.config_retrieve(['variant_annotation', 'mt_path', str(dataset_name)], default=None)
         if mt_path is None:
-            logger.warning(f'MT path is None, skipping variant annotation for dataset {dataset_name}')
+            logger.warning(f'MT path is None, grabbing latest variant annotation for dataset {dataset_name}')
             mt_path=query_for_latest_analysis(
                 dataset=dataset_name,
                 analysis_type=config.config_retrieve(['workflow', 'variant_annotation_mt_analysis_type'],default='matrixtable'),
