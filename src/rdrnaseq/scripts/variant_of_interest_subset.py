@@ -228,10 +228,19 @@ def subset_mt_to_variants_of_interest(
         rna_sg_ids=ht.matching_samples.map(genome_to_rna_hl.get),
     )
 
+    raw_hgvsc = ht.mainTranscript.hgvsc
+    hgvsc_change = hl.if_else(raw_hgvsc.contains(':'), raw_hgvsc.split(':')[1], raw_hgvsc)
+
+    has_mane = 'mane_select' in ht.mainTranscript
+    if has_mane:
+        logger.info('mainTranscript has mane_select — using RefSeq transcript IDs')
+    else:
+        logger.info('mainTranscript has no mane_select — falling back to Ensembl transcript IDs')
+
     fields = {
         'gene_symbol': ht.mainTranscript.gene_symbol,
-        'transcript_id': ht.mainTranscript.transcript_id,
-        'hgvsc': ht.mainTranscript.hgvsc,
+        'transcript_id': ht.mainTranscript.mane_select if has_mane else ht.mainTranscript.transcript_id,
+        'hgvsc': hgvsc_change,
         'major_consequence': ht.mainTranscript.major_consequence,
         'splice_ai_delta_score': ht.splice_ai.delta_score,
         'splice_ai_consequence': ht.splice_ai.splice_consequence,
