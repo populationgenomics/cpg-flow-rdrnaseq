@@ -690,7 +690,8 @@ async function init() {
                 r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
                 const tid = r.transcript_id || '';
                 const sym = r.gene_symbol || '';
-                const hgvsc = r.hgvsc || '';
+                const rawHgvsc = r.hgvsc || '';
+                const hgvsc = rawHgvsc.includes(':') ? rawHgvsc.split(':').pop() : rawHgvsc;
                 r.hgvs = tid && hgvsc ? tid + '(' + sym + '):' + hgvsc : hgvsc || '';
             });
         }
