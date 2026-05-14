@@ -502,7 +502,7 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
 const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
-const VARIANT_COLS = ['gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids', 'bed_chrom', 'bed_start', 'bed_end'];
+const VARIANT_COLS = ['variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {
@@ -682,6 +682,18 @@ async function init() {
         // 3. Variant annotations (optional)
         if (FILES.variant_tsv) {
             variantRows = await fetchCSV('variants', FILES.variant_tsv);
+            variantRows.forEach(r => {
+                // variant_id: "7-140674264-G-C" from locus + alleles
+                const alleles = (r.alleles || '').replace(/[\[\]"]/g, '').split(',').map(s => s.trim());
+                const locParts = (r.locus || '').split(':');
+                const chrom = (locParts[0] || '').replace('chr', '');
+                r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
+                // hgvs: "NM_007294.4(BRCA1):c.5588A>G" from transcript_id, gene_symbol, hgvsc
+                const tid = r.transcript_id || '';
+                const sym = r.gene_symbol || '';
+                const hgvsc = r.hgvsc || '';
+                r.hgvs = tid && hgvsc ? tid + '(' + sym + '):' + hgvsc : hgvsc || '';
+            });
         }
 
         logLine('render-tbl', 'Tables...', 'log-wait');
