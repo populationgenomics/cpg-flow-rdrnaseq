@@ -95,7 +95,7 @@ def query_for_latest_analysis(
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 
-def annotate_variants(
+def match_variants_and_splicing(
     fraser_csv: str | Path,
     mt_path: str,
     sg_ids_by_dataset: dict[str, list[str]],
@@ -115,16 +115,16 @@ def annotate_variants(
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
-        mt_path = config.config_retrieve(['variant_annotation', 'mt_path', str(dataset_name)], default=None)
-        logger.info(f'Config lookup for variant_annotation.mt_path.{dataset_name}: {mt_path!r}')
+        mt_path = config.config_retrieve(['variant_splice_match', 'mt_path', str(dataset_name)], default=None)
+        logger.info(f'Config lookup for variant_splice_match.mt_path.{dataset_name}: {mt_path!r}')
         if mt_path is None:
             analysis_type = config.config_retrieve(
-                ['workflow', 'variant_annotation_mt_analysis_type'], default='matrixtable'
+                ['workflow', 'variant_splice_match_mt_analysis_type'], default='matrixtable'
             )
-            seq_type = config.config_retrieve(['workflow', 'variant_annotation_sequencing_type'], default='genome')
+            seq_type = config.config_retrieve(['workflow', 'variant_splice_match_sequencing_type'], default='genome')
             long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
             stage_name = config.config_retrieve(
-                ['workflow', 'variant_annotation_stage_name'], default='AnnotateDataset'
+                ['workflow', 'variant_splice_match_stage_name'], default='AnnotateDataset'
             )
             logger.info(
                 f'Config lookup returned None, querying metamist for latest analysis: '
@@ -144,8 +144,8 @@ def annotate_variants(
             continue
 
         j = b.new_job(
-            f'variant_annotation_{dataset_name}_{cohort_id}',
-            attributes=job_attrs | {'tool': 'variant_annotation'},
+            f'variant_splice_match_{dataset_name}_{cohort_id}',
+            attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
 

@@ -16,7 +16,7 @@ from cpg_flow.filetypes import (
 )
 from cpg_utils import Path, config
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_annotation
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -274,7 +274,7 @@ class Outrider(stage.CohortStage):
 
 
 @stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['bed', 'tsv'])
-class VariantAnnotation(stage.CohortStage):
+class VariantSpliceMatch(stage.CohortStage):
     """
     Annotate FRASER significant regions (determined using rna data)
      with rare variants from a seqr-loader MatrixTable (by finding their corresponding genome data).
@@ -282,8 +282,8 @@ class VariantAnnotation(stage.CohortStage):
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         return {
-            'bed': cohort.dataset.prefix() / 'variant_annotation' / f'{cohort.id}_variants_of_interest.bed',
-            'tsv': cohort.dataset.prefix() / 'variant_annotation' / f'{cohort.id}_variants_of_interest.tsv',
+            'bed': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.bed',
+            'tsv': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.tsv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -299,7 +299,7 @@ class VariantAnnotation(stage.CohortStage):
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
             # TODO: if this is more than one dataset per cohort, this will need to be refactored
 
-        jobs = variant_annotation.annotate_variants(
+        jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
             mt_path=mt_path,
             sg_ids_by_dataset=sg_ids_by_dataset,
@@ -311,7 +311,7 @@ class VariantAnnotation(stage.CohortStage):
 
 
 @stage.stage(
-    required_stages=[Fraser, Outrider, VariantAnnotation], analysis_type='web', analysis_keys=['dashboard_html']
+    required_stages=[Fraser, Outrider, VariantSpliceMatch], analysis_type='web', analysis_keys=['dashboard_html']
 )
 class Dashboard(stage.CohortStage):
     """
@@ -334,8 +334,8 @@ class Dashboard(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
-        variant_bed = inputs.as_path(cohort, VariantAnnotation, 'bed')
-        variant_tsv = inputs.as_path(cohort, VariantAnnotation, 'tsv')
+        variant_bed = inputs.as_path(cohort, VariantSpliceMatch, 'bed')
+        variant_tsv = inputs.as_path(cohort, VariantSpliceMatch, 'tsv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
