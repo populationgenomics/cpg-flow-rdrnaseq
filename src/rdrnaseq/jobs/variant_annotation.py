@@ -115,16 +115,28 @@ def annotate_variants(
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
         mt_path = config.config_retrieve(['variant_annotation', 'mt_path', str(dataset_name)], default=None)
+        logger.info(f'Config lookup for variant_annotation.mt_path.{dataset_name}: {mt_path!r}')
         if mt_path is None:
-            logger.warning(f'MT path is None, grabbing latest variant annotation for dataset {dataset_name}')
-            mt_path=query_for_latest_analysis(
-                dataset=dataset_name,
-                analysis_type=config.config_retrieve(['workflow', 'variant_annotation_mt_analysis_type'],default='matrixtable'),
-                sequencing_type=config.config_retrieve(['workflow', 'sequencing_type'], default="genome"),
-                long_read=config.config_retrieve(['workflow', 'long_read'],default= False ),
-                stage_name=config.config_retrieve(['workflow', 'variant_annotation_stage_name'],default="AnnotateDataset"),
-
+            analysis_type = config.config_retrieve(['workflow', 'variant_annotation_mt_analysis_type'], default='matrixtable')
+            seq_type = config.config_retrieve(['workflow', 'sequencing_type'], default='genome')
+            long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
+            stage_name = config.config_retrieve(['workflow', 'variant_annotation_stage_name'], default='AnnotateDataset')
+            logger.info(
+                f'Config lookup returned None, querying metamist for latest analysis: '
+                f'analysis_type={analysis_type!r}, sequencing_type={seq_type!r}, '
+                f'long_read={long_read!r}, stage_name={stage_name!r}',
             )
+            mt_path = query_for_latest_analysis(
+                dataset=dataset_name,
+                analysis_type=analysis_type,
+                sequencing_type=seq_type,
+                long_read=long_read,
+                stage_name=stage_name,
+            )
+            logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
+        if mt_path is None:
+            logger.error(f'No MT path found for dataset {dataset_name} — skipping job')
+            continue
 
         j = b.new_job(
             f'variant_annotation_{dataset_name}_{cohort_id}',
