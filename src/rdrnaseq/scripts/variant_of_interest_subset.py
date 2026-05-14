@@ -228,15 +228,14 @@ def subset_mt_to_variants_of_interest(
         rna_sg_ids=ht.matching_samples.map(genome_to_rna_hl.get),
     )
 
-    has_mane = 'mane_select' in ht.mainTranscript
-    if has_mane:
-        logger.info('mainTranscript has mane_select — using RefSeq transcript IDs')
-    else:
-        logger.info('mainTranscript has no mane_select — falling back to Ensembl transcript IDs')
+    main_tid = ht.mainTranscript.transcript_id
+    matching_tc = ht.vep.transcript_consequences.filter(lambda tc: tc.transcript_id == main_tid)
+    mane_raw = hl.or_missing(matching_tc.length() > 0, matching_tc[0].mane_select)
+    refseq_tid = hl.or_missing(hl.is_defined(mane_raw) & (mane_raw != ''), mane_raw.split(':')[0])
 
     fields = {
         'gene_symbol': ht.mainTranscript.gene_symbol,
-        'transcript_id': ht.mainTranscript.mane_select if has_mane else ht.mainTranscript.transcript_id,
+        'transcript_id': hl.or_else(refseq_tid, main_tid),
         'hgvsc': ht.mainTranscript.hgvsc,
         'major_consequence': ht.mainTranscript.major_consequence,
         'splice_ai_delta_score': ht.splice_ai.delta_score,
@@ -327,7 +326,10 @@ def main():
         bed_start=ht.bed_start,
         bed_end=ht.bed_end,
         name=hl.or_else(
-            ht.transcript_id + '(' + ht.gene_symbol + '):'
+            ht.transcript_id
+            + '('
+            + ht.gene_symbol
+            + '):'
             + hl.if_else(ht.hgvsc.contains(':'), ht.hgvsc.split(':')[1], ht.hgvsc),
             ht.bed_chrom + ':' + hl.str(ht.bed_start) + ':' + ht.alleles[0] + '>' + ht.alleles[1],
         ),
