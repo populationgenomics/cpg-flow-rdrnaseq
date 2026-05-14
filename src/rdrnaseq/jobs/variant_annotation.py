@@ -121,7 +121,7 @@ def annotate_variants(
             analysis_type = config.config_retrieve(
                 ['workflow', 'variant_annotation_mt_analysis_type'], default='matrixtable'
             )
-            seq_type = config.config_retrieve(['workflow', 'sequencing_type'], default='genome')
+            seq_type = config.config_retrieve(['workflow', 'variant_annotation_sequencing_type'], default='genome')
             long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
             stage_name = config.config_retrieve(
                 ['workflow', 'variant_annotation_stage_name'], default='AnnotateDataset'
