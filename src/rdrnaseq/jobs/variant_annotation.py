@@ -94,6 +94,7 @@ def query_for_latest_analysis(
     # 2023-10-10... > 2023-10-09..., so sort on strings
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
+
 def annotate_variants(
     fraser_csv: str | Path,
     mt_path: str,
@@ -117,10 +118,14 @@ def annotate_variants(
         mt_path = config.config_retrieve(['variant_annotation', 'mt_path', str(dataset_name)], default=None)
         logger.info(f'Config lookup for variant_annotation.mt_path.{dataset_name}: {mt_path!r}')
         if mt_path is None:
-            analysis_type = config.config_retrieve(['workflow', 'variant_annotation_mt_analysis_type'], default='matrixtable')
+            analysis_type = config.config_retrieve(
+                ['workflow', 'variant_annotation_mt_analysis_type'], default='matrixtable'
+            )
             seq_type = config.config_retrieve(['workflow', 'sequencing_type'], default='genome')
             long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
-            stage_name = config.config_retrieve(['workflow', 'variant_annotation_stage_name'], default='AnnotateDataset')
+            stage_name = config.config_retrieve(
+                ['workflow', 'variant_annotation_stage_name'], default='AnnotateDataset'
+            )
             logger.info(
                 f'Config lookup returned None, querying metamist for latest analysis: '
                 f'analysis_type={analysis_type!r}, sequencing_type={seq_type!r}, '
