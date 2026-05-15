@@ -97,7 +97,6 @@ def query_for_latest_analysis(
 
 def match_variants_and_splicing(
     fraser_csv: str | Path,
-    mt_path: str,
     sg_ids_by_dataset: dict[str, list[str]],
     output: str,
     cohort_id: str,
