@@ -151,6 +151,8 @@ Examples:
         default=None,
         help='Output path for private dashboard HTML ',
     )
+    parser.add_argument('--dataset-name', required=True, help='CPG dataset name (e.g. rdnow)')
+    parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
 
     return parser.parse_args()
 
@@ -245,9 +247,9 @@ def main() -> None:
     )
 
     print('\nDashboard created successfully!')
-    print(f'  HTML:  {args.output}')
+    print(f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html')
 
-    print(f'  Private HTML:  {args.private_output}')
+    print(f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html')
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')

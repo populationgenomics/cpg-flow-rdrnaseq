@@ -145,7 +145,9 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --output-fraser-csv {j.out.fraser_csv} \
     --output-outrider-csv {j.out.outrider_csv} \
     --variant-bed-filename {cohort_id}.rna_dashboard.variants.bed \
-    --variant-tsv-filename {cohort_id}.rna_dashboard.variants.tsv
+    --variant-tsv-filename {cohort_id}.rna_dashboard.variants.tsv \
+    --dataset-name {dataset_name} \
+    --cohort-id {cohort_id}
 """),
         )
         # TODO: When working with a Cohort across multiple datasets,

@@ -201,12 +201,8 @@ def subset_mt_to_variants_of_interest(
     )
     ht = ht.filter(ht.matching_samples.length() > 0)
 
-    gnomad_genomes_af = ht.gnomad_genomes.AF_POPMAX_OR_GLOBAL
-    gnomad_exomes_af = ht.gnomad_exomes.AF_POPMAX_OR_GLOBAL
-    ht = ht.filter(
-        (hl.is_missing(gnomad_genomes_af) | (gnomad_genomes_af < MAX_POPMAX_AF))
-        & (hl.is_missing(gnomad_exomes_af) | (gnomad_exomes_af < MAX_POPMAX_AF)),
-    )
+    gnomad_af = ht.gnomad_joint.AF_POPMAX_OR_GLOBAL
+    ht = ht.filter(hl.is_missing(gnomad_af) | (gnomad_af < MAX_POPMAX_AF))
 
     pos = ht.locus.position
     ht = ht.annotate(
@@ -251,7 +247,7 @@ def subset_mt_to_variants_of_interest(
     if 'avis_phred' in ht.row:
         fields['avis_phred'] = ht.avis_phred
     if 'avis' in ht.row:
-        fields['avi_score'] = ht.avis
+        fields['avis_score'] = ht.avis
 
     return ht.select(**fields)
 
