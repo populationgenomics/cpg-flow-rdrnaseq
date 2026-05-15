@@ -116,8 +116,7 @@ def match_variants_and_splicing(
         logger.info(f'Config lookup for variant_splice_match.mt_path.{dataset_name}: {mt_path!r}')
         if mt_path is None:
             analysis_type = 'matrixtable'
-            
-            
+
             seq_type = config.config_retrieve(['workflow', 'variant_splice_match_sequencing_type'], default='genome')
             long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
             stage_name = config.config_retrieve(

@@ -247,9 +247,13 @@ def main() -> None:
     )
 
     print('\nDashboard created successfully!')
-    print(f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html')
+    print(
+        f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html'
+    )
 
-    print(f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html')
+    print(
+        f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html'
+    )
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')
