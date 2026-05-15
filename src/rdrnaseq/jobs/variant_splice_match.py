@@ -98,7 +98,7 @@ def query_for_latest_analysis(
 def match_variants_and_splicing(
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
-    output_by_dataset: dict[str, str],
+    output: str,
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -149,7 +149,6 @@ def match_variants_and_splicing(
         j.image(config.config_retrieve('workflow')['driver_image'])
 
         rna_ids_str = ' '.join(sg_ids)
-        output_root = output_by_dataset[dataset_name]
 
         j.command(
             command(f"""\
@@ -158,7 +157,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {output_root}
+    --output {output}
 """),
         )
         jobs.append(j)
