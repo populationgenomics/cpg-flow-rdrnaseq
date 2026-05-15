@@ -81,7 +81,7 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
 
     merged = []
     for chrom, group in df.groupby('seqnames'):
-        rows = group.sort_values('buf_start').to_dict('records')
+        rows = group.to_dict('records')
         current = {
             'chrom': chrom,
             'start': rows[0]['buf_start'],
