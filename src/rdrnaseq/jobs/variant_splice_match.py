@@ -39,12 +39,10 @@ def query_for_latest_analysis(
     """
     Query for the latest analysis object of a given type in the requested project.
 
-    Analysis entries for Talos all have unique types, so we can use this generic query method
 
     Args:
         dataset (str):         project to query for
         analysis_type (str):   analysis type to query for - rd_combiner writes MTs to metamist as 'matrixtable',
-                               seqr_loader used 'custom': using a config entry we can decide which type to use
         sequencing_type (str): optional, if set, only return entries with meta.sequencing_type == this
         long_read (bool):      if True, will skip over any entries that are not LongRead (SNPsIndels/SV)
         stage_name (str):      optional, if set, will only return entries with meta.stage == this
@@ -117,9 +115,9 @@ def match_variants_and_splicing(
         mt_path = config.config_retrieve(['variant_splice_match', 'mt_path', str(dataset_name)], default=None)
         logger.info(f'Config lookup for variant_splice_match.mt_path.{dataset_name}: {mt_path!r}')
         if mt_path is None:
-            analysis_type = config.config_retrieve(
-                ['workflow', 'variant_splice_match_mt_analysis_type'], default='matrixtable'
-            )
+            analysis_type = 'matrixtable'
+            
+            
             seq_type = config.config_retrieve(['workflow', 'variant_splice_match_sequencing_type'], default='genome')
             long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
             stage_name = config.config_retrieve(

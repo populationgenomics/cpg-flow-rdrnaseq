@@ -53,6 +53,7 @@ query_ids = gql(
 
 def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
     """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
+    affected_lookup = {1: 'Unaffected', 2: 'Affected', 0: 'Unknown'}
     rna_to_metadata: dict[str, dict[str, str | int]] = {}
     for group in query_result['project']['sequencingGroups']:
         rna_id = group['id']
@@ -61,7 +62,7 @@ def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | i
             rna_to_metadata[rna_id] = {
                 'participant_external_id': participant['externalId'],
                 'family_id': participant['families'][0]['externalId'],
-                'affected': participant['familyParticipants'][0]['affected'],
+                'affected': affected_lookup[participant['familyParticipants'][0]['affected']],
             }
         except (KeyError, IndexError, TypeError):
             logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
@@ -311,12 +312,8 @@ def main():
     meta_hl = hl.literal(rna_to_metadata)
     rna_sg_array = hl.array(ht.rna_sg_ids)
     first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
-    meta_entry = meta_hl.get(first_rna_id, hl.struct(participant_external_id='', family_id='', affected=0))
-    affected_labels = hl.literal({1: 'Unaffected', 2: 'Affected'})
     ht = ht.annotate(
-        family_id=meta_entry.family_id,
-        participant_external_id=meta_entry.participant_external_id,
-        affected=affected_labels.get(meta_entry.affected, 'Unknown'),
+        **meta_hl.get(first_rna_id, hl.struct(participant_external_id='', family_id='', affected='Unknown'))
     )
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
