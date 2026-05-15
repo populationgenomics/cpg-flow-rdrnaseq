@@ -248,7 +248,7 @@ def subset_mt_to_variants_of_interest(
     if 'avis_phred' in ht.row:
         fields['avis_phred'] = ht.avis_phred
     if 'avis' in ht.row:
-        fields['avis_score'] = ht.avis
+        fields['avi_score'] = ht.avis
 
     return ht.select(**fields)
 
