@@ -336,7 +336,7 @@ def main():
             ht.bed_chrom + ':' + hl.str(ht.bed_start) + ':' + ht.alleles[0] + '>' + ht.alleles[1],
         ),
     )
-    bed_ht = bed_ht.key_by()
+    bed_ht = bed_ht.key_by('bed_chrom', 'bed_start', 'bed_end', 'name')
     bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
 
     bed_path = f'{args.output}.bed'
