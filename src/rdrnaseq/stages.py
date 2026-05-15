@@ -291,7 +291,6 @@ class VariantSpliceMatch(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
 
-
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         # todo this doesn't correctly identify `dataset-test`
         for sg in cohort.get_sequencing_groups():
