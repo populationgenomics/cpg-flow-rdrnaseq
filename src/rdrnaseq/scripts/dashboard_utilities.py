@@ -190,19 +190,16 @@ def load_cpg_to_family_mapping(mapping_file: str) -> dict:
     return mapping
 
 
+AFFECTED_LABELS: dict[int, str] = {0: 'Unknown', 1: 'Unaffected', 2: 'Affected'}
+
+
 def affected_status_label(value) -> str:
     """Map numeric affected status to a human-readable label."""
     try:
         numeric = int(value)
     except (ValueError, TypeError):
         return 'Unknown'
-    match numeric:
-        case 1:
-            return 'Unaffected'
-        case 2:
-            return 'Affected'
-        case _:
-            return 'Unknown'
+    return AFFECTED_LABELS.get(numeric, 'Unknown')
 
 
 def add_family_ids(df: pd.DataFrame, cpg_to_metadata: dict) -> pd.DataFrame:

@@ -16,6 +16,8 @@ import hail as hl
 from cpg_utils import hail_batch
 from metamist.graphql import gql, query
 
+from rdrnaseq.scripts.dashboard_utilities import AFFECTED_LABELS
+
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
@@ -53,7 +55,6 @@ query_ids = gql(
 
 def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
     """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
-    affected_lookup = {1: 'Unaffected', 2: 'Affected', 0: 'Unknown'}
     rna_to_metadata: dict[str, dict[str, str | int]] = {}
     for group in query_result['project']['sequencingGroups']:
         rna_id = group['id']
@@ -62,7 +63,7 @@ def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | i
             rna_to_metadata[rna_id] = {
                 'participant_external_id': participant['externalId'],
                 'family_id': participant['families'][0]['externalId'],
-                'affected': affected_lookup[participant['familyParticipants'][0]['affected']],
+                'affected': AFFECTED_LABELS.get(participant['familyParticipants'][0]['affected'], 'Unknown'),
             }
         except (KeyError, IndexError, TypeError):
             logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
