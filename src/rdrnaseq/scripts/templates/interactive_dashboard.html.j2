@@ -173,7 +173,8 @@
 
         {% if variant_tsv_filename %}
         <div class="plot-container">
-            <h2>Rare Variants of Interest</h2>
+            <h2 style="display:inline-block">Rare Variants of Interest</h2>
+            <button onclick="unlockAvis()" id="avis-lock-btn" style="display:none;margin-left:12px;padding:4px 12px;border:1px solid #aaa;border-radius:4px;cursor:pointer;font-size:0.85em" title="Unlock hidden AVIS column">&#x1f512; DEV</button>
             <p class="plot-caption">Rare variants (popmax AF &lt; 1%) found in the genomic data of samples with FRASER hits in the same region. Distance shows how far the variant is from the nearest FRASER junction.</p>
             <div style="margin-bottom:12px">
                 <label style="font-weight:bold;color:#555">Max FRASER distance (bp): </label>
@@ -220,6 +221,7 @@ const DEFAULT_ZSCORE = {{ default_zscore_threshold }};
 let fraserRows = [], outriderRows = [], variantRows = [];
 let igvBrowser = null;
 let fraserDT = null, outriderDT = null, commonDT = null, variantDT = null;
+let avisUnlocked = false;
 
 // ─── Load log UI ─────────────────────────────────────────────────────────────
 function logLine(id, msg, cls) {
@@ -435,10 +437,10 @@ function findCommon(fRows, oRows, pval, dpsi, zscore) {
 
 // ─── DataTables ──────────────────────────────────────────────────────────────
 const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
-const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi'];
+const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi', 'avis_phred'];
 const DP2 = ['zScore', 'outrider_zScore'];
 
-const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_ids: 'Genome SG IDs'};
+const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_ids: 'Genome SG IDs', avis_phred: 'AVIS Phred'};
 const WRAP_COLS = new Set(['rna_sg_ids', 'matching_genome_sg_ids']);
 
 function colTitle(c) {
@@ -502,7 +504,7 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
 const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
-const VARIANT_COLS = ['variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids'];
+const VARIANT_COLS_BASE = ['variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {
@@ -562,15 +564,43 @@ function showRegionDetails(chr, start, end) {
     }
 }
 
+// ─── AVIS column visibility ─────────────────────────────────────────────────
+const AVIS_TITLE = COL_TITLES['avis_phred'];
+function hideAvisColumn() {
+    if (!variantDT || avisUnlocked) return;
+    const headers = variantDT.columns().header().toArray();
+    const idx = headers.findIndex(th => th.textContent === AVIS_TITLE);
+    if (idx >= 0) variantDT.column(idx).visible(false);
+}
+function unlockAvis() {
+    if (avisUnlocked) return;
+    const pw = prompt('Enter password to reveal Dev scores:');
+    if (pw === 'cardinal') {
+        avisUnlocked = true;
+        if (variantDT) {
+            const headers = variantDT.columns().header().toArray();
+            const idx = headers.findIndex(th => th.textContent === AVIS_TITLE);
+            if (idx >= 0) variantDT.column(idx).visible(true);
+        }
+        const btn = document.getElementById('avis-lock-btn');
+        btn.innerHTML = '&#x1f513; AVIS';
+        btn.style.color = '#2f9e44';
+    } else if (pw !== null) {
+        alert('Incorrect password.');
+    }
+}
+
 // ─── Variant table filter ───────────────────────────────────────────────────
 function applyVariantFilter() {
     const maxDist = parseFloat(document.getElementById('fraser-dist-thresh').value);
     const filtered = variantRows.filter(r => r.fraser_distance !== null && r.fraser_distance <= maxDist);
-    variantDT = buildDT('variant-table', filtered, VARIANT_COLS, variantDT);
+    variantDT = buildDT('variant-table', filtered, window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+    hideAvisColumn();
 }
 function resetVariantFilter() {
     document.getElementById('fraser-dist-thresh').value = 200;
-    variantDT = buildDT('variant-table', variantRows, VARIANT_COLS, variantDT);
+    variantDT = buildDT('variant-table', variantRows, window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+    hideAvisColumn();
 }
 
 // ─── IGV ─────────────────────────────────────────────────────────────────────
@@ -712,7 +742,13 @@ async function init() {
             renderStats(null);
         }
         if (variantRows.length) {
-            variantDT = buildDT('variant-table', variantRows, VARIANT_COLS, null);
+            const hasAvis = variantRows.some(r => r.avis_phred != null && r.avis_phred !== '');
+            window.VARIANT_COLS = hasAvis ? [...VARIANT_COLS_BASE, 'avis_phred'] : VARIANT_COLS_BASE;
+            variantDT = buildDT('variant-table', variantRows, window.VARIANT_COLS, null);
+            if (hasAvis) {
+                document.getElementById('avis-lock-btn').style.display = '';
+                hideAvisColumn();
+            }
         }
         logLine('render-tbl', 'Tables', 'log-ok');
 
