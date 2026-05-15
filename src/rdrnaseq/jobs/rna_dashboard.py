@@ -153,7 +153,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{j.out.dashboard_html}'
+            f'/transcriptome/rna_dashboard/{cohort_id}.rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
