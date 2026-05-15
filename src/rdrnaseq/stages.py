@@ -320,6 +320,7 @@ class Dashboard(stage.CohortStage):
         base = f'{cohort.id}.rna_dashboard'
         return {
             'dashboard_html': prefix / f'{base}.html',
+            'private_dashboard_html': prefix / f'{base}.private.html',
             'fraser_csv': prefix / f'{base}.fraser.csv',
             'outrider_csv': prefix / f'{base}.outrider.csv',
             'variant_bed': prefix / f'{base}.variants.bed',

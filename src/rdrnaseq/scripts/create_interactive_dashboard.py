@@ -155,6 +155,28 @@ Examples:
     return parser.parse_args()
 
 
+def apply_family_mapping(mapping_file, fraser_df, outrider_df):
+    """Load family mapping, filter DataFrames to mapped SG IDs, and add metadata columns."""
+    cpg_to_family = load_cpg_to_family_mapping(mapping_file)
+    sg_ids = set(cpg_to_family.keys())
+    print(f'\nFiltering to {len(sg_ids)} sample IDs from family mapping...')
+
+    pre = len(fraser_df)
+    fraser_df = fraser_df[fraser_df['sampleID'].isin(sg_ids)].copy()
+    print(f'  FRASER: {pre} -> {len(fraser_df)} rows')
+
+    if outrider_df is not None:
+        pre = len(outrider_df)
+        outrider_df = outrider_df[outrider_df['sampleID'].isin(sg_ids)].copy()
+        print(f'  OUTRIDER: {pre} -> {len(outrider_df)} rows')
+
+    fraser_df = add_family_ids(fraser_df, cpg_to_family)
+    if outrider_df is not None:
+        outrider_df = add_family_ids(outrider_df, cpg_to_family)
+
+    return cpg_to_family, fraser_df, outrider_df
+
+
 def main() -> None:
     """Main entry point."""
     args = parse_args()
@@ -166,22 +188,7 @@ def main() -> None:
     # ── Load and apply family mapping ────────────────────────────────────────
     cpg_to_family: dict[str, dict] = {}
     if args.family_mapping:
-        cpg_to_family = load_cpg_to_family_mapping(args.family_mapping)
-        sg_ids = set(cpg_to_family.keys())
-        print(f'\nFiltering to {len(sg_ids)} sample IDs from family mapping...')
-
-        pre = len(fraser_df)
-        fraser_df = fraser_df[fraser_df['sampleID'].isin(sg_ids)].copy()
-        print(f'  FRASER: {pre} -> {len(fraser_df)} rows')
-
-        if outrider_df is not None:
-            pre = len(outrider_df)
-            outrider_df = outrider_df[outrider_df['sampleID'].isin(sg_ids)].copy()
-            print(f'  OUTRIDER: {pre} -> {len(outrider_df)} rows')
-
-        fraser_df = add_family_ids(fraser_df, cpg_to_family)
-        if outrider_df is not None:
-            outrider_df = add_family_ids(outrider_df, cpg_to_family)
+        cpg_to_family, fraser_df, outrider_df = apply_family_mapping(args.family_mapping, fraser_df, outrider_df)
 
     # ── Load ENSG-to-symbol mapping and enrich DataFrames ──────────────────
     print('\nLoading ENSG-to-symbol mapping...')
@@ -210,28 +217,25 @@ def main() -> None:
         print(f'  OUTRIDER CSV: {outrider_csv_path} ({len(outrider_df)} rows)')
 
     # ── Build embedded data for JS ───────────────────────────────────────────
-    family_map = cpg_to_family
-
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
         ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
 
     # ── Render dashboard HTML ────────────────────────────────────────────────
-    render_kwargs = dict(
-        fraser_csv_filename=Path(fraser_csv_path).name,
-        outrider_csv_filename=Path(outrider_csv_path).name if outrider_csv_path else None,
-        family_map=family_map,
-        ensg_to_hgnc=ensg_to_hgnc,
-        pvalue_threshold=args.pvalue_threshold,
-        deltapsi_threshold=args.deltapsi_threshold,
-        zscore_threshold=args.zscore_threshold,
-        variant_bed_filename=args.variant_bed_filename,
-        variant_tsv_filename=args.variant_tsv_filename,
-    )
+    render_kwargs = {
+        'fraser_csv_filename': Path(fraser_csv_path).name,
+        'outrider_csv_filename': Path(outrider_csv_path).name if outrider_csv_path else None,
+        'family_map': cpg_to_family,
+        'ensg_to_hgnc': ensg_to_hgnc,
+        'pvalue_threshold': args.pvalue_threshold,
+        'deltapsi_threshold': args.deltapsi_threshold,
+        'zscore_threshold': args.zscore_threshold,
+        'variant_bed_filename': args.variant_bed_filename,
+        'variant_tsv_filename': args.variant_tsv_filename,
+    }
 
     print('\nRendering public dashboard...')
     render_dashboard(output_path=args.output, **render_kwargs)
-
 
     print('Rendering private dashboard...')
     render_dashboard(

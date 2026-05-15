@@ -112,6 +112,7 @@ def make_dashboards(
         j.declare_resource_group(
             out={
                 'dashboard_html': f'{cohort_id}.rna_dashboard.html',
+                'private_dashboard_html': f'{cohort_id}.rna_dashboard.private.html',
                 'fraser_csv': f'{cohort_id}.rna_dashboard.fraser.csv',
                 'outrider_csv': f'{cohort_id}.rna_dashboard.outrider.csv',
                 'variant_bed': f'{cohort_id}.rna_dashboard.variants.bed',
