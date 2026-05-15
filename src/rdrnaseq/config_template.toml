@@ -40,6 +40,9 @@ min_count = 5
 pval_cutoff = 0.1
 z_cutoff = 0.0
 
+[variant_splice_match.mt_path]
+
+
 [cohort_job_resources]
 base_storage_gb=100
 per_bam_storage=10

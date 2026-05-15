@@ -74,6 +74,8 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
 def make_dashboards(
     fraser_csv: str | Path,
     outrider_csv: str | Path,
+    variant_bed: str | Path,
+    variant_tsv: str | Path,
     output_paths: dict[str, str | Path],
     sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
@@ -82,18 +84,20 @@ def make_dashboards(
     """
     Create one Hail Batch job per dataset that renders an interactive dashboard.
 
-    Each job localises the full cohort-level Fraser and Outrider CSVs, writes a
-    family-mapping CSV scoped to that dataset's SG IDs, and runs the dashboard
-    CLI script. The script writes an HTML file plus companion FRASER/OUTRIDER
-    CSVs in the same directory — the HTML loads them at runtime via relative
-    fetch() + PapaParse.
+    Each job localises the full cohort-level Fraser and Outrider CSVs, the
+    variant annotation BED/TSV, writes a family-mapping CSV scoped to that
+    dataset's SG IDs, and runs the dashboard CLI script. The script writes an
+    HTML file plus companion data files in the same directory — the HTML loads
+    them at runtime via relative fetch() + PapaParse.
 
-    output_paths keys: 'dashboard_html', 'fraser_csv', 'outrider_csv'
+    output_paths keys: 'dashboard_html', 'fraser_csv', 'outrider_csv', 'variant_bed', 'variant_tsv'
     """
     b = get_batch()
 
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
+    variant_bed_input = b.read_input(str(variant_bed))
+    variant_tsv_input = b.read_input(str(variant_tsv))
 
     ensg_to_symbol_path = config.config_retrieve(['references', 'ensg_to_symbol'])
     ensg_input = b.read_input(ensg_to_symbol_path)
@@ -108,15 +112,18 @@ def make_dashboards(
         j.declare_resource_group(
             out={
                 'dashboard_html': f'{cohort_id}.rna_dashboard.html',
+                'private_dashboard_html': f'{cohort_id}.rna_dashboard.private.html',
                 'fraser_csv': f'{cohort_id}.rna_dashboard.fraser.csv',
                 'outrider_csv': f'{cohort_id}.rna_dashboard.outrider.csv',
+                'variant_bed': f'{cohort_id}.rna_dashboard.variants.bed',
+                'variant_tsv': f'{cohort_id}.rna_dashboard.variants.tsv',
             },
         )
 
         # Build a family-mapping CSV scoped to this dataset's SG IDs
-        csv_lines = ['sequencing_group.id,family.external_ids']
+        csv_lines = ['sequencing_group.id,family.external_ids,participant.external_id,affected']
         for cpg_id, meta in cpg_metadata.items():
-            csv_lines.append(f'{cpg_id},{meta["family_id"]}')
+            csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{meta["affected"]}')
         family_csv_content = '\n'.join(csv_lines)
 
         j.command(
@@ -125,14 +132,22 @@ cat > /tmp/family_mapping.csv << 'FAMILY_EOF'
 {family_csv_content}
 FAMILY_EOF
 
+cp {variant_bed_input} {j.out.variant_bed}
+cp {variant_tsv_input} {j.out.variant_tsv}
+
 python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --fraser {fraser_input} \
     --outrider {outrider_input} \
     --family-mapping /tmp/family_mapping.csv \
     --ensg-to-symbol {ensg_input} \
     --output {j.out.dashboard_html} \
+    --private-output {j.out.private_dashboard_html} \
     --output-fraser-csv {j.out.fraser_csv} \
-    --output-outrider-csv {j.out.outrider_csv}
+    --output-outrider-csv {j.out.outrider_csv} \
+    --variant-bed-filename {cohort_id}.rna_dashboard.variants.bed \
+    --variant-tsv-filename {cohort_id}.rna_dashboard.variants.tsv \
+    --dataset-name {dataset_name} \
+    --cohort-id {cohort_id}
 """),
         )
         # TODO: When working with a Cohort across multiple datasets,
@@ -142,7 +157,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{j.out.dashboard_html}'
+            f'/transcriptome/rna_dashboard/{cohort_id}.rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)

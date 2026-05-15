@@ -177,36 +177,39 @@ def validate_dataframe(df: pd.DataFrame, required_cols: list, optional_cols: lis
 
 
 def load_cpg_to_family_mapping(mapping_file: str) -> dict:
-    """
-    Load CPG ID to Family ID mapping from a two-column CSV.
-
-    Expected columns: ``sequencing_group.id``, ``family.external_ids``.
-    In the batch job this CSV is built on the fly from metamist query results.
-
-    Returns:
-        Dictionary mapping sequencing group IDs to family external IDs.
-    """
+    """Load CPG ID to Family ID mapping from a CSV."""
     print(f'Loading CPG to Family mapping from {mapping_file}...')
-
-    df = pd.read_csv(mapping_file)
-
-    # Create mapping from sequencing_group.id to family.external_ids
-    mapping = {}
-    for _, row in df.iterrows():
-        cpg_id = row['sequencing_group.id']
-        family_id = row['family.external_ids']
-        mapping[cpg_id] = family_id
-
-    unique_families = len(set(mapping.values()))
+    col_renames = {'family.external_ids': 'familyID', 'participant.external_id': 'participantExternalId'}
+    meta_df = pd.read_csv(mapping_file).rename(columns=col_renames).set_index('sequencing_group.id')
+    for col in ['familyID', 'participantExternalId', 'affected']:
+        if col not in meta_df.columns:
+            meta_df[col] = ''
+    mapping = meta_df[['familyID', 'participantExternalId', 'affected']].fillna('').to_dict('index')
+    unique_families = len({m['familyID'] for m in mapping.values()})
     print(f'  Loaded {len(mapping)} CPG IDs mapping to {unique_families} families')
-
     return mapping
 
 
-def add_family_ids(df: pd.DataFrame, cpg_to_family: dict) -> pd.DataFrame:
-    """Add a familyID column to a DataFrame by mapping sampleID to family IDs."""
-    df['familyID'] = df['sampleID'].map(cpg_to_family).fillna('Unknown')
-    return df
+AFFECTED_LABELS: dict[int, str] = {0: 'Unknown', 1: 'Unaffected', 2: 'Affected'}
+
+
+def affected_status_label(value) -> str:
+    """Map numeric affected status to a human-readable label."""
+    try:
+        numeric = int(value)
+    except (ValueError, TypeError):
+        return 'Unknown'
+    return AFFECTED_LABELS.get(numeric, 'Unknown')
+
+
+def add_family_ids(df: pd.DataFrame, cpg_to_metadata: dict) -> pd.DataFrame:
+    """Add familyID, participantExternalId, and affected columns by mapping sampleID."""
+    meta_df = pd.DataFrame.from_dict(cpg_to_metadata, orient='index')
+    joined = df.join(meta_df, on='sampleID', how='left')
+    joined['familyID'] = joined['familyID'].fillna('Unknown')
+    joined = joined.fillna({'participantExternalId': '', 'affected': ''})
+    joined['affected'] = joined['affected'].apply(affected_status_label)
+    return joined
 
 
 # =============================================================================

@@ -44,6 +44,9 @@ def render_dashboard(
     pvalue_threshold: float = 0.05,
     deltapsi_threshold: float = 0.2,
     zscore_threshold: float = 2.0,
+    variant_bed_filename: str | None = None,
+    variant_tsv_filename: str | None = None,
+    template_name: str = 'interactive_dashboard.html.j2',
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
 
@@ -52,11 +55,13 @@ def render_dashboard(
     """
     template_dir = Path(__file__).parent / 'templates'
     env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
-    template = env.get_template('interactive_dashboard.html.j2')
+    template = env.get_template(template_name)
 
     html_content = template.render(
         fraser_csv_filename=fraser_csv_filename,
         outrider_csv_filename=outrider_csv_filename,
+        variant_bed_filename=variant_bed_filename,
+        variant_tsv_filename=variant_tsv_filename,
         family_map=family_map,
         ensg_to_hgnc=ensg_to_hgnc,
         default_pvalue_threshold=pvalue_threshold,
@@ -131,7 +136,47 @@ Examples:
         '--ensg-to-symbol', required=True, help='Path to ENSG-to-HGNC-symbol TSV mapping file (two columns, no header)'
     )
 
+    parser.add_argument(
+        '--variant-bed-filename',
+        default=None,
+        help='Filename of variant annotation BED (already in output dir, for IGV.js track)',
+    )
+    parser.add_argument(
+        '--variant-tsv-filename',
+        default=None,
+        help='Filename of variant annotation TSV (already in output dir, for data table)',
+    )
+    parser.add_argument(
+        '--private-output',
+        default=None,
+        help='Output path for private dashboard HTML ',
+    )
+    parser.add_argument('--dataset-name', required=True, help='CPG dataset name (e.g. rdnow)')
+    parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
+
     return parser.parse_args()
+
+
+def apply_family_mapping(mapping_file, fraser_df, outrider_df):
+    """Load family mapping, filter DataFrames to mapped SG IDs, and add metadata columns."""
+    cpg_to_family = load_cpg_to_family_mapping(mapping_file)
+    sg_ids = set(cpg_to_family.keys())
+    print(f'\nFiltering to {len(sg_ids)} sample IDs from family mapping...')
+
+    pre = len(fraser_df)
+    fraser_df = fraser_df[fraser_df['sampleID'].isin(sg_ids)].copy()
+    print(f'  FRASER: {pre} -> {len(fraser_df)} rows')
+
+    if outrider_df is not None:
+        pre = len(outrider_df)
+        outrider_df = outrider_df[outrider_df['sampleID'].isin(sg_ids)].copy()
+        print(f'  OUTRIDER: {pre} -> {len(outrider_df)} rows')
+
+    fraser_df = add_family_ids(fraser_df, cpg_to_family)
+    if outrider_df is not None:
+        outrider_df = add_family_ids(outrider_df, cpg_to_family)
+
+    return cpg_to_family, fraser_df, outrider_df
 
 
 def main() -> None:
@@ -143,24 +188,9 @@ def main() -> None:
     outrider_df = load_outrider_data(args.outrider) if args.outrider else None
 
     # ── Load and apply family mapping ────────────────────────────────────────
-    cpg_to_family: dict[str, str] = {}
+    cpg_to_family: dict[str, dict] = {}
     if args.family_mapping:
-        cpg_to_family = load_cpg_to_family_mapping(args.family_mapping)
-        sg_ids = set(cpg_to_family.keys())
-        print(f'\nFiltering to {len(sg_ids)} sample IDs from family mapping...')
-
-        pre = len(fraser_df)
-        fraser_df = fraser_df[fraser_df['sampleID'].isin(sg_ids)].copy()
-        print(f'  FRASER: {pre} -> {len(fraser_df)} rows')
-
-        if outrider_df is not None:
-            pre = len(outrider_df)
-            outrider_df = outrider_df[outrider_df['sampleID'].isin(sg_ids)].copy()
-            print(f'  OUTRIDER: {pre} -> {len(outrider_df)} rows')
-
-        fraser_df = add_family_ids(fraser_df, cpg_to_family)
-        if outrider_df is not None:
-            outrider_df = add_family_ids(outrider_df, cpg_to_family)
+        cpg_to_family, fraser_df, outrider_df = apply_family_mapping(args.family_mapping, fraser_df, outrider_df)
 
     # ── Load ENSG-to-symbol mapping and enrich DataFrames ──────────────────
     print('\nLoading ENSG-to-symbol mapping...')
@@ -189,30 +219,41 @@ def main() -> None:
         print(f'  OUTRIDER CSV: {outrider_csv_path} ({len(outrider_df)} rows)')
 
     # ── Build embedded data for JS ───────────────────────────────────────────
-    # Family map: small dict embedded in the HTML for JS-side use
-    family_map: dict[str, dict] = {}
-    for cpg_id, family_id in cpg_to_family.items():
-        family_map[cpg_id] = {'familyID': family_id}
-
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
         ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
 
     # ── Render dashboard HTML ────────────────────────────────────────────────
-    print('\nRendering dashboard...')
+    render_kwargs = {
+        'fraser_csv_filename': Path(fraser_csv_path).name,
+        'outrider_csv_filename': Path(outrider_csv_path).name if outrider_csv_path else None,
+        'family_map': cpg_to_family,
+        'ensg_to_hgnc': ensg_to_hgnc,
+        'pvalue_threshold': args.pvalue_threshold,
+        'deltapsi_threshold': args.deltapsi_threshold,
+        'zscore_threshold': args.zscore_threshold,
+        'variant_bed_filename': args.variant_bed_filename,
+        'variant_tsv_filename': args.variant_tsv_filename,
+    }
+
+    print('\nRendering public dashboard...')
+    render_dashboard(output_path=args.output, **render_kwargs)
+
+    print('Rendering private dashboard...')
     render_dashboard(
-        fraser_csv_filename=Path(fraser_csv_path).name,
-        outrider_csv_filename=Path(outrider_csv_path).name if outrider_csv_path else None,
-        output_path=args.output,
-        family_map=family_map,
-        ensg_to_hgnc=ensg_to_hgnc,
-        pvalue_threshold=args.pvalue_threshold,
-        deltapsi_threshold=args.deltapsi_threshold,
-        zscore_threshold=args.zscore_threshold,
+        output_path=args.private_output,
+        template_name='private_interactive_dashboard.html.j2',
+        **render_kwargs,
     )
 
     print('\nDashboard created successfully!')
-    print(f'  HTML:  {args.output}')
+    print(
+        f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html'
+    )
+
+    print(
+        f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html'
+    )
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')

@@ -16,7 +16,7 @@ from cpg_flow.filetypes import (
 )
 from cpg_utils import Path, config
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -273,7 +273,43 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=[Fraser, Outrider], analysis_type='web', analysis_keys=['dashboard_html'])
+@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['bed', 'tsv'])
+class VariantSpliceMatch(stage.CohortStage):
+    """
+    Annotate FRASER significant regions (determined using rna data)
+     with rare variants from a seqr-loader MatrixTable (by finding their corresponding genome data).
+    """
+
+    def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        return {
+            'bed': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.bed',
+            'tsv': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.tsv',
+        }
+
+    def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
+        output = self.expected_outputs(cohort)
+
+        fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+        # todo this doesn't correctly identify `dataset-test`
+        for sg in cohort.get_sequencing_groups():
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
+        jobs = variant_splice_match.match_variants_and_splicing(
+            fraser_csv=fraser_csv,
+            sg_ids_by_dataset=sg_ids_by_dataset,
+            output=str(output['bed']).removesuffix('.bed'),
+            cohort_id=cohort.id,
+            job_attrs=self.get_job_attrs(),
+        )
+        return self.make_outputs(cohort, data=output, jobs=jobs)
+
+
+@stage.stage(
+    required_stages=[Fraser, Outrider, VariantSpliceMatch], analysis_type='web', analysis_keys=['dashboard_html']
+)
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
@@ -284,8 +320,11 @@ class Dashboard(stage.CohortStage):
         base = f'{cohort.id}.rna_dashboard'
         return {
             'dashboard_html': prefix / f'{base}.html',
+            'private_dashboard_html': prefix / f'{base}.private.html',
             'fraser_csv': prefix / f'{base}.fraser.csv',
             'outrider_csv': prefix / f'{base}.outrider.csv',
+            'variant_bed': prefix / f'{base}.variants.bed',
+            'variant_tsv': prefix / f'{base}.variants.tsv',
         }
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
@@ -293,6 +332,8 @@ class Dashboard(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
+        variant_bed = inputs.as_path(cohort, VariantSpliceMatch, 'bed')
+        variant_tsv = inputs.as_path(cohort, VariantSpliceMatch, 'tsv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
@@ -304,6 +345,8 @@ class Dashboard(stage.CohortStage):
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
+            variant_bed=variant_bed,
+            variant_tsv=variant_tsv,
             output_paths=output,
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
