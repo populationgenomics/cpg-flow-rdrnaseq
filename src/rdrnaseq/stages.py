@@ -290,8 +290,7 @@ class VariantSpliceMatch(stage.CohortStage):
         output = self.expected_outputs(cohort)
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
-        # TODO needs phasing out
-        mt_path: str = ''
+
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         # todo this doesn't correctly identify `dataset-test`
@@ -301,7 +300,6 @@ class VariantSpliceMatch(stage.CohortStage):
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
-            mt_path=mt_path,
             sg_ids_by_dataset=sg_ids_by_dataset,
             output=str(output['bed']).removesuffix('.bed'),
             cohort_id=cohort.id,
