@@ -98,7 +98,7 @@ def query_for_latest_analysis(
 def match_variants_and_splicing(
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
-    output: str,
+    output_by_dataset: dict[str, str],
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -106,7 +106,7 @@ def match_variants_and_splicing(
     Create one Hail Batch job per dataset that runs variant_of_interest_subset.
 
     Each job localises the Fraser significant CSV, passes the MT path (read
-    directly from GCS by Hail), and writes a BED + TSV output.
+    directly from GCS by Hail), and writes a BED + TSV output per dataset.
     """
     b = get_batch()
     fraser_input = b.read_input(fraser_csv)
@@ -149,6 +149,7 @@ def match_variants_and_splicing(
         j.image(config.config_retrieve('workflow')['driver_image'])
 
         rna_ids_str = ' '.join(sg_ids)
+        output_root = output_by_dataset[dataset_name]
 
         j.command(
             command(f"""\
@@ -157,7 +158,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {output}
+    --output {output_root}
 """),
         )
         jobs.append(j)

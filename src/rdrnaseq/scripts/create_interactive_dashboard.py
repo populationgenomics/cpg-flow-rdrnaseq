@@ -46,6 +46,7 @@ def render_dashboard(
     zscore_threshold: float = 2.0,
     variant_bed_filename: str | None = None,
     variant_tsv_filename: str | None = None,
+    template_name: str = 'interactive_dashboard.html.j2',
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
 
@@ -54,7 +55,7 @@ def render_dashboard(
     """
     template_dir = Path(__file__).parent / 'templates'
     env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
-    template = env.get_template('interactive_dashboard.html.j2')
+    template = env.get_template(template_name)
 
     html_content = template.render(
         fraser_csv_filename=fraser_csv_filename,
@@ -145,6 +146,11 @@ Examples:
         default=None,
         help='Filename of variant annotation TSV (already in output dir, for data table)',
     )
+    parser.add_argument(
+        '--private-output',
+        default=None,
+        help='Output path for private dashboard HTML ',
+    )
 
     return parser.parse_args()
 
@@ -211,11 +217,9 @@ def main() -> None:
         ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
 
     # ── Render dashboard HTML ────────────────────────────────────────────────
-    print('\nRendering dashboard...')
-    render_dashboard(
+    render_kwargs = dict(
         fraser_csv_filename=Path(fraser_csv_path).name,
         outrider_csv_filename=Path(outrider_csv_path).name if outrider_csv_path else None,
-        output_path=args.output,
         family_map=family_map,
         ensg_to_hgnc=ensg_to_hgnc,
         pvalue_threshold=args.pvalue_threshold,
@@ -225,8 +229,21 @@ def main() -> None:
         variant_tsv_filename=args.variant_tsv_filename,
     )
 
+    print('\nRendering public dashboard...')
+    render_dashboard(output_path=args.output, **render_kwargs)
+
+
+    print('Rendering private dashboard...')
+    render_dashboard(
+        output_path=args.private_output,
+        template_name='private_interactive_dashboard.html.j2',
+        **render_kwargs,
+    )
+
     print('\nDashboard created successfully!')
     print(f'  HTML:  {args.output}')
+
+    print(f'  Private HTML:  {args.private_output}')
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')

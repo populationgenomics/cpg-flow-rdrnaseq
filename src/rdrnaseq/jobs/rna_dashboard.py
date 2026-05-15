@@ -140,6 +140,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --family-mapping /tmp/family_mapping.csv \
     --ensg-to-symbol {ensg_input} \
     --output {j.out.dashboard_html} \
+    --private-output {j.out.private_dashboard_html} \
     --output-fraser-csv {j.out.fraser_csv} \
     --output-outrider-csv {j.out.outrider_csv} \
     --variant-bed-filename {cohort_id}.rna_dashboard.variants.bed \
