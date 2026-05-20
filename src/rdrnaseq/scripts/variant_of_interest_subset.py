@@ -306,7 +306,7 @@ def main():
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
     # --- Annotate with participant metadata and export TSV ---
-    meta_structs = {k: hl.utils.Struct(**v) for k, v in rna_to_metadata.items()}
+    meta_structs = {k: hl.Struct(**v) for k, v in rna_to_metadata.items()}
     meta_hl = hl.literal(meta_structs)
     rna_sg_array = hl.array(ht.rna_sg_ids)
     first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
