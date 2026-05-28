@@ -284,12 +284,13 @@ class VariantSpliceMatch(stage.CohortStage):
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         datasets = {}
         for sg in cohort.get_sequencing_groups():
-            datasets[sg.dataset.name] = sg.dataset()
+            datasets[sg.dataset.name] = sg.dataset
         outputs={}
         for ds_name, ds_obj in datasets.items():
             prefix = ds_obj.prefix() / 'variant_splice_match'
             outputs[f'bed_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.bed'
             outputs[f'tsv_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.tsv'
+        return outputs
 
 
 
@@ -302,14 +303,14 @@ class VariantSpliceMatch(stage.CohortStage):
 
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-
+        output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
 
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
             sg_ids_by_dataset=sg_ids_by_dataset,
-            output=output_by_dataset,
+            output_by_dataset=output_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
