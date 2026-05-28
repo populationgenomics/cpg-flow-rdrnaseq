@@ -93,6 +93,10 @@ def query_for_latest_analysis(
     # 2023-10-10... > 2023-10-09..., so sort on strings
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
+def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, project_name, meta):
+    for output in outputs:
+        complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+
 
 def match_variants_and_splicing(
     fraser_csv: str | Path,
@@ -159,14 +163,15 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
 """),
         )
         jobs.append(j)
+        dataset_output = output_by_dataset[dataset_name]
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'metamist'},
         )
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
         registration_jobjob.call(
-            complete_analysis_job,
-            output=str(output_by_dataset[dataset_name]) + '.bed',
+            register_multiple_analyses,
+            outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv'],
             analysis_type='custom',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,
