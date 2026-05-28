@@ -9,6 +9,7 @@ to genome SG IDs and subsets the MT to matching rare variants.
 from hailtop.batch.job import Job
 from loguru import logger
 
+from cpg_flow.status import complete_analysis_job
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 from metamist import graphql
@@ -96,7 +97,7 @@ def query_for_latest_analysis(
 def match_variants_and_splicing(
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
-    output: str,
+    output_by_dataset: dict[str,str],
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -158,5 +159,20 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
 """),
         )
         jobs.append(j)
+        registration_job = b.new_python_job(
+            f'register_variant_splice_match_{dataset_name}_{cohort_id}',
+            attributes=job_attrs | {'tool': 'metamist'},
+        )
+        registration_job.image(config.config_retrieve('workflow')['driver_image'])
+        registration_jobjob.call(
+            complete_analysis_job,
+            output=str(output_by_dataset[dataset_name]) + '.bed',
+            analysis_type='custom',
+            cohort_ids=[cohort_id],
+            sg_ids=sg_ids,
+            project_name=dataset_name,
+            meta={'stage': 'VariantSpliceMatch', 'dataset': dataset_name, 'cohort_id': cohort_id},
+        )
+        registration_jobjob.depends_on(j)
 
     return jobs
