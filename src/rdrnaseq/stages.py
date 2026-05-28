@@ -4,6 +4,7 @@ Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 
 from collections import defaultdict
 
+from cpg_flow.targets import cohort
 from hailtop.batch.job import Job
 from loguru import logger
 
@@ -273,7 +274,7 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['bed', 'tsv'])
+@stage.stage(required_stages=Fraser)
 class VariantSpliceMatch(stage.CohortStage):
     """
     Annotate FRASER significant regions (determined using rna data)
@@ -281,26 +282,34 @@ class VariantSpliceMatch(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        return {
-            'bed': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.bed',
-            'tsv': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.tsv',
-        }
+        datasets = {}
+        for sg in cohort.get_sequencing_groups():
+            datasets[sg.dataset.name] = sg.dataset()
+        outputs={}
+        for ds_name, ds_obj in datasets.items():
+            prefix = ds_obj.prefix() / 'variant_splice_match'
+            outputs[f'bed_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.bed'
+            outputs[f'tsv_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.tsv'
+
+
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
-        output = self.expected_outputs(cohort)
+
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        # todo this doesn't correctly identify `dataset-test`
+
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
+        output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
+
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
             sg_ids_by_dataset=sg_ids_by_dataset,
-            output=str(output['bed']).removesuffix('.bed'),
+            output=output_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
         )
@@ -308,18 +317,24 @@ class VariantSpliceMatch(stage.CohortStage):
 
 
 @stage.stage(
-    required_stages=[Fraser, Outrider, VariantSpliceMatch], analysis_type='web', analysis_keys=['dashboard_html']
+    required_stages=[Fraser, Outrider, VariantSpliceMatch]
 )
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
     """
 
+
+
+
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        datasets = {sg.dataset.name for sg in cohort.get_sequencing_groups()}
         prefix = cohort.dataset.web_prefix() / 'rna_dashboard'
         base = f'{cohort.id}.rna_dashboard'
+        #cell type/ library type can be used instead of cohort here to
+        # make a better link or this can just be mentioned on the dashboard itself. For now, using cohort to be consistent with other stages and because this is a first iteration of the dashboard
         return {
-            'dashboard_html': prefix / f'{base}.html',
+            f'dashboard_html_{ds}': prefix / f'{base}_{ds}.html',
             'private_dashboard_html': prefix / f'{base}.private.html',
             'fraser_csv': prefix / f'{base}.fraser.csv',
             'outrider_csv': prefix / f'{base}.outrider.csv',
