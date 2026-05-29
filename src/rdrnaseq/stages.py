@@ -282,14 +282,19 @@ class VariantSpliceMatch(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
+        cell_type = config.config_retrieve(['workflow', 'cell_type'])
+        library_type = config.config_retrieve(['workflow', 'library_type'])
+
         datasets = {}
         for sg in cohort.get_sequencing_groups():
             datasets[sg.dataset.name] = sg.dataset
+
         outputs={}
         for ds_name, ds_obj in datasets.items():
-            prefix = ds_obj.prefix() / 'variant_splice_match'
-            outputs[f'bed_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.bed'
-            outputs[f'tsv_{ds_name}'] = prefix / f'{cohort.id}_{ds_name}_variants_of_interest.tsv'
+            folder = f'{cohort.id}_{cell_type}_{library_type}'
+            prefix = ds_obj.prefix() / 'variant_splice_match'  / folder
+            outputs[f'bed_{ds_name}'] = prefix / 'variants_of_interest.bed'
+            outputs[f'tsv_{ds_name}'] = prefix / 'variants_of_interest.tsv'
         return outputs
 
 
@@ -325,23 +330,28 @@ class Dashboard(stage.CohortStage):
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
     """
 
-
-
-
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        datasets = {sg.dataset.name for sg in cohort.get_sequencing_groups()}
-        prefix = cohort.dataset.web_prefix() / 'rna_dashboard'
-        base = f'{cohort.id}.rna_dashboard'
+        cell_type = config.config_retrieve(['workflow', 'cell_type'])
+        library_type = config.config_retrieve(['workflow', 'library_type'])
+
+        datasets = {}
+        outputs = {}
+
+        for sg in cohort.get_sequencing_groups():
+            datasets[sg.dataset.name] = sg.dataset
+
+        for ds_name, ds_obj in datasets.items():
+            folder = f'{cohort.id}_{cell_type}_{library_type}'
+            prefix = ds_obj.prefix() / 'dashboard' / folder
+            outputs[f'dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.html'
+            outputs[f'private_dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.private.html'
+            outputs[f'fraser_csv_{ds_name}'] = prefix / 'rna_dashboard.fraser.csv'
+            outputs[f'outrider_csv_{ds_name}'] = prefix / 'rna_dashboard.outrider.csv'
+            outputs[f'variant_bed_{ds_name}'] = prefix / 'rna_dashboard.variants.bed'
+            outputs[f'variant_tsv_{ds_name}'] = prefix / 'rna_dashboard.variants.tsv'
         #cell type/ library type can be used instead of cohort here to
         # make a better link or this can just be mentioned on the dashboard itself. For now, using cohort to be consistent with other stages and because this is a first iteration of the dashboard
-        return {
-            f'dashboard_html_{ds}': prefix / f'{base}_{ds}.html',
-            'private_dashboard_html': prefix / f'{base}.private.html',
-            'fraser_csv': prefix / f'{base}.fraser.csv',
-            'outrider_csv': prefix / f'{base}.outrider.csv',
-            'variant_bed': prefix / f'{base}.variants.bed',
-            'variant_tsv': prefix / f'{base}.variants.tsv',
-        }
+        return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         output = self.expected_outputs(cohort)
