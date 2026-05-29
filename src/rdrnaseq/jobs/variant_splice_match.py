@@ -151,7 +151,7 @@ def match_variants_and_splicing(
         j.image(config.config_retrieve('workflow')['driver_image'])
 
         rna_ids_str = ' '.join(sg_ids)
-
+        dataset_output = output_by_dataset[dataset_name]
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
@@ -159,25 +159,29 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {output}
+    --output {dataset_output}
 """),
         )
         jobs.append(j)
-        dataset_output = output_by_dataset[dataset_name]
+
+
+
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'metamist'},
         )
+
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
-        registration_jobjob.call(
+
+        registration_job.call(
             register_multiple_analyses,
             outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv'],
-            analysis_type='custom',
+            analysis_type='variantsplicematch',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,
             project_name=dataset_name,
             meta={'stage': 'VariantSpliceMatch', 'dataset': dataset_name, 'cohort_id': cohort_id},
         )
-        registration_jobjob.depends_on(j)
+        registration_job.depends_on(j)
 
     return jobs
