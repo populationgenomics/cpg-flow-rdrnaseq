@@ -160,11 +160,13 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
         )
 
         for k, p in output_paths.items():
+            if k=='folder':
+                continue
             b.write_output(j.out[k], str(p))
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{output_paths_by_dataset["folder"]}/rna_dashboard.html'
+            f'/transcriptome/rna_dashboard/{output_paths["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
@@ -176,7 +178,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
         reg_job.image(config.config_retrieve('workflow')['driver_image'])
         reg_job.call(
             register_multiple_analyses,
-            outputs=[str(output_paths[k]) for k in output_paths],
+            outputs=[str(output_paths[k]) for k in output_paths if k != 'folder'],
             analysis_type='web',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,
