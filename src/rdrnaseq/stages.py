@@ -335,11 +335,10 @@ class Dashboard(stage.CohortStage):
         library_type = config.config_retrieve(['workflow', 'library_type'])
 
         datasets = {}
-        outputs = {}
-
         for sg in cohort.get_sequencing_groups():
             datasets[sg.dataset.name] = sg.dataset
 
+        outputs = {}
         for ds_name, ds_obj in datasets.items():
             folder = f'{cohort.id}_{cell_type}_{library_type}'
             prefix = ds_obj.prefix() / 'dashboard' / folder
@@ -359,13 +358,27 @@ class Dashboard(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
-        variant_bed = inputs.as_path(cohort, VariantSpliceMatch, 'bed')
-        variant_tsv = inputs.as_path(cohort, VariantSpliceMatch, 'tsv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+
+        variant_files_by_dataset: dict[str,str|Path] = {}
+        output_paths_by_dataset: dict[str, str | Path] = {}
+        for ds in sg_ids_by_dataset:
+            variant_files_by_dataset[ds] = {
+                'bed': inputs.as_path(cohort, VariantSpliceMatch, f'bed_{ds}'),
+                'tsv': inputs.as_path(cohort, VariantSpliceMatch, f'tsv_{ds}'),
+            }
+
+            output_paths_by_dataset[ds] = {
+                'dashboard_html': output[f'dashboard_html_{ds}'],
+                'private_dashboard_html': output[f'private_dashboard_html_{ds}'],
+                'fraser_csv': output[f'fraser_csv_{ds}'],
+                'outrider_csv': output[f'outrider_csv_{ds}'],
+                'variant_bed': output[f'variant_bed_{ds}'],
+                'variant_tsv': output[f'variant_tsv_{ds}'],
+            }
 
         logger.info(f'Sequence group IDs by dataset for dashboard: {dict(sg_ids_by_dataset)}')
 
