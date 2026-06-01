@@ -38,9 +38,11 @@ METADATA_QUERY = gql(
     """
 )
 
+
 def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, project_name, meta):
     for output in outputs:
         complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+
 
 def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str, str | int]]:
     """
@@ -100,7 +102,6 @@ def make_dashboards(
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
 
-
     ensg_to_symbol_path = config.config_retrieve(['references', 'ensg_to_symbol'])
     ensg_input = b.read_input(ensg_to_symbol_path)
 
@@ -109,7 +110,7 @@ def make_dashboards(
         variant_bed_input = b.read_input(str(variant_files_by_dataset[dataset_name]['bed']))
         variant_tsv_input = b.read_input(str(variant_files_by_dataset[dataset_name]['tsv']))
 
-        output_paths=output_paths_by_dataset[dataset_name]
+        output_paths = output_paths_by_dataset[dataset_name]
 
         logger.info(f'Processing dataset {dataset_name} with SG IDs: {sg_ids}')
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
@@ -163,7 +164,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{output_paths_by_dataset.folder}/rna_dashboard.html'
+            f'/transcriptome/rna_dashboard/{output_paths_by_dataset["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)

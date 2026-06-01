@@ -4,7 +4,6 @@ Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 
 from collections import defaultdict
 
-from cpg_flow.targets import cohort
 from hailtop.batch.job import Job
 from loguru import logger
 
@@ -289,18 +288,15 @@ class VariantSpliceMatch(stage.CohortStage):
         for sg in cohort.get_sequencing_groups():
             datasets[sg.dataset.name] = sg.dataset
 
-        outputs={}
+        outputs = {}
         for ds_name, ds_obj in datasets.items():
             folder = f'{cohort.id}_{cell_type}_{library_type}'
-            prefix = ds_obj.prefix() / 'variant_splice_match'  / folder
+            prefix = ds_obj.prefix() / 'variant_splice_match' / folder
             outputs[f'bed_{ds_name}'] = prefix / 'variants_of_interest.bed'
             outputs[f'tsv_{ds_name}'] = prefix / 'variants_of_interest.tsv'
         return outputs
 
-
-
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
-
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
 
@@ -310,7 +306,6 @@ class VariantSpliceMatch(stage.CohortStage):
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
         output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
-
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
@@ -322,9 +317,7 @@ class VariantSpliceMatch(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=[Fraser, Outrider, VariantSpliceMatch]
-)
+@stage.stage(required_stages=[Fraser, Outrider, VariantSpliceMatch])
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
@@ -333,6 +326,7 @@ class Dashboard(stage.CohortStage):
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
         cell_type = config.config_retrieve(['workflow', 'cell_type'])
         library_type = config.config_retrieve(['workflow', 'library_type'])
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         datasets = {}
         for sg in cohort.get_sequencing_groups():
@@ -340,21 +334,22 @@ class Dashboard(stage.CohortStage):
 
         outputs = {}
         for ds_name, ds_obj in datasets.items():
-            folder = f'{cohort.id}_{cell_type}_{library_type}'
             prefix = ds_obj.prefix() / 'dashboard' / folder
-            outputs[f'folder_{ds_name}'] = folder
             outputs[f'dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.html'
             outputs[f'private_dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.private.html'
             outputs[f'fraser_csv_{ds_name}'] = prefix / 'rna_dashboard.fraser.csv'
             outputs[f'outrider_csv_{ds_name}'] = prefix / 'rna_dashboard.outrider.csv'
             outputs[f'variant_bed_{ds_name}'] = prefix / 'rna_dashboard.variants.bed'
             outputs[f'variant_tsv_{ds_name}'] = prefix / 'rna_dashboard.variants.tsv'
-        #cell type/ library type can be used instead of cohort here to
-        # make a better link or this can just be mentioned on the dashboard itself. For now, using cohort to be consistent with other stages and because this is a first iteration of the dashboard
+        # cell type/ library type can be used instead of cohort here to make a better link
         return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         output = self.expected_outputs(cohort)
+
+        cell_type = config.config_retrieve(['workflow', 'cell_type'])
+        library_type = config.config_retrieve(['workflow', 'library_type'])
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
@@ -363,7 +358,7 @@ class Dashboard(stage.CohortStage):
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
 
-        variant_files_by_dataset: dict[str,str|Path] = {}
+        variant_files_by_dataset: dict[str, str | Path] = {}
         output_paths_by_dataset: dict[str, str | Path] = {}
         for ds in sg_ids_by_dataset:
             variant_files_by_dataset[ds] = {
@@ -372,6 +367,7 @@ class Dashboard(stage.CohortStage):
             }
 
             output_paths_by_dataset[ds] = {
+                'folder': folder,
                 'dashboard_html': output[f'dashboard_html_{ds}'],
                 'private_dashboard_html': output[f'private_dashboard_html_{ds}'],
                 'fraser_csv': output[f'fraser_csv_{ds}'],

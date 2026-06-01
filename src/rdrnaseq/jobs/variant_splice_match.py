@@ -93,6 +93,7 @@ def query_for_latest_analysis(
     # 2023-10-10... > 2023-10-09..., so sort on strings
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
+
 def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, project_name, meta):
     for output in outputs:
         complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
@@ -101,7 +102,7 @@ def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, proje
 def match_variants_and_splicing(
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
-    output_by_dataset: dict[str,str],
+    output_by_dataset: dict[str, str],
     cohort_id: str,
     job_attrs: dict,
 ) -> list[Job]:
@@ -163,8 +164,6 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
 """),
         )
         jobs.append(j)
-
-
 
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
