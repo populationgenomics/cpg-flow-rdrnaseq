@@ -385,9 +385,8 @@ class Dashboard(stage.CohortStage):
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
-            variant_bed=variant_bed,
-            variant_tsv=variant_tsv,
-            output_paths=output,
+            variant_files_by_dataset=variant_files_by_dataset,
+            output_paths_by_dataset=output_paths_by_dataset,
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
