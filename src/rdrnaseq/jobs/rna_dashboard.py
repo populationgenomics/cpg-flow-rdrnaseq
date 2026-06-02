@@ -160,13 +160,13 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
         )
 
         for k, p in output_paths.items():
-            if k=='folder':
+            if k == 'folder':
                 continue
             b.write_output(j.out[k], str(p))
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{output_paths["folder"]}/rna_dashboard.html'
+            f'/transcriptome/dashboard/{output_paths["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)

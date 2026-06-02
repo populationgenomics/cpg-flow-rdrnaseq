@@ -334,7 +334,7 @@ class Dashboard(stage.CohortStage):
 
         outputs = {}
         for ds_name, ds_obj in datasets.items():
-            prefix = ds_obj.prefix() / 'dashboard' / folder
+            prefix = ds_obj.web_prefix() / 'dashboard' / folder
             outputs[f'dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.html'
             outputs[f'private_dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.private.html'
             outputs[f'fraser_csv_{ds_name}'] = prefix / 'rna_dashboard.fraser.csv'
