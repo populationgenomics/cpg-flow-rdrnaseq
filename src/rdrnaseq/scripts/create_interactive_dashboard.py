@@ -151,6 +151,16 @@ Examples:
         default=None,
         help='Output path for private dashboard HTML ',
     )
+    parser.add_argument(
+        '--seqr-variant-template',
+        default=None,
+        help='the URL template string. Optional — if omitted, no seqr links are rendered.',
+    )
+    parser.add_argument(
+        '--seqr-family-map-json',
+        default=None,
+        help='path to a JSON file containing the `{family_ext_id: seqr_guid}` mapping. Written by the batch job ',
+    )
     parser.add_argument('--dataset-name', required=True, help='CPG dataset name (e.g. rdnow)')
     parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
 
@@ -234,6 +244,8 @@ def main() -> None:
         'zscore_threshold': args.zscore_threshold,
         'variant_bed_filename': args.variant_bed_filename,
         'variant_tsv_filename': args.variant_tsv_filename,
+        'seqr_variant_template': args.seqr_variant_template,
+        'seqr_family_map_json': args.seqr_family_map_json,
     }
 
     print('\nRendering public dashboard...')
