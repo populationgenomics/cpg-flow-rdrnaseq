@@ -46,8 +46,9 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
     sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
     sgs_by_cell_type: dict[str, list[str]] = defaultdict(list)
 
-    if (config.config_retrieve(['workflow', 'access_level']) == 'test' and
-            config.config_retrieve(['workflow', 'test_skip_metamist_queries'])):
+    if config.config_retrieve(['workflow', 'access_level']) == 'test' and config.config_retrieve(
+        ['workflow', 'test_skip_metamist_queries']
+    ):
         logger.warning('Running in test environment, skipping cell type and library type validation')
         return 'test_cell_type', 'test_library_type'
 
