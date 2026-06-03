@@ -210,6 +210,7 @@ const FILES = {
     variant_tsv: {{ variant_tsv_filename | tojson }},
 };
 const FAMILY_MAP   = {{ family_map | tojson }};
+const SEQR_LINKS = {{ seqr_links | tojson | default("{}", true) }};
 const ENSG_TO_HGNC = {{ ensg_to_hgnc | tojson }};
 const GENOME       = {{ genome | tojson }};
 const DEFAULT_PVAL   = {{ default_pvalue_threshold }};
@@ -465,8 +466,14 @@ function buildDT(tableId, rows, cols, existing) {
     if (!rows.length) return null;
     const avail = cols.filter(c => rows[0][c] !== undefined);
     return $('#' + tableId).DataTable({
-        data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); return o; }),
-        columns: avail.map(c => ({ title: colTitle(c), data: c, type: 'na-bottom', render: d => fmt(c, d) })),
+        data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); if (r.seqr_link) o.seqr_link = r.seqr_link; return o; }),
+        columns: avail.map(c => ({ title: colTitle(c), data: c, type: 'na-bottom', render: (d, type, row) => {
+       const formatted = fmt(c, d);
+       if (c === 'variant_id' && row.seqr_link) {
+           return '<a href="' + row.seqr_link + '" target="_blank">' + formatted + '</a>';
+       }
+       return formatted;
+   } })),
         dom: 'Bfrtip', buttons: ['csv', 'excel'], pageLength: 25, scrollX: true,
     });
 }
@@ -688,6 +695,7 @@ async function init() {
                 const locParts = (r.locus || '').split(':');
                 const chrom = (locParts[0] || '').replace('chr', '');
                 r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
+   				r.seqr_link = SEQR_LINKS[r.variant_id] || '';
                 const tid = r.transcript_id || '';
                 const sym = r.gene_symbol || '';
                 const rawHgvsc = r.hgvsc || '';
