@@ -43,38 +43,26 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
     across the entire cohort.
     #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
-    all_library_types: set[str] = set()
-    all_cell_types: set[str] = set()
-    library_type_by_sg: dict[str, str] = {}
-    cell_type_by_sg: dict[str, str] = {}
-
-    if (config.config_retrieve(['workflow', 'access_level']) == 'test' and
-            config.config_retrieve(['workflow', 'test_skip_metamist_queries'])):
-        logger.warning('Running in test environment, skipping cell type and library type validation')
-        return 'test_cell_type', 'test_library_type'
+    sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
+    sgs_by_cell_type: dict[str, list[str]] = defaultdict(list)
 
     for dataset, sg_ids in sg_ids_by_dataset.items():
         result = query(SG_TYPE_QUERY, variables={'dataset': dataset, 'sgIds': sg_ids})
         sgs = result['project']['sequencingGroups']
 
-        library_types = {sg['type'] for sg in sgs}
-        cell_types = {sg['sample']['type'] for sg in sgs}
-
         for sg in sgs:
-            library_type_by_sg[sg['id']] = sg['type']
-            cell_type_by_sg[sg['id']] = sg['sample']['type']
+            sgs_by_library_type[sg['type']].append(sg['id'])
+            sgs_by_cell_type[sg['sample']['type']].append(sg['id'])
 
-        logger.info(f'{dataset}: library_types={library_types}, cell_types={cell_types}')
+        logger.info(f'{dataset}: library_types={set(sg["type"] for sg in sgs)}, cell_types={set(sg["sample"]["type"] for sg in sgs)}')
 
-        all_library_types.update(library_types)
-        all_cell_types.update(cell_types)
+    if len(sgs_by_library_type) != 1:
+        raise ValueError(f'Expected one library type across cohort, got {dict(sgs_by_library_type)}')
+    if len(sgs_by_cell_type) != 1:
+        raise ValueError(f'Expected one cell type across cohort, got {dict(sgs_by_cell_type)}')
 
-    if len(all_library_types) != 1:
-        raise ValueError(f'Expected one library type across cohort, got {all_library_types}: {library_type_by_sg}')
-    if len(all_cell_types) != 1:
-        raise ValueError(f'Expected one cell type across cohort, got {all_cell_types}: {cell_type_by_sg}')
+    return next(iter(sgs_by_cell_type)), next(iter(sgs_by_library_type))
 
-    return all_cell_types.pop(), all_library_types.pop()
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
