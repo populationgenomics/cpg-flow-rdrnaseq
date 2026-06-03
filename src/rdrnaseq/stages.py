@@ -44,6 +44,13 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
     """
     all_library_types: set[str] = set()
     all_cell_types: set[str] = set()
+    library_type_by_sg: dict[str, str] = {}
+    cell_type_by_sg: dict[str, str] = {}
+
+    if (config.config_retrieve(['workflow', 'access_level']) == 'test' and
+            config.config_retrieve(['workflow', 'test_skip_metamist_queries'])):
+        logger.warning('Running in test environment, skipping cell type and library type validation')
+        return 'test_cell_type', 'test_library_type'
 
     for dataset, sg_ids in sg_ids_by_dataset.items():
         result = query(SG_TYPE_QUERY, variables={'dataset': dataset, 'sgIds': sg_ids})
@@ -52,15 +59,19 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
         library_types = {sg['type'] for sg in sgs}
         cell_types = {sg['sample']['type'] for sg in sgs}
 
+        for sg in sgs:
+            library_type_by_sg[sg['id']] = sg['type']
+            cell_type_by_sg[sg['id']] = sg['sample']['type']
+
         logger.info(f'{dataset}: library_types={library_types}, cell_types={cell_types}')
 
         all_library_types.update(library_types)
         all_cell_types.update(cell_types)
 
     if len(all_library_types) != 1:
-        raise ValueError(f'Expected one library type across cohort, got {all_library_types}')
+        raise ValueError(f'Expected one library type across cohort, got {all_library_types}: {library_type_by_sg}')
     if len(all_cell_types) != 1:
-        raise ValueError(f'Expected one cell type across cohort, got {all_cell_types}')
+        raise ValueError(f'Expected one cell type across cohort, got {all_cell_types}: {cell_type_by_sg}')
 
     return all_cell_types.pop(), all_library_types.pop()
 
