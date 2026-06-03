@@ -24,6 +24,7 @@ SG_TYPE_QUERY = gql(
     query SgTypes($dataset: String!, $sgIds: [String!]!) {
         project(name: $dataset) {
             sequencingGroups(id: {in_: $sgIds}) {
+                id
                 type
                 sample {
                     type
