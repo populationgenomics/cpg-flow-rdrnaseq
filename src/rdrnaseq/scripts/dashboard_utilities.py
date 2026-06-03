@@ -358,80 +358,24 @@ def prepare_tabix_file(filepath: str, output_dir: str | None = None) -> str:
 # Link Preparation Functions
 # =============================================================================
 
+class SeqrVariantLinkEngine:
+    """Build seqr variant-search URLs from a family ID and variant string."""
 
-class LinkEngine:
-    """
-    Generate links to external resources based on configuration settings
-    """
-
-    def __init__(
-        self,
-        template: str,
-        variant_template: str | None = None,
-        external: bool = False,
-        lookup: str | None = None,
-    ):
-        """
-
-        Args:
-            template (str): mandatory - without this there's no sense generating an instance
-            variant_template (str): optional, if there's a string here, we'll try and generate variant-specific links
-            external (bool): if True, embed/lookup external IDs in the lookup dictionary. Default is sample.name.
-                             This is mostly for a CPG internal use-case, where the seqr lookup and external lookup come
-                             from different sources. The Lookup variable makes this redundant.
-            lookup (dict): optional, a path to a CSV/TSV/JSON file, used to connect sample ID -> arbitrary ID
-        """
-        self.template = template
-        self.variant_template = variant_template
-        self.external = external
-        self.lookup = parse_ids_from_file(lookup)
-
-    def get_string_id(self, sample: str) -> str | None:
-        """Get the string ID for the sample to use in links."""
-
-        key = sample.ext_id if self.external else sample.name
-
-        if self.lookup:
-            # bail here instead of generating broken links
-            if key not in self.lookup:
-                return None
-
-            return self.lookup[key]
-
-        return key
-
-    def generate_sample_link(self, sample: str):
-        """Generates a sample/family level link using the template."""
-
-        string_id = self.get_string_id(sample)
-
-        # escape here - if we want an ID translated, don't return a hyperlink
-        # feels better than returning a broken hyperlink
-        if string_id is None:
-            return None
-
-        return self.template.format(sample=string_id)
-
-    def generate_variant_link(self, sample: str, var_string: str) -> str | None:
-        """Generate a Sample & Variant level link using the template."""
-
-        if not self.variant_template:
-            return None
-
-        string_id = self.get_string_id(sample)
-
-        # escape here - if we want an ID translated, don't return a hyperlink
-        # feels better than returning a broken hyperlink
-        if string_id is None:
-            return None
-
-        return self.variant_template.format(sample=self.get_string_id(sample), variant=var_string)
-
-    def get_seqr_family_guid_map(project: str) -> dict[str, str]:
+    def __init__(self, project: str, variant_template: str):
         """querying metamist for external family id mapping to seqr sample mapping
         the configurabile things are
         - project to query
-        - sequencing type which will always be genome here"""
-        sequencing_type = 'genome'
+        - sequencing type which will always be genome here, but is changeable in case we want to use
+        this for exome data in the future"""
         api = WebApi()
-        return api.get_seqr_family_guid_map(sequencing_type, project)
+        self.guid_map: dict[str, str] = api.get_seqr_family_guid_map('genome', project)
+        self.variant_template = variant_template
+
+    def build_link(self, family_id: str, variant_string: str) -> str | None:
+        """Return a seqr URL, or None if the family ID has no GUID mapping."""
+        guid = self.guid_map.get(family_id)
+        if not guid:
+            return None
+        return self.variant_template.format(variant=variant_string, sample=guid)
+
+
