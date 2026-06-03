@@ -18,6 +18,7 @@ Output files (all in the same directory as --output):
 import argparse
 import ast
 import csv
+import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -227,23 +228,24 @@ def main() -> None:
         print(f'  OUTRIDER CSV: {outrider_csv_path} ({len(outrider_df)} rows)')
 
     # ── Build embedded data for JS ───────────────────────────────────────────
-    if args.seqr_variant_template:
-        link_engine = SeqrVariantLinkEngine(args.dataset_name, args.seqr_variant_template)
-
     seqr_links: dict[str, str] = {}
-    with open(variant_tsv) as variants:
-        reader = csv.DictReader(variants, delimiter='\t')
-        for variant in reader:
-            # grab locus
-            loc_parts = variant['locus'].split(':')
-            chrom = loc_parts[0].replace('chr', '')
-            pos= loc_parts[1]
-            # grab alleles and sanitize for use in URL
-            alleles = row['alleles'].ast.literal_eval()  # e.g. "['A', 'G']"
-            variant_id = f'{chrom}-{pos}-{"-".join(alleles)}'
-            link = link_engine.build_link(row['family_id'], variant_id)
-            if link is not None:
-                seqr_links[variant_id] = link
+    if args.seqr_variant_template and args.variant_tsv_filename:
+        link_engine = SeqrVariantLinkEngine(args.dataset_name, args.seqr_variant_template)
+        with open(variant_tsv) as variants:
+            reader = csv.DictReader(variants, delimiter='\t')
+            for variant in reader:
+                # grab locus
+                loc_parts = variant['locus'].split(':')
+                chrom = loc_parts[0].replace('chr', '')
+                pos= loc_parts[1]
+                # grab alleles and sanitize for use in URL
+                alleles = ast.literal_eval(variant['alleles'])
+                variant_id = f'{chrom}-{pos}-{"-".join(alleles)}'
+                link = link_engine.build_link(variant['family_id'], variant_id)
+                if link is not None:
+                    seqr_links[variant_id] = link
+    else:
+        logging.warning('\nNo Seqr variant template or variant TSV provided, skipping Seqr link generation.')
 
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
@@ -260,7 +262,7 @@ def main() -> None:
         'zscore_threshold': args.zscore_threshold,
         'variant_bed_filename': args.variant_bed_filename,
         'variant_tsv_filename': args.variant_tsv_filename,
-        'seqr_links': args.seqr_links,
+        'seqr_links': seqr_links,
     }
 
     print('\nRendering public dashboard...')
