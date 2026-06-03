@@ -40,6 +40,7 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
 
     Returns (cell_type, library_type). Raises ValueError if either set has more than one element
     across the entire cohort.
+    #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
     all_library_types: set[str] = set()
     all_cell_types: set[str] = set()
