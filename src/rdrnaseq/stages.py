@@ -15,8 +15,53 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
+from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
+
+SG_TYPE_QUERY = gql(
+    """
+    query SgTypes($dataset: String!, $sgIds: [String!]!) {
+        project(name: $dataset) {
+            sequencingGroups(id: {in_: $sgIds}) {
+                type
+                sample {
+                    type
+                }
+            }
+        }
+    }
+""",
+)
+
+
+def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str, str]:
+    """Query Metamist per dataset to confirm all SGs share one library type and one cell type.
+
+    Returns (cell_type, library_type). Raises ValueError if either set has more than one element
+    across the entire cohort.
+    """
+    all_library_types: set[str] = set()
+    all_cell_types: set[str] = set()
+
+    for dataset, sg_ids in sg_ids_by_dataset.items():
+        result = query(SG_TYPE_QUERY, variables={'dataset': dataset, 'sgIds': sg_ids})
+        sgs = result['project']['sequencingGroups']
+
+        library_types = {sg['type'] for sg in sgs}
+        cell_types = {sg['sample']['type'] for sg in sgs}
+
+        logger.info(f'{dataset}: library_types={library_types}, cell_types={cell_types}')
+
+        all_library_types.update(library_types)
+        all_cell_types.update(cell_types)
+
+    if len(all_library_types) != 1:
+        raise ValueError(f'Expected one library type across cohort, got {all_library_types}')
+    if len(all_cell_types) != 1:
+        raise ValueError(f'Expected one cell type across cohort, got {all_cell_types}')
+
+    return all_cell_types.pop(), all_library_types.pop()
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -281,12 +326,13 @@ class VariantSpliceMatch(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        cell_type = config.config_retrieve(['workflow', 'cell_type'])
-        library_type = config.config_retrieve(['workflow', 'library_type'])
-
         datasets = {}
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             datasets[sg.dataset.name] = sg.dataset
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+
+        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
 
         outputs = {}
         for ds_name, ds_obj in datasets.items():
@@ -324,13 +370,14 @@ class Dashboard(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        cell_type = config.config_retrieve(['workflow', 'cell_type'])
-        library_type = config.config_retrieve(['workflow', 'library_type'])
-        folder = f'{cohort.id}_{cell_type}_{library_type}'
-
         datasets = {}
+        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             datasets[sg.dataset.name] = sg.dataset
+            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+
+        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         outputs = {}
         for ds_name, ds_obj in datasets.items():
@@ -347,17 +394,15 @@ class Dashboard(stage.CohortStage):
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         output = self.expected_outputs(cohort)
 
-        cell_type = config.config_retrieve(['workflow', 'cell_type'])
-        library_type = config.config_retrieve(['workflow', 'library_type'])
-
-        folder = f'{cohort.id}_{cell_type}_{library_type}'
-
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
 
         sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
         for sg in cohort.get_sequencing_groups():
             sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+
+        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         variant_files_by_dataset: dict[str, str | Path] = {}
         output_paths_by_dataset: dict[str, str | Path] = {}
