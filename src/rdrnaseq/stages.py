@@ -54,7 +54,9 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
             sgs_by_library_type[sg['type']].append(sg['id'])
             sgs_by_cell_type[sg['sample']['type']].append(sg['id'])
 
-        logger.info(f'{dataset}: library_types={set(sg["type"] for sg in sgs)}, cell_types={set(sg["sample"]["type"] for sg in sgs)}')
+        library_types = {sg['type'] for sg in sgs}
+        cell_types = {sg['sample']['type'] for sg in sgs}
+        logger.info(f'{dataset}: library_types={library_types}, cell_types={cell_types}')
 
     if len(sgs_by_library_type) != 1:
         raise ValueError(f'Expected one library type across cohort, got {dict(sgs_by_library_type)}')
@@ -62,7 +64,6 @@ def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str,
         raise ValueError(f'Expected one cell type across cohort, got {dict(sgs_by_cell_type)}')
 
     return next(iter(sgs_by_cell_type)), next(iter(sgs_by_library_type))
-
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
