@@ -349,8 +349,6 @@ class Dashboard(stage.CohortStage):
 
         cell_type = config.config_retrieve(['workflow', 'cell_type'])
         library_type = config.config_retrieve(['workflow', 'library_type'])
-        #This can be in config if its sensitive
-        seqr_variant_link_template = f'https://seqr.populationgenomics.org.au/variant_search/variant/{variant}/family/{sample}'
 
         folder = f'{cohort.id}_{cell_type}_{library_type}'
 
@@ -389,6 +387,5 @@ class Dashboard(stage.CohortStage):
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
-            variant_link_template=seqr_variant_link_template,
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)

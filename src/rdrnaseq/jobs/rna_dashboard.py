@@ -85,7 +85,6 @@ def make_dashboards(
     sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
     job_attrs: dict,
-    variant_template_string: str = '',
 ) -> list[Job]:
     """
     Create one Hail Batch job per dataset that renders an interactive dashboard.
@@ -135,12 +134,6 @@ def make_dashboards(
             csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{meta["affected"]}')
         family_csv_content = '\n'.join(csv_lines)
 
-       # 1. Conditionally format the argument (including the bash line continuation '\' and newline)
-        variant_template_arg = ""
-        if variant_template_string is not None:
-            variant_template_arg = f"    --seqr-variant-template {variant_template_string!r} \\\n"
-
-        # 2. Inject it into your f-string
         j.command(
             command(f"""\
 cat > /tmp/family_mapping.csv << 'FAMILY_EOF'
@@ -149,7 +142,7 @@ FAMILY_EOF
 
 cp {variant_bed_input} {j.out.variant_bed}
 cp {variant_tsv_input} {j.out.variant_tsv}
- 
+
 python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --fraser {fraser_input} \
     --outrider {outrider_input} \
@@ -161,9 +154,9 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --output-outrider-csv {j.out.outrider_csv} \
     --variant-bed-filename rna_dashboard.variants.bed \
     --variant-tsv-filename rna_dashboard.variants.tsv \
-{variant_template_arg}    --dataset-name {dataset_name} \
+    --dataset-name {dataset_name} \
     --cohort-id {cohort_id}
-        """),
+"""),
         )
         for k, p in output_paths.items():
             if k == 'folder':

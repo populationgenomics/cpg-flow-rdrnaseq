@@ -24,6 +24,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 from rdrnaseq.scripts.dashboard_utilities import (
+    SeqrVariantLinkEngine,
     add_family_ids,
     build_ensg_to_hgnc_subset,
     enrich_with_gene_mapping,
@@ -31,7 +32,6 @@ from rdrnaseq.scripts.dashboard_utilities import (
     load_ensg_to_symbol,
     load_fraser_data,
     load_outrider_data,
-    SeqrVariantLinkEngine
 )
 
 # =============================================================================
@@ -155,11 +155,6 @@ Examples:
         default=None,
         help='Output path for private dashboard HTML ',
     )
-    parser.add_argument(
-        '--seqr-variant-template',
-        default=None,
-        help='the URL template string. Optional — if omitted, no seqr links are rendered.',
-    )
     parser.add_argument('--dataset-name', required=True, help='CPG dataset name (e.g. rdnow)')
     parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
 
@@ -229,15 +224,15 @@ def main() -> None:
 
     # ── Build embedded data for JS ───────────────────────────────────────────
     seqr_links: dict[str, str] = {}
-    if args.seqr_variant_template and args.variant_tsv_filename:
-        link_engine = SeqrVariantLinkEngine(args.dataset_name, args.seqr_variant_template)
-        with open(variant_tsv) as variants:
+    if args.variant_tsv_filename:
+        link_engine = SeqrVariantLinkEngine(args.dataset_name)
+        with open(str(output_dir / args.variant_tsv_filename)) as variants:
             reader = csv.DictReader(variants, delimiter='\t')
             for variant in reader:
                 # grab locus
                 loc_parts = variant['locus'].split(':')
                 chrom = loc_parts[0].replace('chr', '')
-                pos= loc_parts[1]
+                pos = loc_parts[1]
                 # grab alleles and sanitize for use in URL
                 alleles = ast.literal_eval(variant['alleles'])
                 variant_id = f'{chrom}-{pos}-{"-".join(alleles)}'
@@ -245,7 +240,7 @@ def main() -> None:
                 if link is not None:
                     seqr_links[variant_id] = link
     else:
-        logging.warning('\nNo Seqr variant template or variant TSV provided, skipping Seqr link generation.')
+        logging.warning('\nNo variant TSV provided, skipping Seqr link generation.')
 
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
@@ -265,24 +260,17 @@ def main() -> None:
         'seqr_links': seqr_links,
     }
 
-    print('\nRendering public dashboard...')
     render_dashboard(output_path=args.output, **render_kwargs)
 
-    print('Rendering private dashboard...')
     render_dashboard(
         output_path=args.private_output,
         template_name='private_interactive_dashboard.html.j2',
         **render_kwargs,
     )
-
-    print('\nDashboard created successfully!')
     print(
         f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html'
     )
 
-    print(
-        f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html'
-    )
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')

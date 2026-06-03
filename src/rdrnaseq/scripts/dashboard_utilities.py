@@ -5,7 +5,9 @@ import os
 import numpy as np
 import pandas as pd
 import pysam
+
 from metamist.apis import WebApi
+
 # =============================================================================
 # Constants and Configuration
 # =============================================================================
@@ -358,10 +360,14 @@ def prepare_tabix_file(filepath: str, output_dir: str | None = None) -> str:
 # Link Preparation Functions
 # =============================================================================
 
+
+SEQR_VARIANT_TEMPLATE = 'https://seqr.populationgenomics.org.au/variant_search/variant/{variant}/family/{sample}'
+
+
 class SeqrVariantLinkEngine:
     """Build seqr variant-search URLs from a family ID and variant string."""
 
-    def __init__(self, project: str, variant_template: str):
+    def __init__(self, project: str, variant_template: str = SEQR_VARIANT_TEMPLATE):
         """querying metamist for external family id mapping to seqr sample mapping
         the configurabile things are
         - project to query
@@ -377,5 +383,3 @@ class SeqrVariantLinkEngine:
         if not guid:
             return None
         return self.variant_template.format(variant=variant_string, sample=guid)
-
-
