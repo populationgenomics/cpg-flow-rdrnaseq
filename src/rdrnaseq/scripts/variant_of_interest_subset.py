@@ -261,26 +261,6 @@ def main():
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.export(tsv_path, delimiter='\t')
 
-    # --- Export minimal IGV-compatible BED ---
-    bed_ht = ht.select(
-        bed_chrom=ht.bed_chrom,
-        bed_start=ht.bed_start,
-        bed_end=ht.bed_end,
-        name=hl.or_else(
-            ht.transcript_id
-            + '('
-            + ht.gene_symbol
-            + '):'
-            + hl.if_else(ht.hgvsc.contains(':'), ht.hgvsc.split(':')[1], ht.hgvsc),
-            ht.bed_chrom + ':' + hl.str(ht.bed_start) + ':' + ht.alleles[0] + '>' + ht.alleles[1],
-        ),
-    )
-    bed_ht = bed_ht.key_by()
-    bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
-
-    bed_path = f'{args.output}.bed'
-    logger.info(f'Exporting IGV BED to {bed_path}')
-    bed_ht.export(bed_path, delimiter='\t', header=False)
     logger.info('Done.')
 
 
