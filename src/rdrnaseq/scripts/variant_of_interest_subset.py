@@ -229,7 +229,7 @@ def main():
     variables = {'project': args.query_dataset, 'RnaSequencingGroupIds': relevant_ids}
 
     # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
-    result = query(query_ids, variables=variables)
+    result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
     rna_to_metadata = build_rna_to_metadata_map(result)
 
