@@ -14,60 +14,20 @@ from loguru import logger
 import hail as hl
 
 from cpg_utils import hail_batch
-from metamist.graphql import gql, query
+from metamist.graphql import query
 
-from rdrnaseq.scripts.dashboard_utilities import AFFECTED_LABELS
+from rdrnaseq.scripts.dashboard_utilities import (
+    AFFECTED_LABELS,
+    PEDIGREE_QUERY,
+    build_genome_to_rna_map,
+    build_rna_to_genome_map,
+    build_rna_to_metadata_map,
+)
 
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
 
-query_ids = gql(
-    """
-    query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
-      project(name: $project) {
-        sequencingGroups(id: {in_: $RnaSequencingGroupIds}) {
-          id
-          sample {
-            participant {
-              externalId
-              families {
-                externalId
-              }
-              familyParticipants {
-                affected
-              }
-              samples {
-                sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
-                  id
-                  technology
-                  type
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
-)
-
-
-def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
-    """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
-    rna_to_metadata: dict[str, dict[str, str | int]] = {}
-    for group in query_result['project']['sequencingGroups']:
-        rna_id = group['id']
-        participant = group['sample']['participant']
-        try:
-            rna_to_metadata[rna_id] = {
-                'participant_external_id': participant['externalId'],
-                'family_id': participant['families'][0]['externalId'],
-                'affected': AFFECTED_LABELS.get(participant['familyParticipants'][0]['affected'], 'Unknown'),
-            }
-        except (KeyError, IndexError, TypeError):
-            logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
-    return rna_to_metadata
 
 
 def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
@@ -110,19 +70,6 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
     return merged
 
 
-def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
-    """Parse metamist query result into a mapping of RNA SG IDs to genome SG IDs."""
-    rna_to_genome_ids: dict[str, set[str]] = {}
-    for group in query_result['project']['sequencingGroups']:
-        rna_id = group['id']
-        participant = group['sample']['participant']
-        genome_ids = set()
-        for sample in participant['samples']:
-            for sg in sample['sequencingGroups']:
-                if sg['type'] == 'genome':
-                    genome_ids.add(sg['id'])
-        rna_to_genome_ids[rna_id] = genome_ids
-    return rna_to_genome_ids
 
 
 def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval], hl.Table]:
@@ -286,10 +233,7 @@ def main():
     rna_to_genome_ids = build_rna_to_genome_map(result)
     rna_to_metadata = build_rna_to_metadata_map(result)
 
-    genome_to_rna: dict[str, str] = {}
-    for rna_id, genome_ids in rna_to_genome_ids.items():
-        for gid in genome_ids:
-            genome_to_rna[gid] = rna_id
+    genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
 
     # --- Step 1: Parse CSV and build merged intervals ---
     df = read_fraser_csv(args.csv, rna_to_genome_ids)
