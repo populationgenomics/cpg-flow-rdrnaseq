@@ -50,6 +50,7 @@ def render_dashboard(
     zscore_threshold: float = 2.0,
     variant_bed_filename: str | None = None,
     variant_tsv_filename: str | None = None,
+    seqr_links: dict[str, str] | None = None,
     template_name: str = 'interactive_dashboard.html.j2',
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
@@ -71,6 +72,7 @@ def render_dashboard(
         default_pvalue_threshold=pvalue_threshold,
         default_deltapsi_threshold=deltapsi_threshold,
         default_zscore_threshold=zscore_threshold,
+        seqr_links=seqr_links or {},
         genome='hg38',
     )
 

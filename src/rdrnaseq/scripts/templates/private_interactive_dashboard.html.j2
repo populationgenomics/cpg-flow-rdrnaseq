@@ -212,7 +212,7 @@ const FILES = {
     variant_tsv: {{ variant_tsv_filename | tojson }},
 };
 const FAMILY_MAP   = {{ family_map | tojson }};
-const SEQR_LINKS = {{ seqr_links | tojson | default("{}", true) }};
+const SEQR_LINKS = {{ seqr_links | default({}) | tojson }};
 const ENSG_TO_HGNC = {{ ensg_to_hgnc | tojson }};
 const GENOME       = {{ genome | tojson }};
 const DEFAULT_PVAL   = {{ default_pvalue_threshold }};
@@ -698,7 +698,7 @@ async function init() {
             variantRows = await fetchCSV('variants', FILES.variant_tsv);
             variantRows.forEach(r => {
                 // variant_id: "7-140674264-G-C" from locus + alleles
-                const alleles = (r.alleles || '').replace(/[\[\]"]/g, '').split(',').map(s => s.trim());
+                const alleles = (r.alleles || '').replace(/[\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
                 const locParts = (r.locus || '').split(':');
                 const chrom = (locParts[0] || '').replace('chr', '');
                 r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
