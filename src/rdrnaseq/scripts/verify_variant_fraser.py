@@ -10,6 +10,7 @@ import json
 
 import pandas as pd
 from loguru import logger
+
 from metamist.graphql import query
 
 from rdrnaseq.scripts.dashboard_utilities import (
@@ -17,7 +18,6 @@ from rdrnaseq.scripts.dashboard_utilities import (
     build_genome_to_rna_map,
     build_rna_to_genome_map,
 )
-
 
 BUFFER_BP = 200
 
@@ -66,13 +66,9 @@ def verify_variant_fraser_matches(
 
     fraser_lookup = build_fraser_lookup(fraser_df)
 
-    verified_genome_ids_col = []
-    verified_rna_ids_col = []
-    verified_distance_col = []
-    verified_delta_psi_col = []
-    keep_mask = []
+    verified_rows = []
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         chrom = row['_chrom']
         pos = row['_pos']
         alleles = row['_alleles']
@@ -104,34 +100,31 @@ def verify_variant_fraser_matches(
                 verified_rna_ids.append(rna_id)
 
         if verified_genome_ids:
-            keep_mask.append(True)
-            verified_genome_ids_col.append(json.dumps(verified_genome_ids))
-            verified_rna_ids_col.append(json.dumps(verified_rna_ids))
-            verified_distance_col.append(min_distance)
-            verified_delta_psi_col.append(closest_delta_psi)
-        else:
-            keep_mask.append(False)
-            verified_genome_ids_col.append(None)
-            verified_rna_ids_col.append(None)
-            verified_distance_col.append(None)
-            verified_delta_psi_col.append(None)
+            verified_rows.append(
+                {
+                    'idx': idx,
+                    'matching_genome_sg_ids': json.dumps(verified_genome_ids),
+                    'rna_sg_ids': json.dumps(verified_rna_ids),
+                    'fraser_distance': min_distance,
+                    'deltaPsi': closest_delta_psi,
+                }
+            )
 
-    df['matching_genome_sg_ids'] = verified_genome_ids_col
-    df['rna_sg_ids'] = verified_rna_ids_col
-    df['fraser_distance'] = verified_distance_col
-    df['deltaPsi'] = verified_delta_psi_col
-
-    df = df[keep_mask].drop(columns=[c for c in df.columns if c.startswith('_')])
+    verified_df = pd.DataFrame(verified_rows).set_index('idx')
+    df = df.loc[verified_df.index].drop(columns=[c for c in df.columns if c.startswith('_')])
+    df[['matching_genome_sg_ids', 'rna_sg_ids', 'fraser_distance', 'deltaPsi']] = verified_df
     verified_count = len(df)
     removed = original_count - verified_count
     logger.info(
-        f'Verification complete: {verified_count}/{original_count} variants retained, '
-        f'{removed} false positives removed'
+        f'Verification complete: {verified_count}/{original_count} variants retained, {removed} false positives removed'
     )
 
     df.to_csv(output_tsv_path, sep='\t', index=False)
+    export_bed(df, output_bed_path)
 
-    # Export BED from verified results
+
+def export_bed(df: pd.DataFrame, bed_path: str) -> None:
+    """Write a minimal IGV-compatible BED from the verified variant DataFrame."""
     bed = df[['bed_chrom', 'bed_start', 'bed_end']].copy()
     names = []
     for _, r in df.iterrows():
@@ -145,8 +138,8 @@ def verify_variant_fraser_matches(
             alleles = json.loads(r['alleles'])
             names.append(f'{r["bed_chrom"]}:{r["bed_start"]}:{alleles[0]}>{alleles[1]}')
     bed['name'] = names
-    bed.to_csv(output_bed_path, sep='\t', header=False, index=False)
-    logger.info(f'Exported verified BED ({len(bed)} rows) to {output_bed_path}')
+    bed.to_csv(bed_path, sep='\t', header=False, index=False)
+    logger.info(f'Exported verified BED ({len(bed)} rows) to {bed_path}')
 
 
 def main():
@@ -161,10 +154,13 @@ def main():
     args = parser.parse_args()
 
     # Query Metamist for genome-to-RNA mapping
-    result = query(PEDIGREE_QUERY, variables={
-        'project': args.query_dataset,
-        'RnaSequencingGroupIds': list(set(args.rna_ids)),
-    })
+    result = query(
+        PEDIGREE_QUERY,
+        variables={
+            'project': args.query_dataset,
+            'RnaSequencingGroupIds': list(set(args.rna_ids)),
+        },
+    )
     rna_to_genome_ids = build_rna_to_genome_map(result)
     genome_to_rna = build_genome_to_rna_map(rna_to_genome_ids)
 

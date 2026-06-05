@@ -17,7 +17,6 @@ from cpg_utils import hail_batch
 from metamist.graphql import query
 
 from rdrnaseq.scripts.dashboard_utilities import (
-    AFFECTED_LABELS,
     PEDIGREE_QUERY,
     build_genome_to_rna_map,
     build_rna_to_genome_map,
@@ -27,7 +26,6 @@ from rdrnaseq.scripts.dashboard_utilities import (
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
-
 
 
 def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
@@ -68,8 +66,6 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
         merged.append(current)
 
     return merged
-
-
 
 
 def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval], hl.Table]:

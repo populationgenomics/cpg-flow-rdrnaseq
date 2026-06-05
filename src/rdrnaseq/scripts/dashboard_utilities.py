@@ -5,9 +5,10 @@ import os
 import numpy as np
 import pandas as pd
 import pysam
+from loguru import logger
 
 from metamist.apis import WebApi
-from metamist.graphql import gql, query
+from metamist.graphql import gql
 
 # =============================================================================
 # Constants and Configuration
@@ -173,6 +174,7 @@ def validate_dataframe(df: pd.DataFrame, required_cols: list, optional_cols: lis
     if present_optional:
         print(f'  Found optional columns: {present_optional}')
 
+
 # =============================================================================
 # Metamist Pedigree / SG-ID Mapping
 # =============================================================================
@@ -222,6 +224,7 @@ def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
         rna_to_genome_ids[rna_id] = genome_ids
     return rna_to_genome_ids
 
+
 def build_genome_to_rna_map(rna_to_genome_ids: dict[str, set[str]]) -> dict[str, str]:
     """Reverse the RNA-to-genome mapping: genome SG ID -> RNA SG ID."""
     genome_to_rna: dict[str, str] = {}
@@ -229,6 +232,7 @@ def build_genome_to_rna_map(rna_to_genome_ids: dict[str, set[str]]) -> dict[str,
         for gid in genome_ids:
             genome_to_rna[gid] = rna_id
     return genome_to_rna
+
 
 def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
     """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
@@ -245,6 +249,7 @@ def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | i
         except (KeyError, IndexError, TypeError):
             logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
     return rna_to_metadata
+
 
 # =============================================================================
 # CPG to Family ID Mapping

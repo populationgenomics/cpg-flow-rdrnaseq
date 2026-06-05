@@ -145,6 +145,9 @@ def match_variants_and_splicing(
             logger.error(f'No MT path found for dataset {dataset_name} — skipping job')
             continue
 
+        rna_ids_str = ' '.join(sg_ids)
+        dataset_output = output_by_dataset[dataset_name]
+
         j = b.new_job(
             f'variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'variant_splice_match'},
