@@ -150,9 +150,6 @@ def match_variants_and_splicing(
             attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
-
-        rna_ids_str = ' '.join(sg_ids)
-        dataset_output = output_by_dataset[dataset_name]
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
@@ -165,13 +162,39 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         )
         jobs.append(j)
 
+        # --- NEW: Verification job ---
+        verify_j = b.new_job(
+            f'verify_variant_fraser_{dataset_name}_{cohort_id}',
+            attributes=job_attrs | {'tool': 'verify_variant_fraser'},
+        )
+        verify_j.image(config.config_retrieve('workflow')['driver_image'])
+        verify_j.depends_on(j)
+
+        tsv_input = b.read_input(f'{dataset_output}.tsv')
+        # fraser_input already localised above
+
+        verify_j.command(
+            command(f"""\
+python3 -m rdrnaseq.scripts.verify_variant_fraser \
+    --tsv {tsv_input} \
+    --fraser-csv {fraser_input} \
+    --rna-ids {rna_ids_str} \
+    --query-dataset {dataset_name} \
+    --output-tsv {verify_j.output_tsv} \
+    --output-bed {verify_j.output_bed}
+"""),
+        )
+
+        b.write_output(verify_j.output_tsv, f'{dataset_output}.tsv')
+        b.write_output(verify_j.output_bed, f'{dataset_output}.bed')
+        jobs.append(verify_j)
+
+        # --- Registration job (now depends on verify) ---
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'metamist'},
         )
-
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
-
         registration_job.call(
             register_multiple_analyses,
             outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv'],
@@ -181,7 +204,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
             project_name=dataset_name,
             meta={'stage': 'VariantSpliceMatch', 'dataset': dataset_name, 'cohort_id': cohort_id},
         )
-        registration_job.depends_on(j)
+        registration_job.depends_on(verify_j)
         jobs.append(registration_job)
 
     return jobs
