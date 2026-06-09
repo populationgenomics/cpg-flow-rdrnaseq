@@ -117,7 +117,11 @@ def verify_variant_fraser_matches(
     )
 
     result_df.to_csv(output_tsv_path, sep='\t', index=False)
-    export_bed(result_df, output_bed_path)
+    if len(result_df) > 0:
+        export_bed(result_df, output_bed_path)
+    else:
+        open(output_bed_path, 'w').close()
+        logger.info(f'No verified variants; wrote empty BED to {output_bed_path}')
 
 
 def export_bed(df: pd.DataFrame, bed_path: str) -> None:
