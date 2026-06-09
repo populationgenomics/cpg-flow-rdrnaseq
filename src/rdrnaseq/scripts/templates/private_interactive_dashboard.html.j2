@@ -508,7 +508,7 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
     return (x > y) ? -1 : (x < y) ? 1 : 0;
 };
 
-const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
+const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
 const VARIANT_COLS_BASE = ['participant_external_id', 'variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'deltaPsi', 'psiValue', 'splice_ai_delta_score', 'splice_ai_consequence', 'affected', 'rna_sg_id', 'family_id', 'matching_genome_sg_id'];
