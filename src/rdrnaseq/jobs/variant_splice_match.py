@@ -166,33 +166,6 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         )
         jobs.append(j)
 
-        # --- Verification job ---
-        verify_j = b.new_job(
-            f'verify_variant_fraser_{dataset_name}_{cohort_id}',
-            attributes=job_attrs | {'tool': 'verify_variant_fraser'},
-        )
-        verify_j.image(config.config_retrieve('workflow')['driver_image'])
-        verify_j.depends_on(j)
-
-        tsv_input = b.read_input(f'{coarse_output}.tsv')
-        # fraser_input already localised above
-
-        verify_j.command(
-            command(f"""\
-python3 -m rdrnaseq.scripts.verify_variant_fraser \
-    --tsv {tsv_input} \
-    --fraser-csv {fraser_input} \
-    --rna-ids {rna_ids_str} \
-    --query-dataset {dataset_name} \
-    --output-tsv {verify_j.output_tsv} \
-    --output-bed {verify_j.output_bed}
-"""),
-        )
-
-        b.write_output(verify_j.output_tsv, f'{dataset_output}.tsv')
-        b.write_output(verify_j.output_bed, f'{dataset_output}.bed')
-        jobs.append(verify_j)
-
         # --- Registration job (now depends on verify) ---
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
