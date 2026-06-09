@@ -322,7 +322,9 @@ def main():
     parser.add_argument('--csv', required=True, help='Path to FRASER significant results CSV')
     parser.add_argument('--rna_ids', required=True, help='RNA sequencing group IDs', nargs='+')
     parser.add_argument('--query_dataset', required=True, help='Metamist project name')
-    parser.add_argument('--output', required=True, help='Output root for BED and TSV files')
+    parser.add_argument('--output', required=True, help='Output root for coarse TSV')
+    parser.add_argument('--output-tsv', required=True, help='Output path for verified TSV')
+    parser.add_argument('--output-bed', required=True, help='Output path for verified BED')
     args = parser.parse_args()
 
     hail_batch.init_batch(driver_memory='highmem', driver_cores=2)
@@ -332,28 +334,41 @@ def main():
     logger.info(f'Input RNA Sequencing Group IDs: {relevant_ids}')
     variables = {'project': args.query_dataset, 'RnaSequencingGroupIds': relevant_ids}
 
-    # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
     result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
     genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
+    rna_to_metadata = build_rna_to_metadata_map(result)
 
-    # --- Step 1: Parse CSV and build merged intervals ---
-    df = read_fraser_csv(args.csv, rna_to_genome_ids)
+    coarse_tsv_path = f'{args.output}.tsv'
 
-    cpg_ids = set().union(*df['genome_ids'])
-    logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
-    logger.info(f'Found {len(df)} FRASER significant regions')
+    if hl.utils.hadoop_exists(coarse_tsv_path):
+        logger.info(f'Coarse TSV already exists at {coarse_tsv_path}, skipping Hail subset')
+    else:
+        df = read_fraser_csv(args.csv, rna_to_genome_ids)
 
-    merged = merge_overlapping_intervals(df)
-    logger.info(f'Merged into {len(merged)} non-overlapping intervals (±{BUFFER_BP}bp buffer)')
+        cpg_ids = set().union(*df['genome_ids'])
+        logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
+        logger.info(f'Found {len(df)} FRASER significant regions')
 
-    hail_intervals, interval_ht = build_hail_intervals(merged)
+        merged = merge_overlapping_intervals(df)
+        logger.info(f'Merged into {len(merged)} non-overlapping intervals (±{BUFFER_BP}bp buffer)')
 
-    ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
+        hail_intervals, interval_ht = build_hail_intervals(merged)
 
-    tsv_path = f'{args.output}.tsv'
-    logger.info(f'Exporting TSV to {tsv_path}')
-    ht.export(tsv_path, delimiter='\t')
+        ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
+
+        logger.info(f'Exporting coarse TSV to {coarse_tsv_path}')
+        ht.export(coarse_tsv_path, delimiter='\t')
+
+    logger.info('Running verification against original FRASER regions')
+    verify_variant_fraser_matches(
+        tsv_path=coarse_tsv_path,
+        fraser_csv_path=args.csv,
+        genome_to_rna=genome_to_rna,
+        rna_to_metadata=rna_to_metadata,
+        output_tsv_path=args.output_tsv,
+        output_bed_path=args.output_bed,
+    )
 
     logger.info('Done.')
 
