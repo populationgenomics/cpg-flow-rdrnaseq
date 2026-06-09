@@ -64,7 +64,7 @@ def verify_variant_fraser_matches(
     fraser_distance, attaches deltaPsi, and denormalizes to one row per
     verified variant-sample pair with correct participant metadata.
     """
-    with hl.utils.hadoop_open(tsv_path, 'r') as f:
+    with hl.current_backend().fs.open(tsv_path, 'r') as f:
         variant_df = pd.read_csv(f, sep='\t')
     fraser_df = pd.read_csv(fraser_csv_path)
     original_count = len(variant_df)
@@ -348,7 +348,7 @@ def main():
 
     coarse_tsv_path = f'{args.output}.tsv'
 
-    if hl.utils.hadoop_exists(coarse_tsv_path):
+    if hl.current_backend().fs.exists(coarse_tsv_path):
         logger.info(f'Coarse TSV already exists at {coarse_tsv_path}, skipping Hail subset')
     else:
         df = read_fraser_csv(args.csv, rna_to_genome_ids)
