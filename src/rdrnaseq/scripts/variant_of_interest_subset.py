@@ -20,7 +20,6 @@ from rdrnaseq.scripts.dashboard_utilities import (
     PEDIGREE_QUERY,
     build_genome_to_rna_map,
     build_rna_to_genome_map,
-    build_rna_to_metadata_map,
 )
 
 BUFFER_BP = 200
@@ -227,8 +226,6 @@ def main():
     # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
     result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
-    rna_to_metadata = build_rna_to_metadata_map(result)
-
     genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
 
     # --- Step 1: Parse CSV and build merged intervals ---
@@ -245,14 +242,6 @@ def main():
 
     ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
-    # --- Annotate with participant metadata and export TSV ---
-    meta_structs = {k: hl.Struct(**v) for k, v in rna_to_metadata.items()}
-    meta_hl = hl.literal(meta_structs)
-    rna_sg_array = hl.array(ht.rna_sg_ids)
-    first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
-    ht = ht.annotate(
-        **meta_hl.get(first_rna_id, hl.struct(participant_external_id='', family_id='', affected='Unknown'))
-    )
     tsv_path = f'{args.output}.tsv'
     logger.info(f'Exporting TSV to {tsv_path}')
     ht.export(tsv_path, delimiter='\t')
