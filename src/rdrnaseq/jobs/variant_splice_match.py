@@ -185,7 +185,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
             project_name=dataset_name,
             meta={'stage': 'VariantSpliceMatch', 'dataset': dataset_name, 'cohort_id': cohort_id},
         )
-        registration_job.depends_on(verify_j)
+        registration_job.depends_on(j)
         jobs.append(registration_job)
 
     return jobs
