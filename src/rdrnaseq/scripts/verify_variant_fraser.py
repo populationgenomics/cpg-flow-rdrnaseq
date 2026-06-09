@@ -88,28 +88,20 @@ def verify_variant_fraser_matches(
                 continue
 
             regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
-            best_dist = None
-            best_delta_psi = None
-            best_psi_value = None
+            meta = rna_to_metadata.get(rna_id, {})
             for region_start, region_end, delta_psi, psi_value in regions:
                 dist = compute_span_distance(pos, variant_end, region_start, region_end)
-                if dist <= buffer_bp and (best_dist is None or dist < best_dist):
-                    best_dist = dist
-                    best_delta_psi = delta_psi
-                    best_psi_value = psi_value
-
-            if best_dist is not None:
-                sample_row = {col: row[col] for col in base_cols}
-                sample_row['matching_genome_sg_id'] = genome_id
-                sample_row['rna_sg_id'] = rna_id
-                sample_row['fraser_distance'] = best_dist
-                sample_row['deltaPsi'] = best_delta_psi
-                sample_row['psiValue'] = best_psi_value
-                meta = rna_to_metadata.get(rna_id, {})
-                sample_row['participant_external_id'] = meta.get('participant_external_id', '')
-                sample_row['family_id'] = meta.get('family_id', '')
-                sample_row['affected'] = meta.get('affected', 'Unknown')
-                output_rows.append(sample_row)
+                if dist <= buffer_bp:
+                    sample_row = {col: row[col] for col in base_cols}
+                    sample_row['matching_genome_sg_id'] = genome_id
+                    sample_row['rna_sg_id'] = rna_id
+                    sample_row['fraser_distance'] = dist
+                    sample_row['deltaPsi'] = delta_psi
+                    sample_row['psiValue'] = psi_value
+                    sample_row['participant_external_id'] = meta.get('participant_external_id', '')
+                    sample_row['family_id'] = meta.get('family_id', '')
+                    sample_row['affected'] = meta.get('affected', 'Unknown')
+                    output_rows.append(sample_row)
 
     result_df = pd.DataFrame(output_rows)
     verified_variants = result_df['locus'].nunique() if len(result_df) > 0 else 0
