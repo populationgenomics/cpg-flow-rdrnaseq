@@ -441,7 +441,7 @@ const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
 const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi'];
 const DP2 = ['zScore', 'outrider_zScore'];
 
-const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_ids: 'Genome SG IDs', gene_symbol: 'HGNC Symbol'};
+const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_id: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_id: 'Genome SG ID', matching_genome_sg_ids: 'Genome SG IDs', gene_symbol: 'HGNC Symbol'};
 const WRAP_COLS = new Set(['rna_sg_ids', 'matching_genome_sg_ids']);
 
 function colTitle(c) {
@@ -511,7 +511,7 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
 const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
 const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
-const VARIANT_COLS = ['participant_external_id', 'variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids'];
+const VARIANT_COLS = ['participant_external_id', 'variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'deltaPsi', 'psiValue', 'splice_ai_delta_score', 'splice_ai_consequence', 'affected', 'rna_sg_id', 'family_id', 'matching_genome_sg_id'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {

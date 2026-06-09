@@ -30,13 +30,16 @@ def compute_span_distance(variant_start: int, variant_end: int, region_start: in
     return min(abs(variant_start - region_end), abs(variant_end - region_start))
 
 
-def build_fraser_lookup(fraser_df: pd.DataFrame) -> dict[str, dict[str, list[tuple[int, int, float]]]]:
-    """Index FRASER regions as sample -> chrom -> list of (start, end, deltaPsi)."""
-    lookup: dict[str, dict[str, list[tuple[int, int, float]]]] = {}
+def build_fraser_lookup(fraser_df: pd.DataFrame) -> dict[str, dict[str, list[tuple[int, int, float, float]]]]:
+    """Index FRASER regions as sample -> chrom -> list of (start, end, deltaPsi, psiValue)."""
+    lookup: dict[str, dict[str, list[tuple[int, int, float, float]]]] = {}
     for _, row in fraser_df.iterrows():
         sample_regions = lookup.setdefault(row['sampleID'], {})
         delta_psi = float(row['deltaPsi'])
-        sample_regions.setdefault(row['seqnames'], []).append((int(row['start']), int(row['end']), delta_psi))
+        psi_value = float(row['psiValue'])
+        sample_regions.setdefault(row['seqnames'], []).append(
+            (int(row['start']), int(row['end']), delta_psi, psi_value)
+        )
     return lookup
 
 
@@ -87,11 +90,13 @@ def verify_variant_fraser_matches(
             regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
             best_dist = None
             best_delta_psi = None
-            for region_start, region_end, delta_psi in regions:
+            best_psi_value = None
+            for region_start, region_end, delta_psi, psi_value in regions:
                 dist = compute_span_distance(pos, variant_end, region_start, region_end)
                 if dist <= buffer_bp and (best_dist is None or dist < best_dist):
                     best_dist = dist
                     best_delta_psi = delta_psi
+                    best_psi_value = psi_value
 
             if best_dist is not None:
                 sample_row = {col: row[col] for col in base_cols}
@@ -99,6 +104,7 @@ def verify_variant_fraser_matches(
                 sample_row['rna_sg_id'] = rna_id
                 sample_row['fraser_distance'] = best_dist
                 sample_row['deltaPsi'] = best_delta_psi
+                sample_row['psiValue'] = best_psi_value
                 meta = rna_to_metadata.get(rna_id, {})
                 sample_row['participant_external_id'] = meta.get('participant_external_id', '')
                 sample_row['family_id'] = meta.get('family_id', '')
