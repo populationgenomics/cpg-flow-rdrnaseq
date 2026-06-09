@@ -170,7 +170,6 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         b.write_output(j.output_bed, f'{dataset_output}.bed')
         jobs.append(j)
 
-        # --- Registration job (now depends on verify) ---
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'metamist'},

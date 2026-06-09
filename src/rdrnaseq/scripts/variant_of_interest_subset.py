@@ -28,6 +28,7 @@ BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
 
+
 def compute_span_distance(variant_start: int, variant_end: int, region_start: int, region_end: int) -> int:
     "Compute distance between a variant span and a region span, treating any overlap as distance 0."
     if variant_start <= region_end and variant_end >= region_start:
@@ -63,7 +64,8 @@ def verify_variant_fraser_matches(
     fraser_distance, attaches deltaPsi, and denormalizes to one row per
     verified variant-sample pair with correct participant metadata.
     """
-    variant_df = pd.read_csv(tsv_path, sep='\t')
+    with hl.utils.hadoop_open(tsv_path, 'r') as f:
+        variant_df = pd.read_csv(f, sep='\t')
     fraser_df = pd.read_csv(fraser_csv_path)
     original_count = len(variant_df)
     logger.info(f'Verifying {original_count} variant rows against {len(fraser_df)} FRASER regions')
@@ -135,6 +137,7 @@ def export_bed(df: pd.DataFrame, bed_path: str) -> None:
     bed['name'] = names
     bed.to_csv(bed_path, sep='\t', header=False, index=False)
     logger.info(f'Exported verified BED ({len(bed)} rows) to {bed_path}')
+
 
 def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
     """Merge overlapping buffered intervals, unioning their sequencing group ID sets.
