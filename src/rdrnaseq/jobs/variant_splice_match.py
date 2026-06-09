@@ -161,9 +161,13 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {coarse_output}
+    --output {coarse_output} \
+    --output-tsv {j.output_tsv} \
+    --output-bed {j.output_bed}
 """),
         )
+        b.write_output(j.output_tsv, f'{dataset_output}.tsv')
+        b.write_output(j.output_bed, f'{dataset_output}.bed')
         jobs.append(j)
 
         # --- Registration job (now depends on verify) ---
