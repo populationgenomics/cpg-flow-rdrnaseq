@@ -17,7 +17,7 @@
     <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
-        .container { max-width: 1600px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
+        .container { width: 95%; max-width: 1800px; margin: 0 auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.1); }
         h1 { text-align: center; color: #333; }
         h2 { color: #444; border-bottom: 2px solid #eee; padding-bottom: 8px; }
         .controls { background: #f9f9f9; padding: 20px; border-radius: 5px; margin-bottom: 20px; }
@@ -325,7 +325,7 @@ function renderFraserVolcano(rows, pval, dpsi) {
     const mkTrace = (pts, color, name) => ({
         x: pts.map(r => r.deltaPsi),
         y: pts.map(r => log10p(r.pValue)),
-        mode: 'markers', type: 'scatter', name,
+        mode: 'markers', type: 'scatter', name, showlegend: true,
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || 'NA') +
@@ -354,7 +354,8 @@ function renderFraserVolcano(rows, pval, dpsi) {
                 { type:'line', x0:-1,    x1:1,     y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
             ],
             margin: { t: 20 }, height: 500,
-        }
+        },
+        { responsive: true }
     );
 }
 
@@ -370,7 +371,7 @@ function renderOutriderVolcano(rows, pval, zscore) {
     const mkTrace = (pts, color, name) => ({
         x: pts.map(fcVal),
         y: pts.map(r => log10p(r.pValue)),
-        mode: 'markers', type: 'scatter', name,
+        mode: 'markers', type: 'scatter', name, showlegend: true,
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || r.geneID || 'NA') +
@@ -397,7 +398,8 @@ function renderOutriderVolcano(rows, pval, zscore) {
                 { type:'line', x0:-20, x1:20, y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
             ],
             margin: { t: 20 }, height: 500,
-        }
+        },
+        { responsive: true }
     );
 }
 
@@ -430,7 +432,7 @@ function findCommon(fRows, oRows, pval, dpsi, zscore) {
             participantExternalId: fr.participantExternalId || 'NA',
             affected: fr.affected || 'NA',
             sampleID: fr.sampleID, familyID: fr.familyID || 'NA',
-            chr: fr.seqnames, start: fr.start, end: fr.end,
+            location: fr.seqnames + ':' + fr.start + '-' + fr.end,
         });
     });
     return common;
@@ -441,7 +443,7 @@ const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
 const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi', 'avis_phred', 'avi_score'];
 const DP2 = ['zScore', 'outrider_zScore'];
 
-const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_id: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_id: 'Genome SG ID', matching_genome_sg_ids: 'Genome SG IDs', avis_phred: 'AVIS Phred', avi_score: 'AVI Score', gene_symbol: 'HGNC Symbol'};
+const COL_TITLES = {sampleID: 'RNA SG ID', rna_sg_id: 'RNA SG ID', rna_sg_ids: 'RNA SG IDs', matching_genome_sg_id: 'Genome SG ID', matching_genome_sg_ids: 'Genome SG IDs', avis_phred: 'AVIS Phred', avi_score: 'AVI Score', gene_symbol: 'HGNC Symbol', hgncSymbol: 'HGNC Symbol', hgvs: 'HGVS'};
 const WRAP_COLS = new Set(['rna_sg_ids', 'matching_genome_sg_ids']);
 
 function colTitle(c) {
@@ -508,9 +510,9 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
     return (x > y) ? -1 : (x < y) ? 1 : 0;
 };
 
-const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end'];
+const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'location'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
-const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
+const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'location'];
 const VARIANT_COLS_BASE = ['participant_external_id', 'variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'deltaPsi', 'psiValue', 'splice_ai_delta_score', 'splice_ai_consequence', 'affected', 'rna_sg_id', 'family_id', 'matching_genome_sg_id'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
@@ -616,7 +618,36 @@ async function initIGV(fraser) {
         document.getElementById('igv-div').textContent = 'IGV failed to load: ' + e;
     }
 }
-
+function updateIGVTracks(fraser, variants) {
+    if (!igvBrowser) return;
+    const existingNames = igvBrowser.trackViews.map(tv => tv.track.name);
+    if (existingNames.includes('FRASER Results')) {
+        const track = igvBrowser.trackViews.find(tv => tv.track.name === 'FRASER Results').track;
+        igvBrowser.removeTrack(track);
+    }
+    if (existingNames.includes('Rare Variants')) {
+        const track = igvBrowser.trackViews.find(tv => tv.track.name === 'Rare Variants').track;
+        igvBrowser.removeTrack(track);
+    }
+    igvBrowser.loadTrack({
+        name: 'FRASER Results', type: 'annotation', format: 'bed',
+        features: fraser.map(r => ({
+            chr: String(r.seqnames), start: r.start - 1, end: r.end,
+            name: (r.hgncSymbol || 'NA') + ' (' + r.sampleID + ')',
+        })),
+        displayMode: 'EXPANDED', color: '#e03131',
+    });
+    if (variants && variants.length) {
+        igvBrowser.loadTrack({
+            name: 'Rare Variants', type: 'annotation', format: 'bed',
+            features: variants.map(r => ({
+                chr: String(r.bed_chrom), start: r.bed_start, end: r.bed_end,
+                name: r.hgvs || r.variant_id || '',
+            })),
+            displayMode: 'EXPANDED', color: '#3b5bdb',
+        });
+    }
+}
 // ─── Apply / Reset ───────────────────────────────────────────────────────────
 function applyThresholds() {
     const pval   = parseFloat(document.getElementById('pval-thresh').value) || DEFAULT_PVAL;
@@ -642,10 +673,12 @@ function applyThresholds() {
     }
     renderStats(outriderRows.length ? common.length : null);
 
+   const vView = families.length ? variantRows.filter(r => families.includes(r.family_id)) : variantRows;
     if (variantRows.length) {
-        const vView = families.length ? variantRows.filter(r => families.includes(r.family_id)) : variantRows;
-        variantDT = buildDT('variant-table', vView, window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+        variantDT = buildDT('variant-table', vView, VARIANT_COLS, variantDT);
     }
+    updateIGVTracks(fView, vView);
+
 }
 
 function resetFilters() {
@@ -664,6 +697,7 @@ async function init() {
 
         // 1. FRASER (required)
         fraserRows = await fetchCSV('fraser', FILES.fraser);
+        fraserRows.forEach(r => { r.location = r.seqnames + ':' + r.start + '-' + r.end; });
         if (!fraserRows.length) throw new Error('FRASER file loaded but contained no rows.');
 
         // 2. OUTRIDER (optional)
