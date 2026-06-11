@@ -354,9 +354,10 @@ class VariantSpliceMatch(stage.CohortStage):
         for ds_name, ds_obj in datasets.items():
             folder = f'{cohort.id}_{cell_type}_{library_type}'
             prefix = ds_obj.prefix() / 'variant_splice_match' / folder
+            tmp_prefix = ds_obj.tmp_prefix() / 'variant_splice_match' / folder
             outputs[f'bed_{ds_name}'] = prefix / 'variants_of_interest.bed'
             outputs[f'tsv_{ds_name}'] = prefix / 'variants_of_interest.tsv'
-            outputs[f'coarse_tsv_{ds_name}'] = prefix / 'variants_of_interest_coarse_hail.tsv'
+            outputs[f'coarse_tsv_{ds_name}'] = tmp_prefix / 'variants_of_interest_coarse_hail.tsv'
         return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
