@@ -142,17 +142,17 @@ def match_variants_and_splicing(
             )
             logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
         if mt_path is None:
-            logger.error(f'No MT path found for dataset {dataset_name} — skipping job')
-            continue
+            raise RuntimeError(f'No MT path found for dataset {dataset_name}')
+
+        rna_ids_str = ' '.join(sg_ids)
+        dataset_output = output_by_dataset[dataset_name]
+        coarse_output = output_by_dataset[f'coarse_{dataset_name}']
 
         j = b.new_job(
             f'variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
-
-        rna_ids_str = ' '.join(sg_ids)
-        dataset_output = output_by_dataset[dataset_name]
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
@@ -160,21 +160,23 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {dataset_output}
+    --output {coarse_output} \
+    --output-tsv {j.output_tsv} \
+    --output-bed {j.output_bed}
 """),
         )
+        b.write_output(j.output_tsv, f'{dataset_output}.tsv')
+        b.write_output(j.output_bed, f'{dataset_output}.bed')
         jobs.append(j)
 
         registration_job = b.new_python_job(
             f'register_variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'metamist'},
         )
-
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
-
         registration_job.call(
             register_multiple_analyses,
-            outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv'],
+            outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv', str(coarse_output) + '.tsv'],
             analysis_type='variantsplicematch',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,

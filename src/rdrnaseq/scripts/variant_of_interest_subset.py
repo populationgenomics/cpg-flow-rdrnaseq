@@ -7,6 +7,7 @@ Exports as a BED-like TSV with all variant annotations.
 """
 
 import argparse
+import json
 
 import pandas as pd
 from loguru import logger
@@ -14,60 +15,132 @@ from loguru import logger
 import hail as hl
 
 from cpg_utils import hail_batch
-from metamist.graphql import gql, query
+from metamist.graphql import query
 
-from rdrnaseq.scripts.dashboard_utilities import AFFECTED_LABELS
+from rdrnaseq.scripts.dashboard_utilities import (
+    PEDIGREE_QUERY,
+    build_genome_to_rna_map,
+    build_rna_to_genome_map,
+    build_rna_to_metadata_map,
+)
 
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
 
-query_ids = gql(
-    """
-    query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
-      project(name: $project) {
-        sequencingGroups(id: {in_: $RnaSequencingGroupIds}) {
-          id
-          sample {
-            participant {
-              externalId
-              families {
-                externalId
-              }
-              familyParticipants {
-                affected
-              }
-              samples {
-                sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
-                  id
-                  technology
-                  type
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-    """
-)
+
+def compute_span_distance(variant_start: int, variant_end: int, region_start: int, region_end: int) -> int:
+    "Compute distance between a variant span and a region span, treating any overlap as distance 0."
+    if variant_start <= region_end and variant_end >= region_start:
+        return 0
+    return min(abs(variant_start - region_end), abs(variant_end - region_start))
 
 
-def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
-    """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
-    rna_to_metadata: dict[str, dict[str, str | int]] = {}
-    for group in query_result['project']['sequencingGroups']:
-        rna_id = group['id']
-        participant = group['sample']['participant']
-        try:
-            rna_to_metadata[rna_id] = {
-                'participant_external_id': participant['externalId'],
-                'family_id': participant['families'][0]['externalId'],
-                'affected': AFFECTED_LABELS.get(participant['familyParticipants'][0]['affected'], 'Unknown'),
-            }
-        except (KeyError, IndexError, TypeError):
-            logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
-    return rna_to_metadata
+def build_fraser_lookup(fraser_df: pd.DataFrame) -> dict[str, dict[str, list[tuple[int, int, float, float]]]]:
+    """Index FRASER regions as sample -> chrom -> list of (start, end, deltaPsi, psiValue)."""
+    lookup: dict[str, dict[str, list[tuple[int, int, float, float]]]] = {}
+    for _, row in fraser_df.iterrows():
+        sample_regions = lookup.setdefault(row['sampleID'], {})
+        delta_psi = float(row['deltaPsi'])
+        psi_value = float(row['psiValue'])
+        sample_regions.setdefault(row['seqnames'], []).append(
+            (int(row['start']), int(row['end']), delta_psi, psi_value)
+        )
+    return lookup
+
+
+def verify_variant_fraser_matches(
+    tsv_path: str,
+    fraser_csv_path: str,
+    genome_to_rna: dict[str, str],
+    rna_to_metadata: dict[str, dict],
+    output_tsv_path: str,
+    output_bed_path: str,
+    buffer_bp: int = BUFFER_BP,
+) -> None:
+    """Re-check each variant-sample match against the original FRASER regions.
+
+    Removes false positives from interval merging, recalculates per-sample
+    fraser_distance, attaches deltaPsi, and denormalizes to one row per
+    verified variant-sample pair with correct participant metadata.
+    """
+    with hl.current_backend().fs.open(tsv_path, 'r') as f:
+        variant_df = pd.read_csv(f, sep='\t')
+    fraser_df = pd.read_csv(fraser_csv_path)
+    original_count = len(variant_df)
+    logger.info(f'Verifying {original_count} variant rows against {len(fraser_df)} FRASER regions')
+
+    variant_df['_genome_ids'] = variant_df['matching_genome_sg_ids'].apply(json.loads)
+    variant_df['_alleles'] = variant_df['alleles'].apply(json.loads)
+    locus_split = variant_df['locus'].str.split(':', n=1)
+    variant_df['_chrom'] = locus_split.str[0]
+    variant_df['_pos'] = locus_split.str[1].astype(int)
+
+    fraser_lookup = build_fraser_lookup(fraser_df)
+
+    drop_cols = {'matching_genome_sg_ids', 'rna_sg_ids', 'fraser_distance'}
+    base_cols = [c for c in variant_df.columns if c not in drop_cols and not c.startswith('_')]
+
+    output_rows = []
+    for _, row in variant_df.iterrows():
+        chrom = row['_chrom']
+        pos = row['_pos']
+        ref, alt = row['_alleles'][0], row['_alleles'][1]
+        variant_end = pos + max(len(ref), len(alt)) - 1
+
+        for genome_id in row['_genome_ids']:
+            rna_id = genome_to_rna.get(genome_id)
+            if rna_id is None:
+                continue
+
+            regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
+            meta = rna_to_metadata.get(rna_id, {})
+            for region_start, region_end, delta_psi, psi_value in regions:
+                dist = compute_span_distance(pos, variant_end, region_start, region_end)
+                if dist <= buffer_bp:
+                    sample_row = {col: row[col] for col in base_cols}
+                    sample_row['matching_genome_sg_id'] = genome_id
+                    sample_row['rna_sg_id'] = rna_id
+                    sample_row['fraser_distance'] = dist
+                    sample_row['deltaPsi'] = delta_psi
+                    sample_row['psiValue'] = psi_value
+                    sample_row['participant_external_id'] = meta.get('participant_external_id', '')
+                    sample_row['family_id'] = meta.get('family_id', '')
+                    sample_row['affected'] = meta.get('affected', 'Unknown')
+                    output_rows.append(sample_row)
+
+    result_df = pd.DataFrame(output_rows)
+    verified_variants = result_df['locus'].nunique() if len(result_df) > 0 else 0
+    logger.info(
+        f'Verification complete: {len(result_df)} variant-sample rows '
+        f'({verified_variants} unique variants) from {original_count} input variants'
+    )
+
+    result_df.to_csv(output_tsv_path, sep='\t', index=False)
+    if len(result_df) > 0:
+        export_bed(result_df, output_bed_path)
+    else:
+        open(output_bed_path, 'w').close()
+        logger.info(f'No verified variants; wrote empty BED to {output_bed_path}')
+
+
+def export_bed(df: pd.DataFrame, bed_path: str) -> None:
+    """Write a minimal IGV-compatible BED from the verified variant DataFrame."""
+    bed = df[['bed_chrom', 'bed_start', 'bed_end']].copy()
+    names = []
+    for _, r in df.iterrows():
+        tid = r.get('transcript_id', '')
+        symbol = r.get('gene_symbol', '')
+        hgvsc = r.get('hgvsc', '')
+        if pd.notna(tid) and tid:
+            suffix = hgvsc.split(':')[1] if pd.notna(hgvsc) and ':' in str(hgvsc) else hgvsc
+            names.append(f'{tid}({symbol}):{suffix}')
+        else:
+            alleles = json.loads(r['alleles'])
+            names.append(f'{r["bed_chrom"]}:{r["bed_start"]}:{alleles[0]}>{alleles[1]}')
+    bed['name'] = names
+    bed.to_csv(bed_path, sep='\t', header=False, index=False)
+    logger.info(f'Exported verified BED ({len(bed)} rows) to {bed_path}')
 
 
 def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
@@ -108,21 +181,6 @@ def merge_overlapping_intervals(df: pd.DataFrame) -> list[dict]:
         merged.append(current)
 
     return merged
-
-
-def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
-    """Parse metamist query result into a mapping of RNA SG IDs to genome SG IDs."""
-    rna_to_genome_ids: dict[str, set[str]] = {}
-    for group in query_result['project']['sequencingGroups']:
-        rna_id = group['id']
-        participant = group['sample']['participant']
-        genome_ids = set()
-        for sample in participant['samples']:
-            for sg in sample['sequencingGroups']:
-                if sg['type'] == 'genome':
-                    genome_ids.add(sg['id'])
-        rna_to_genome_ids[rna_id] = genome_ids
-    return rna_to_genome_ids
 
 
 def build_hail_intervals(merged_intervals: list[dict]) -> tuple[list[hl.Interval], hl.Table]:
@@ -271,7 +329,9 @@ def main():
     parser.add_argument('--csv', required=True, help='Path to FRASER significant results CSV')
     parser.add_argument('--rna_ids', required=True, help='RNA sequencing group IDs', nargs='+')
     parser.add_argument('--query_dataset', required=True, help='Metamist project name')
-    parser.add_argument('--output', required=True, help='Output root for BED and TSV files')
+    parser.add_argument('--output', required=True, help='Output root for coarse TSV')
+    parser.add_argument('--output-tsv', required=True, help='Output path for verified TSV')
+    parser.add_argument('--output-bed', required=True, help='Output path for verified BED')
     args = parser.parse_args()
 
     hail_batch.init_batch(driver_memory='highmem', driver_cores=2)
@@ -281,62 +341,42 @@ def main():
     logger.info(f'Input RNA Sequencing Group IDs: {relevant_ids}')
     variables = {'project': args.query_dataset, 'RnaSequencingGroupIds': relevant_ids}
 
-    # build a dictionary mapping from RNA SG ID to set of genome SG IDs for that participant
-    result = query(query_ids, variables=variables)
+    result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
+    genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
     rna_to_metadata = build_rna_to_metadata_map(result)
 
-    genome_to_rna: dict[str, str] = {}
-    for rna_id, genome_ids in rna_to_genome_ids.items():
-        for gid in genome_ids:
-            genome_to_rna[gid] = rna_id
+    coarse_tsv_path = f'{args.output}.tsv'
 
-    # --- Step 1: Parse CSV and build merged intervals ---
-    df = read_fraser_csv(args.csv, rna_to_genome_ids)
+    if hl.current_backend().fs.exists(coarse_tsv_path):
+        logger.info(f'Coarse TSV already exists at {coarse_tsv_path}, skipping Hail subset')
+    else:
+        df = read_fraser_csv(args.csv, rna_to_genome_ids)
 
-    cpg_ids = set().union(*df['genome_ids'])
-    logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
-    logger.info(f'Found {len(df)} FRASER significant regions')
+        cpg_ids = set().union(*df['genome_ids'])
+        logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
+        logger.info(f'Found {len(df)} FRASER significant regions')
 
-    merged = merge_overlapping_intervals(df)
-    logger.info(f'Merged into {len(merged)} non-overlapping intervals (±{BUFFER_BP}bp buffer)')
+        merged = merge_overlapping_intervals(df)
+        logger.info(f'Merged into {len(merged)} non-overlapping intervals (±{BUFFER_BP}bp buffer)')
 
-    hail_intervals, interval_ht = build_hail_intervals(merged)
+        hail_intervals, interval_ht = build_hail_intervals(merged)
 
-    ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
+        ht = subset_mt_to_variants_of_interest(args.mt, hail_intervals, interval_ht, genome_to_rna)
 
-    # --- Annotate with participant metadata and export TSV ---
-    meta_structs = {k: hl.Struct(**v) for k, v in rna_to_metadata.items()}
-    meta_hl = hl.literal(meta_structs)
-    rna_sg_array = hl.array(ht.rna_sg_ids)
-    first_rna_id = hl.or_missing(rna_sg_array.length() > 0, rna_sg_array[0])
-    ht = ht.annotate(
-        **meta_hl.get(first_rna_id, hl.struct(participant_external_id='', family_id='', affected='Unknown'))
+        logger.info(f'Exporting coarse TSV to {coarse_tsv_path}')
+        ht.export(coarse_tsv_path, delimiter='\t')
+
+    logger.info('Running verification against original FRASER regions')
+    verify_variant_fraser_matches(
+        tsv_path=coarse_tsv_path,
+        fraser_csv_path=args.csv,
+        genome_to_rna=genome_to_rna,
+        rna_to_metadata=rna_to_metadata,
+        output_tsv_path=args.output_tsv,
+        output_bed_path=args.output_bed,
     )
-    tsv_path = f'{args.output}.tsv'
-    logger.info(f'Exporting TSV to {tsv_path}')
-    ht.export(tsv_path, delimiter='\t')
 
-    # --- Export minimal IGV-compatible BED ---
-    bed_ht = ht.select(
-        bed_chrom=ht.bed_chrom,
-        bed_start=ht.bed_start,
-        bed_end=ht.bed_end,
-        name=hl.or_else(
-            ht.transcript_id
-            + '('
-            + ht.gene_symbol
-            + '):'
-            + hl.if_else(ht.hgvsc.contains(':'), ht.hgvsc.split(':')[1], ht.hgvsc),
-            ht.bed_chrom + ':' + hl.str(ht.bed_start) + ':' + ht.alleles[0] + '>' + ht.alleles[1],
-        ),
-    )
-    bed_ht = bed_ht.key_by()
-    bed_ht = bed_ht.select('bed_chrom', 'bed_start', 'bed_end', 'name')
-
-    bed_path = f'{args.output}.bed'
-    logger.info(f'Exporting IGV BED to {bed_path}')
-    bed_ht.export(bed_path, delimiter='\t', header=False)
     logger.info('Done.')
 
 

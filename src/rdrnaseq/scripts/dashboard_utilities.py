@@ -5,8 +5,10 @@ import os
 import numpy as np
 import pandas as pd
 import pysam
+from loguru import logger
 
 from metamist.apis import WebApi
+from metamist.graphql import gql
 
 # =============================================================================
 # Constants and Configuration
@@ -174,10 +176,85 @@ def validate_dataframe(df: pd.DataFrame, required_cols: list, optional_cols: lis
 
 
 # =============================================================================
-# CPG to Family ID Mapping
+# Metamist Pedigree / SG-ID Mapping
 # =============================================================================
 
+PEDIGREE_QUERY = gql(
+    """
+    query Pedigree($project: String!, $RnaSequencingGroupIds: [String!]!) {
+      project(name: $project) {
+        sequencingGroups(id: {in_: $RnaSequencingGroupIds}) {
+          id
+          sample {
+            participant {
+              externalId
+              families {
+                externalId
+              }
+              familyParticipants {
+                affected
+              }
+              samples {
+                sequencingGroups(type: {eq: "genome"}, technology: {eq: "short-read"}, activeOnly: {eq: true}) {
+                  id
+                  technology
+                  type
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    """
+)
 
+
+def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
+    """Parse metamist query result into a mapping of RNA SG IDs to genome SG IDs."""
+    rna_to_genome_ids: dict[str, set[str]] = {}
+    for group in query_result['project']['sequencingGroups']:
+        rna_id = group['id']
+        participant = group['sample']['participant']
+        genome_ids = set()
+        for sample in participant['samples']:
+            for sg in sample['sequencingGroups']:
+                genome_ids.add(sg['id'])
+        rna_to_genome_ids[rna_id] = genome_ids
+    return rna_to_genome_ids
+
+
+def build_genome_to_rna_map(rna_to_genome_ids: dict[str, set[str]]) -> dict[str, str]:
+    """Reverse the RNA-to-genome mapping: genome SG ID -> RNA SG ID."""
+    genome_to_rna: dict[str, str] = {}
+    for rna_id, genome_ids in rna_to_genome_ids.items():
+        for gid in genome_ids:
+            if gid in genome_to_rna:
+                raise ValueError(f'Genome SG: {gid} linked to multiple RNA SGs: {genome_to_rna[gid]}, {rna_id}')
+            genome_to_rna[gid] = rna_id
+    return genome_to_rna
+
+
+def build_rna_to_metadata_map(query_result: dict) -> dict[str, dict[str, str | int]]:
+    """Parse metamist query result into a mapping of RNA SG ID to participant metadata."""
+    rna_to_metadata: dict[str, dict[str, str | int]] = {}
+    for group in query_result['project']['sequencingGroups']:
+        rna_id = group['id']
+        participant = group['sample']['participant']
+        try:
+            rna_to_metadata[rna_id] = {
+                'participant_external_id': participant['externalId'],
+                'family_id': participant['families'][0]['externalId'],
+                'affected': AFFECTED_LABELS.get(participant['familyParticipants'][0]['affected'], 'Unknown'),
+            }
+        except (KeyError, IndexError, TypeError):
+            logger.warning(f'Incomplete metadata for RNA SG {rna_id}, skipping')
+    return rna_to_metadata
+
+
+# =============================================================================
+# CPG to Family ID Mapping
+# =============================================================================
 def load_cpg_to_family_mapping(mapping_file: str) -> dict:
     """Load CPG ID to Family ID mapping from a CSV."""
     print(f'Loading CPG to Family mapping from {mapping_file}...')

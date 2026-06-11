@@ -2,6 +2,7 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
+import functools
 from collections import defaultdict
 
 from hailtop.batch.job import Job
@@ -21,8 +22,8 @@ from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_d
 
 SG_TYPE_QUERY = gql(
     """
-    query SgTypes($dataset: String!, $sgIds: [String!]!) {
-        project(name: $dataset) {
+    query SgTypes($cohort: String!, $sgIds: [String!]!) {
+        cohorts(id: {eq: $cohort}) {
             sequencingGroups(id: {in_: $sgIds}) {
                 id
                 type
@@ -36,33 +37,45 @@ SG_TYPE_QUERY = gql(
 )
 
 
-def validate_cohort_types(sg_ids_by_dataset: dict[str, list[str]]) -> tuple[str, str]:
-    """Query Metamist per dataset to confirm all SGs share one library type and one cell type.
+def get_datasets_and_sg_ids(
+    cohort: targets.Cohort,
+) -> tuple[dict[str, targets.Dataset], dict[str, list[str]]]:
+    """Return (datasets_by_name, sg_ids_by_dataset) for a cohort."""
+    datasets: dict[str, targets.Dataset] = {}
+    sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+    for sg in cohort.get_sequencing_groups():
+        datasets[sg.dataset.name] = sg.dataset
+        sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+    return datasets, sg_ids_by_dataset
+
+
+@functools.cache
+def validate_cohort_types(cohort: targets.Cohort) -> tuple[str, str]:
+    """Query Metamist to confirm all SGs in a cohort share one library type and one cell type.
 
     Returns (cell_type, library_type). Raises ValueError if either set has more than one element
     across the entire cohort.
     #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
-    sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
-    sgs_by_cell_type: dict[str, list[str]] = defaultdict(list)
-
     if config.config_retrieve(['workflow', 'access_level']) == 'test' and config.config_retrieve(
         ['workflow', 'test_skip_metamist_queries']
     ):
         logger.warning('Running in test environment, skipping cell type and library type validation')
         return 'test_cell_type', 'test_library_type'
 
-    for dataset, sg_ids in sg_ids_by_dataset.items():
-        result = query(SG_TYPE_QUERY, variables={'dataset': dataset, 'sgIds': sg_ids})
-        sgs = result['project']['sequencingGroups']
+    all_sg_ids = cohort.get_sequencing_group_ids()
+    result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id, 'sgIds': all_sg_ids})
+    sgs = result['cohorts'][0]['sequencingGroups']
 
-        for sg in sgs:
-            sgs_by_library_type[sg['type']].append(sg['id'])
-            sgs_by_cell_type[sg['sample']['type']].append(sg['id'])
+    sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
+    sgs_by_cell_type: dict[str, list[str]] = defaultdict(list)
+    for sg in sgs:
+        sgs_by_library_type[sg['type']].append(sg['id'])
+        sgs_by_cell_type[sg['sample']['type']].append(sg['id'])
 
-        library_types = {sg['type'] for sg in sgs}
-        cell_types = {sg['sample']['type'] for sg in sgs}
-        logger.info(f'{dataset}: library_types={library_types}, cell_types={cell_types}')
+    library_types = set(sgs_by_library_type)
+    cell_types = set(sgs_by_cell_type)
+    logger.info(f'{cohort.id}: library_types={library_types}, cell_types={cell_types}')
 
     if len(sgs_by_library_type) != 1:
         raise ValueError(f'Expected one library type across cohort, got {dict(sgs_by_library_type)}')
@@ -334,32 +347,28 @@ class VariantSpliceMatch(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        datasets = {}
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        for sg in cohort.get_sequencing_groups():
-            datasets[sg.dataset.name] = sg.dataset
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-
-        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
+        datasets, _ = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
 
         outputs = {}
         for ds_name, ds_obj in datasets.items():
             folder = f'{cohort.id}_{cell_type}_{library_type}'
             prefix = ds_obj.prefix() / 'variant_splice_match' / folder
+            tmp_prefix = ds_obj.tmp_prefix() / 'variant_splice_match' / folder
             outputs[f'bed_{ds_name}'] = prefix / 'variants_of_interest.bed'
             outputs[f'tsv_{ds_name}'] = prefix / 'variants_of_interest.tsv'
+            outputs[f'coarse_tsv_{ds_name}'] = tmp_prefix / 'variants_of_interest_coarse_hail.tsv'
         return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+        _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
 
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-
-        for sg in cohort.get_sequencing_groups():
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
         output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
+        for ds in sg_ids_by_dataset:
+            output_by_dataset[f'coarse_{ds}'] = str(output[f'coarse_tsv_{ds}']).removesuffix('.tsv')
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
@@ -378,13 +387,9 @@ class Dashboard(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        datasets = {}
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        for sg in cohort.get_sequencing_groups():
-            datasets[sg.dataset.name] = sg.dataset
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+        datasets, _ = get_datasets_and_sg_ids(cohort)
 
-        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
+        cell_type, library_type = validate_cohort_types(cohort)
         folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         outputs = {}
@@ -405,11 +410,8 @@ class Dashboard(stage.CohortStage):
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
 
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        for sg in cohort.get_sequencing_groups():
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-
-        cell_type, library_type = validate_cohort_types(sg_ids_by_dataset)
+        _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
         folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         variant_files_by_dataset: dict[str, str | Path] = {}
