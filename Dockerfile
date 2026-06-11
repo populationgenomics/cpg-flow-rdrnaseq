@@ -2,7 +2,7 @@ FROM australia-southeast1-docker.pkg.dev/cpg-common/images/cpg_hail_gcloud:0.2.1
 
 ENV PYTHONDONTWRITEBYTECODE=1
 
-ENV VERSION=2.1.1
+ENV VERSION=3.0.0
 
 WORKDIR /rdrnaseq
 
