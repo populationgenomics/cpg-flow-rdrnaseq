@@ -618,36 +618,7 @@ async function initIGV(fraser) {
         document.getElementById('igv-div').textContent = 'IGV failed to load: ' + e;
     }
 }
-function updateIGVTracks(fraser, variants) {
-    if (!igvBrowser) return;
-    const existingNames = igvBrowser.trackViews.map(tv => tv.track.name);
-    if (existingNames.includes('FRASER Results')) {
-        const track = igvBrowser.trackViews.find(tv => tv.track.name === 'FRASER Results').track;
-        igvBrowser.removeTrack(track);
-    }
-    if (existingNames.includes('Rare Variants')) {
-        const track = igvBrowser.trackViews.find(tv => tv.track.name === 'Rare Variants').track;
-        igvBrowser.removeTrack(track);
-    }
-    igvBrowser.loadTrack({
-        name: 'FRASER Results', type: 'annotation', format: 'bed',
-        features: fraser.map(r => ({
-            chr: String(r.seqnames), start: r.start - 1, end: r.end,
-            name: (r.hgncSymbol || 'NA') + ' (' + r.sampleID + ')',
-        })),
-        displayMode: 'EXPANDED', color: '#e03131',
-    });
-    if (variants && variants.length) {
-        igvBrowser.loadTrack({
-            name: 'Rare Variants', type: 'annotation', format: 'bed',
-            features: variants.map(r => ({
-                chr: String(r.bed_chrom), start: r.bed_start, end: r.bed_end,
-                name: r.hgvs || r.variant_id || '',
-            })),
-            displayMode: 'EXPANDED', color: '#3b5bdb',
-        });
-    }
-}
+
 // ─── Apply / Reset ───────────────────────────────────────────────────────────
 function applyThresholds() {
     const pval   = parseFloat(document.getElementById('pval-thresh').value) || DEFAULT_PVAL;
@@ -677,8 +648,6 @@ function applyThresholds() {
     if (variantRows.length) {
         variantDT = buildDT('variant-table', vView, VARIANT_COLS, variantDT);
     }
-    updateIGVTracks(fView, vView);
-
 }
 
 function resetFilters() {
