@@ -219,8 +219,7 @@ def build_rna_to_genome_map(query_result: dict) -> dict[str, set[str]]:
         genome_ids = set()
         for sample in participant['samples']:
             for sg in sample['sequencingGroups']:
-                if sg['type'] == 'genome':
-                    genome_ids.add(sg['id'])
+                genome_ids.add(sg['id'])
         rna_to_genome_ids[rna_id] = genome_ids
     return rna_to_genome_ids
 
@@ -230,6 +229,8 @@ def build_genome_to_rna_map(rna_to_genome_ids: dict[str, set[str]]) -> dict[str,
     genome_to_rna: dict[str, str] = {}
     for rna_id, genome_ids in rna_to_genome_ids.items():
         for gid in genome_ids:
+            if gid in genome_to_rna:
+                raise ValueError(f'Genome SG: {gid} linked to multiple RNA SGs: {genome_to_rna[gid]}, {rna_id}')
             genome_to_rna[gid] = rna_id
     return genome_to_rna
 
