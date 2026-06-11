@@ -142,7 +142,6 @@ def match_variants_and_splicing(
             )
             logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
         if mt_path is None:
-            logger.error(f'No MT path found for dataset {dataset_name}')
             raise RuntimeError(f'No MT path found for dataset {dataset_name}')
 
         rna_ids_str = ' '.join(sg_ids)
