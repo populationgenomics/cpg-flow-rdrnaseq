@@ -57,11 +57,6 @@ def validate_cohort_types(cohort: targets.Cohort) -> tuple[str, str]:
     across the entire cohort.
     #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
-    if config.config_retrieve(['workflow', 'access_level']) == 'test' and config.config_retrieve(
-        ['workflow', 'test_skip_metamist_queries']
-    ):
-        logger.warning('Running in test environment, skipping cell type and library type validation')
-        return 'test_cell_type', 'test_library_type'
 
     all_sg_ids = cohort.get_sequencing_group_ids()
     result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id, 'sgIds': all_sg_ids})
