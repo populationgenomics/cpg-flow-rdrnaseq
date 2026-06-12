@@ -10,6 +10,7 @@ self-contained HTML file.
 from hailtop.batch.job import Job
 from loguru import logger
 
+from cpg_flow.status import complete_analysis_job
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 from metamist.graphql import gql, query
@@ -36,6 +37,10 @@ METADATA_QUERY = gql(
     }
     """
 )
+
+
+def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
+    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
 
 
 def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str, str | int]]:
@@ -74,12 +79,13 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
 def make_dashboards(
     fraser_csv: str | Path,
     outrider_csv: str | Path,
-    variant_bed: str | Path,
-    variant_tsv: str | Path,
-    output_paths: dict[str, str | Path],
+    variant_files_by_dataset: dict[str, dict[str, str | Path]],
+    output_paths_by_dataset: dict[str, dict[str, str | Path]],
     sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
     job_attrs: dict,
+    sequencing_type: str,
+    cell_library_type: str,
 ) -> list[Job]:
     """
     Create one Hail Batch job per dataset that renders an interactive dashboard.
@@ -96,14 +102,17 @@ def make_dashboards(
 
     fraser_input = b.read_input(str(fraser_csv))
     outrider_input = b.read_input(str(outrider_csv))
-    variant_bed_input = b.read_input(str(variant_bed))
-    variant_tsv_input = b.read_input(str(variant_tsv))
 
     ensg_to_symbol_path = config.config_retrieve(['references', 'ensg_to_symbol'])
     ensg_input = b.read_input(ensg_to_symbol_path)
 
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
+        variant_bed_input = b.read_input(str(variant_files_by_dataset[dataset_name]['bed']))
+        variant_tsv_input = b.read_input(str(variant_files_by_dataset[dataset_name]['tsv']))
+
+        output_paths = output_paths_by_dataset[dataset_name]
+
         logger.info(f'Processing dataset {dataset_name} with SG IDs: {sg_ids}')
         cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
 
@@ -111,12 +120,12 @@ def make_dashboards(
         j.image(config.config_retrieve('workflow')['driver_image'])
         j.declare_resource_group(
             out={
-                'dashboard_html': f'{cohort_id}.rna_dashboard.html',
-                'private_dashboard_html': f'{cohort_id}.rna_dashboard.private.html',
-                'fraser_csv': f'{cohort_id}.rna_dashboard.fraser.csv',
-                'outrider_csv': f'{cohort_id}.rna_dashboard.outrider.csv',
-                'variant_bed': f'{cohort_id}.rna_dashboard.variants.bed',
-                'variant_tsv': f'{cohort_id}.rna_dashboard.variants.tsv',
+                'dashboard_html': 'rna_dashboard.html',
+                'private_dashboard_html': 'rna_dashboard.private.html',
+                'fraser_csv': 'rna_dashboard.fraser.csv',
+                'outrider_csv': 'rna_dashboard.outrider.csv',
+                'variant_bed': 'rna_dashboard.variants.bed',
+                'variant_tsv': 'rna_dashboard.variants.tsv',
             },
         )
 
@@ -144,22 +153,44 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --private-output {j.out.private_dashboard_html} \
     --output-fraser-csv {j.out.fraser_csv} \
     --output-outrider-csv {j.out.outrider_csv} \
-    --variant-bed-filename {cohort_id}.rna_dashboard.variants.bed \
-    --variant-tsv-filename {cohort_id}.rna_dashboard.variants.tsv \
+    --variant-bed-filename rna_dashboard.variants.bed \
+    --variant-tsv-filename rna_dashboard.variants.tsv \
     --dataset-name {dataset_name} \
     --cohort-id {cohort_id}
 """),
         )
-        # TODO: When working with a Cohort across multiple datasets,
-        #  we will need multiple dashboards to be registered and written so this will need refactoring
         for k, p in output_paths.items():
+            if k == 'folder':
+                continue
             b.write_output(j.out[k], str(p))
 
         web_path = (
             f'https://main-web.populationgenomics.org.au/{dataset_name}'
-            f'/transcriptome/rna_dashboard/{cohort_id}.rna_dashboard.html'
+            f'/transcriptome/dashboard/{output_paths["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
+
+        reg_job = b.new_python_job(
+            f'register_dashboard_{dataset_name}_{cohort_id}',
+            attributes=job_attrs | {'tool': 'metamist'},
+        )
+        reg_job.image(config.config_retrieve('workflow')['driver_image'])
+        reg_job.call(
+            register_analyses,
+            output=str(output_paths['dashboard_html']),
+            analysis_type='web',
+            cohort_ids=[cohort_id],
+            sg_ids=sg_ids,
+            project_name=dataset_name,
+            meta={
+                'stage': 'Dashboard',
+                'sequencing_type': sequencing_type,
+                'cell_library_type': cell_library_type,
+                'display_url': web_path,
+            },
+        )
+        reg_job.depends_on(j)
+        jobs.append(reg_job)
 
     return jobs

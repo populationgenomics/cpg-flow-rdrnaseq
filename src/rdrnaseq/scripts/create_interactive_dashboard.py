@@ -16,11 +16,15 @@ Output files (all in the same directory as --output):
 """
 
 import argparse
+import ast
+import csv
+import logging
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 
 from rdrnaseq.scripts.dashboard_utilities import (
+    SeqrVariantLinkEngine,
     add_family_ids,
     build_ensg_to_hgnc_subset,
     enrich_with_gene_mapping,
@@ -46,6 +50,7 @@ def render_dashboard(
     zscore_threshold: float = 2.0,
     variant_bed_filename: str | None = None,
     variant_tsv_filename: str | None = None,
+    seqr_links: dict[str, str] | None = None,
     template_name: str = 'interactive_dashboard.html.j2',
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
@@ -67,6 +72,7 @@ def render_dashboard(
         default_pvalue_threshold=pvalue_threshold,
         default_deltapsi_threshold=deltapsi_threshold,
         default_zscore_threshold=zscore_threshold,
+        seqr_links=seqr_links or {},
         genome='hg38',
     )
 
@@ -219,6 +225,25 @@ def main() -> None:
         print(f'  OUTRIDER CSV: {outrider_csv_path} ({len(outrider_df)} rows)')
 
     # ── Build embedded data for JS ───────────────────────────────────────────
+    seqr_links: dict[str, str] = {}
+    if args.variant_tsv_filename:
+        link_engine = SeqrVariantLinkEngine(args.dataset_name)
+        with open(str(output_dir / args.variant_tsv_filename)) as variants:
+            reader = csv.DictReader(variants, delimiter='\t')
+            for variant in reader:
+                # grab locus
+                loc_parts = variant['locus'].split(':')
+                chrom = loc_parts[0].replace('chr', '')
+                pos = loc_parts[1]
+                # grab alleles and sanitize for use in URL
+                alleles = ast.literal_eval(variant['alleles'])
+                variant_id = f'{chrom}-{pos}-{"-".join(alleles)}'
+                link = link_engine.build_link(variant['family_id'], variant_id)
+                if link is not None:
+                    seqr_links[variant_id] = link
+    else:
+        logging.warning('\nNo variant TSV provided, skipping Seqr link generation.')
+
     ensg_to_hgnc: dict[str, str] = {}
     if outrider_df is not None and ensg_to_symbol:
         ensg_to_hgnc = build_ensg_to_hgnc_subset(outrider_df, ensg_to_symbol)
@@ -234,26 +259,20 @@ def main() -> None:
         'zscore_threshold': args.zscore_threshold,
         'variant_bed_filename': args.variant_bed_filename,
         'variant_tsv_filename': args.variant_tsv_filename,
+        'seqr_links': seqr_links,
     }
 
-    print('\nRendering public dashboard...')
     render_dashboard(output_path=args.output, **render_kwargs)
 
-    print('Rendering private dashboard...')
     render_dashboard(
         output_path=args.private_output,
         template_name='private_interactive_dashboard.html.j2',
         **render_kwargs,
     )
-
-    print('\nDashboard created successfully!')
     print(
         f'  HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.html'
     )
 
-    print(
-        f'  Private HTML: https://main-web.populationgenomics.org.au/{args.dataset_name}/transcriptome/rna_dashboard/{args.cohort_id}.rna_dashboard.private.html'
-    )
     print(f'  FRASER CSV:  {fraser_csv_path}')
     if outrider_csv_path:
         print(f'  OUTRIDER CSV: {outrider_csv_path}')

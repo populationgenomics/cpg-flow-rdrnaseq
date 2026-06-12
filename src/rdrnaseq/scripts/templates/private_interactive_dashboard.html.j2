@@ -49,6 +49,7 @@
         .detail-row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px solid #f5f5f5; }
         /* DataTables overrides */
         table.dataTable thead th { background-color: #3b5bdb; color: white; }
+        #variant-table td { word-break: break-all; max-width: 300px; }
         .dt-button { background-color: #3b5bdb !important; color: white !important; border: none !important; padding: 6px 12px; border-radius: 3px; margin-right: 5px; }
         /* Glossary panel */
         .glossary-panel { background: #f0f4ff; border: 1px solid #d0d7f7; border-radius: 8px; margin-bottom: 20px; }
@@ -91,6 +92,7 @@
                 <li><strong>Volcano plots:</strong> Each dot is one result. Points beyond the dotted threshold lines are considered significant. Click a point on the FRASER volcano plot to see details and navigate IGV.</li>
                 <li><strong>IGV browser:</strong> Copy an HGNC gene symbol from a table and paste it into the IGV search box to visualise the genomic region around a FRASER hit.</li>
                 <li><strong>Tables:</strong> All tables are searchable and sortable. Use the CSV export button to download filtered results.</li>
+                <li><strong>Links:</strong> Variants in the Variant of Interest Table are also hyperlinks that will take you to the variant-family entry in seqr, if you have permission.</li>
             </ul>
         </div>
     </details>
@@ -210,6 +212,7 @@ const FILES = {
     variant_tsv: {{ variant_tsv_filename | tojson }},
 };
 const FAMILY_MAP   = {{ family_map | tojson }};
+const SEQR_LINKS = {{ seqr_links | default({}) | tojson }};
 const ENSG_TO_HGNC = {{ ensg_to_hgnc | tojson }};
 const GENOME       = {{ genome | tojson }};
 const DEFAULT_PVAL   = {{ default_pvalue_threshold }};
@@ -322,7 +325,7 @@ function renderFraserVolcano(rows, pval, dpsi) {
     const mkTrace = (pts, color, name) => ({
         x: pts.map(r => r.deltaPsi),
         y: pts.map(r => log10p(r.pValue)),
-        mode: 'markers', type: 'scatter', name,
+        mode: 'markers', type: 'scatter', name, showlegend: true,
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || 'NA') +
@@ -351,7 +354,8 @@ function renderFraserVolcano(rows, pval, dpsi) {
                 { type:'line', x0:-1,    x1:1,     y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
             ],
             margin: { t: 20 }, height: 500,
-        }
+        },
+        { responsive: true }
     );
 }
 
@@ -367,7 +371,7 @@ function renderOutriderVolcano(rows, pval, zscore) {
     const mkTrace = (pts, color, name) => ({
         x: pts.map(fcVal),
         y: pts.map(r => log10p(r.pValue)),
-        mode: 'markers', type: 'scatter', name,
+        mode: 'markers', type: 'scatter', name, showlegend: true,
         marker: { color, size: 5, opacity: 0.7 },
         text: pts.map(r =>
             'Gene: ' + (r.hgncSymbol || r.geneID || 'NA') +
@@ -394,7 +398,8 @@ function renderOutriderVolcano(rows, pval, zscore) {
                 { type:'line', x0:-20, x1:20, y0:log10p(pval), y1:log10p(pval), line:{color:'#888',dash:'dot'} },
             ],
             margin: { t: 20 }, height: 500,
-        }
+        },
+        { responsive: true }
     );
 }
 
@@ -427,7 +432,7 @@ function findCommon(fRows, oRows, pval, dpsi, zscore) {
             participantExternalId: fr.participantExternalId || 'NA',
             affected: fr.affected || 'NA',
             sampleID: fr.sampleID, familyID: fr.familyID || 'NA',
-            chr: fr.seqnames, start: fr.start, end: fr.end,
+            location: fr.seqnames + ':' + fr.start + '-' + fr.end,
         });
     });
     return common;
@@ -438,7 +443,7 @@ const SCI = ['pValue', 'padjust', 'fraser_padjust', 'outrider_padjust'];
 const DP3 = ['deltaPsi', 'psiValue', 'l2fc', 'log2fc', 'fraser_deltaPsi', 'avis_phred', 'avi_score'];
 const DP2 = ['zScore', 'outrider_zScore'];
 
-const COL_TITLES = {sampleID: 'Rna SG ID', rna_sg_ids: 'Rna SG IDs', matching_genome_sg_ids: 'Genome SG IDs', avis_phred: 'AVIS Phred', avi_score: 'AVI Score'};
+const COL_TITLES = {sampleID: 'RNA SG ID', rna_sg_id: 'RNA SG ID', rna_sg_ids: 'RNA SG IDs', matching_genome_sg_id: 'Genome SG ID', matching_genome_sg_ids: 'Genome SG IDs', avis_phred: 'AVIS Phred', avi_score: 'AVI Score', gene_symbol: 'HGNC Symbol', hgncSymbol: 'HGNC Symbol', hgvs: 'HGVS'};
 const WRAP_COLS = new Set(['rna_sg_ids', 'matching_genome_sg_ids']);
 
 function colTitle(c) {
@@ -465,8 +470,14 @@ function buildDT(tableId, rows, cols, existing) {
     if (!rows.length) return null;
     const avail = cols.filter(c => rows[0][c] !== undefined);
     return $('#' + tableId).DataTable({
-        data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); return o; }),
-        columns: avail.map(c => ({ title: colTitle(c), data: c, type: 'na-bottom', render: d => fmt(c, d) })),
+        data: rows.map(r => { const o = {}; avail.forEach(c => o[c] = r[c] !== undefined ? r[c] : 'NA'); if (r.seqr_link) o.seqr_link = r.seqr_link; return o; }),
+        columns: avail.map(c => ({ title: colTitle(c), data: c, type: 'na-bottom', render: (d, type, row) => {
+       const formatted = fmt(c, d);
+       if (c === 'variant_id' && row.seqr_link) {
+           return '<a href="' + row.seqr_link + '" target="_blank">' + formatted + '</a>';
+       }
+       return formatted;
+   } })),
         dom: 'Bfrtip', buttons: ['csv', 'excel'], pageLength: 25, scrollX: true,
     });
 }
@@ -499,10 +510,10 @@ $.fn.dataTable.ext.type.order['na-bottom-desc'] = function(a, b) {
     return (x > y) ? -1 : (x < y) ? 1 : 0;
 };
 
-const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'seqnames', 'start', 'end', 'type'];
+const FRASER_COLS  = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'psiValue', 'deltaPsi', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'location'];
 const OUTRIDER_COLS = ['hgncSymbol', 'geneID', 'pValue', 'padjust', 'zScore', 'l2fc', 'log2fc', 'participantExternalId', 'affected', 'sampleID', 'familyID'];
-const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'chr', 'start', 'end'];
-const VARIANT_COLS_BASE = ['variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'splice_ai_delta_score', 'splice_ai_consequence', 'participant_external_id', 'affected', 'rna_sg_ids', 'family_id', 'matching_genome_sg_ids'];
+const COMMON_COLS  = ['gene', 'geneID', 'fraser_padjust', 'fraser_deltaPsi', 'outrider_padjust', 'outrider_zScore', 'participantExternalId', 'affected', 'sampleID', 'familyID', 'location'];
+const VARIANT_COLS_BASE = ['participant_external_id', 'variant_id', 'hgvs', 'gene_symbol', 'major_consequence', 'fraser_distance', 'deltaPsi', 'psiValue', 'splice_ai_delta_score', 'splice_ai_consequence', 'affected', 'rna_sg_id', 'family_id', 'matching_genome_sg_id'];
 
 // ─── Selected Region Details ─────────────────────────────────────────────────
 function showRegionDetails(chr, start, end) {
@@ -632,6 +643,12 @@ function applyThresholds() {
         if (common.length && commonDT) commonDT.columns.adjust().draw();
     }
     renderStats(outriderRows.length ? common.length : null);
+
+   const vView = families.length ? variantRows.filter(r => families.includes(r.family_id)) : variantRows;
+    if (variantRows.length) {
+        variantDT = buildDT('variant-table', vView, VARIANT_COLS, variantDT);
+    }
+
 }
 
 function resetFilters() {
@@ -650,6 +667,7 @@ async function init() {
 
         // 1. FRASER (required)
         fraserRows = await fetchCSV('fraser', FILES.fraser);
+        fraserRows.forEach(r => { r.location = r.seqnames + ':' + r.start + '-' + r.end; });
         if (!fraserRows.length) throw new Error('FRASER file loaded but contained no rows.');
 
         // 2. OUTRIDER (optional)
@@ -684,10 +702,11 @@ async function init() {
             variantRows = await fetchCSV('variants', FILES.variant_tsv);
             variantRows.forEach(r => {
                 // variant_id: "7-140674264-G-C" from locus + alleles
-                const alleles = (r.alleles || '').replace(/[\[\]"]/g, '').split(',').map(s => s.trim());
+                const alleles = (r.alleles || '').replace(/[\[\]"]/g, '').split(',').map(s => s.trim()).filter(Boolean);
                 const locParts = (r.locus || '').split(':');
                 const chrom = (locParts[0] || '').replace('chr', '');
                 r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
+   				r.seqr_link = SEQR_LINKS[r.variant_id] || '';
                 const tid = r.transcript_id || '';
                 const sym = r.gene_symbol || '';
                 const rawHgvsc = r.hgvsc || '';

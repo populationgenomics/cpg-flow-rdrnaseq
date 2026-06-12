@@ -9,6 +9,7 @@ to genome SG IDs and subsets the MT to matching rare variants.
 from hailtop.batch.job import Job
 from loguru import logger
 
+from cpg_flow.status import complete_analysis_job
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 from metamist import graphql
@@ -93,12 +94,18 @@ def query_for_latest_analysis(
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 
+def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
+    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+
+
 def match_variants_and_splicing(
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
-    output: str,
+    output_by_dataset: dict[str, str],
     cohort_id: str,
     job_attrs: dict,
+    sequencing_type: str,
+    cell_library_type: str,
 ) -> list[Job]:
     """
     Create one Hail Batch job per dataset that runs variant_of_interest_subset.
@@ -136,17 +143,17 @@ def match_variants_and_splicing(
             )
             logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
         if mt_path is None:
-            logger.error(f'No MT path found for dataset {dataset_name} — skipping job')
-            continue
+            raise RuntimeError(f'No MT path found for dataset {dataset_name}')
+
+        rna_ids_str = ' '.join(sg_ids)
+        dataset_output = output_by_dataset[dataset_name]
+        coarse_output = output_by_dataset[f'coarse_{dataset_name}']
 
         j = b.new_job(
             f'variant_splice_match_{dataset_name}_{cohort_id}',
             attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
-
-        rna_ids_str = ' '.join(sg_ids)
-
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
@@ -154,9 +161,34 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
     --csv {fraser_input} \
     --rna_ids {rna_ids_str} \
     --query_dataset {dataset_name} \
-    --output {output}
+    --output {coarse_output} \
+    --output-tsv {j.output_tsv} \
+    --output-bed {j.output_bed}
 """),
         )
+        b.write_output(j.output_tsv, f'{dataset_output}.tsv')
+        b.write_output(j.output_bed, f'{dataset_output}.bed')
         jobs.append(j)
+
+        registration_job = b.new_python_job(
+            f'register_variant_splice_match_{dataset_name}_{cohort_id}',
+            attributes=job_attrs | {'tool': 'metamist'},
+        )
+        registration_job.image(config.config_retrieve('workflow')['driver_image'])
+        registration_job.call(
+            register_analyses,
+            output=f'{dataset_output}.tsv',
+            analysis_type='variantsplicematch',
+            cohort_ids=[cohort_id],
+            sg_ids=sg_ids,
+            project_name=dataset_name,
+            meta={
+                'stage': 'VariantSpliceMatch',
+                'sequencing_type': sequencing_type,
+                'cell_library_type': cell_library_type,
+            },
+        )
+        registration_job.depends_on(j)
+        jobs.append(registration_job)
 
     return jobs

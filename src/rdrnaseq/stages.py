@@ -2,6 +2,7 @@
 Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 """
 
+import functools
 from collections import defaultdict
 
 from hailtop.batch.job import Job
@@ -15,8 +16,69 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
+from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
+
+SG_TYPE_QUERY = gql(
+    """
+    query SgTypes($cohort: String!, $sgIds: [String!]!) {
+        cohorts(id: {eq: $cohort}) {
+            sequencingGroups(id: {in_: $sgIds}) {
+                id
+                type
+                sample {
+                    type
+                }
+            }
+        }
+    }
+""",
+)
+
+
+@functools.cache
+def get_datasets_and_sg_ids(
+    cohort: targets.Cohort,
+) -> tuple[dict[str, targets.Dataset], dict[str, list[str]]]:
+    """Return (datasets_by_name, sg_ids_by_dataset) for a cohort."""
+    datasets: dict[str, targets.Dataset] = {}
+    sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
+    for sg in cohort.get_sequencing_groups():
+        datasets[sg.dataset.name] = sg.dataset
+        sg_ids_by_dataset[sg.dataset.name].append(sg.id)
+    return datasets, sg_ids_by_dataset
+
+
+@functools.cache
+def validate_cohort_types(cohort: targets.Cohort) -> tuple[str, str]:
+    """Query Metamist to confirm all SGs in a cohort share one library type and one cell type.
+
+    Returns (cell_type, library_type). Raises ValueError if either set has more than one element
+    across the entire cohort.
+    #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
+    """
+
+    all_sg_ids = cohort.get_sequencing_group_ids()
+    result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id, 'sgIds': all_sg_ids})
+    sgs = result['cohorts'][0]['sequencingGroups']
+
+    sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
+    sgs_by_cell_type: dict[str, list[str]] = defaultdict(list)
+    for sg in sgs:
+        sgs_by_library_type[sg['type']].append(sg['id'])
+        sgs_by_cell_type[sg['sample']['type']].append(sg['id'])
+
+    library_types = set(sgs_by_library_type)
+    cell_types = set(sgs_by_cell_type)
+    logger.info(f'{cohort.id}: library_types={library_types}, cell_types={cell_types}')
+
+    if len(sgs_by_library_type) != 1:
+        raise ValueError(f'Expected one library type across cohort, got {dict(sgs_by_library_type)}')
+    if len(sgs_by_cell_type) != 1:
+        raise ValueError(f'Expected one cell type across cohort, got {dict(sgs_by_cell_type)}')
+
+    return next(iter(sgs_by_cell_type)), next(iter(sgs_by_library_type))
 
 
 def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | None:
@@ -273,7 +335,7 @@ class Outrider(stage.CohortStage):
         return self.make_outputs(cohort, data=output, jobs=j)
 
 
-@stage.stage(required_stages=Fraser, analysis_type='custom', analysis_keys=['bed', 'tsv'])
+@stage.stage(required_stages=Fraser)
 class VariantSpliceMatch(stage.CohortStage):
     """
     Annotate FRASER significant regions (determined using rna data)
@@ -281,75 +343,109 @@ class VariantSpliceMatch(stage.CohortStage):
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        return {
-            'bed': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.bed',
-            'tsv': cohort.dataset.prefix() / 'variant_splice_match' / f'{cohort.id}_variants_of_interest.tsv',
-        }
+        datasets, _ = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
+
+        outputs = {}
+        for ds_name, ds_obj in datasets.items():
+            folder = f'{cohort.id}_{cell_type}_{library_type}'
+            prefix = ds_obj.prefix() / 'variant_splice_match' / folder
+            tmp_prefix = ds_obj.tmp_prefix() / 'variant_splice_match' / folder
+            outputs[f'bed_{ds_name}'] = prefix / 'variants_of_interest.bed'
+            outputs[f'tsv_{ds_name}'] = prefix / 'variants_of_interest.tsv'
+            outputs[f'coarse_tsv_{ds_name}'] = tmp_prefix / 'variants_of_interest_coarse_hail.tsv'
+        return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
-        output = self.expected_outputs(cohort)
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
+        _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
+        sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
+        cell_library_type = f'{cell_type}_{library_type}'
 
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        # todo this doesn't correctly identify `dataset-test`
-        for sg in cohort.get_sequencing_groups():
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+        output = self.expected_outputs(cohort)
+        output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
+        for ds in sg_ids_by_dataset:
+            output_by_dataset[f'coarse_{ds}'] = str(output[f'coarse_tsv_{ds}']).removesuffix('.tsv')
 
         jobs = variant_splice_match.match_variants_and_splicing(
             fraser_csv=fraser_csv,
             sg_ids_by_dataset=sg_ids_by_dataset,
-            output=str(output['bed']).removesuffix('.bed'),
+            output_by_dataset=output_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            sequencing_type=sequencing_type,
+            cell_library_type=cell_library_type,
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
 
-@stage.stage(
-    required_stages=[Fraser, Outrider, VariantSpliceMatch], analysis_type='web', analysis_keys=['dashboard_html']
-)
+@stage.stage(required_stages=[Fraser, Outrider, VariantSpliceMatch])
 class Dashboard(stage.CohortStage):
     """
     Create an interactive HTML dashboard from FRASER and OUTRIDER results.
     """
 
     def expected_outputs(self, cohort: targets.Cohort) -> dict[str, Path]:
-        prefix = cohort.dataset.web_prefix() / 'rna_dashboard'
-        base = f'{cohort.id}.rna_dashboard'
-        return {
-            'dashboard_html': prefix / f'{base}.html',
-            'private_dashboard_html': prefix / f'{base}.private.html',
-            'fraser_csv': prefix / f'{base}.fraser.csv',
-            'outrider_csv': prefix / f'{base}.outrider.csv',
-            'variant_bed': prefix / f'{base}.variants.bed',
-            'variant_tsv': prefix / f'{base}.variants.tsv',
-        }
+        datasets, _ = get_datasets_and_sg_ids(cohort)
+
+        cell_type, library_type = validate_cohort_types(cohort)
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
+
+        outputs = {}
+        for ds_name, ds_obj in datasets.items():
+            prefix = ds_obj.web_prefix() / 'dashboard' / folder
+            outputs[f'dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.html'
+            outputs[f'private_dashboard_html_{ds_name}'] = prefix / 'rna_dashboard.private.html'
+            outputs[f'fraser_csv_{ds_name}'] = prefix / 'rna_dashboard.fraser.csv'
+            outputs[f'outrider_csv_{ds_name}'] = prefix / 'rna_dashboard.outrider.csv'
+            outputs[f'variant_bed_{ds_name}'] = prefix / 'rna_dashboard.variants.bed'
+            outputs[f'variant_tsv_{ds_name}'] = prefix / 'rna_dashboard.variants.tsv'
+        # cell type/ library type can be used instead of cohort here to make a better link
+        return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
         output = self.expected_outputs(cohort)
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
-        variant_bed = inputs.as_path(cohort, VariantSpliceMatch, 'bed')
-        variant_tsv = inputs.as_path(cohort, VariantSpliceMatch, 'tsv')
 
-        sg_ids_by_dataset: dict[str, list[str]] = defaultdict(list)
-        for sg in cohort.get_sequencing_groups():
-            sg_ids_by_dataset[sg.dataset.name].append(sg.id)
-            # TODO: if this is more than one dataset per cohort, this will need to be refactored
+        _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
+        cell_library_type = f'{cell_type}_{library_type}'
+        sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
+        folder = f'{cohort.id}_{cell_type}_{library_type}'
+
+        variant_files_by_dataset: dict[str, str | Path] = {}
+        output_paths_by_dataset: dict[str, str | Path] = {}
+        for ds in sg_ids_by_dataset:
+            variant_files_by_dataset[ds] = {
+                'bed': inputs.as_path(cohort, VariantSpliceMatch, f'bed_{ds}'),
+                'tsv': inputs.as_path(cohort, VariantSpliceMatch, f'tsv_{ds}'),
+            }
+
+            output_paths_by_dataset[ds] = {
+                'folder': folder,
+                'dashboard_html': output[f'dashboard_html_{ds}'],
+                'private_dashboard_html': output[f'private_dashboard_html_{ds}'],
+                'fraser_csv': output[f'fraser_csv_{ds}'],
+                'outrider_csv': output[f'outrider_csv_{ds}'],
+                'variant_bed': output[f'variant_bed_{ds}'],
+                'variant_tsv': output[f'variant_tsv_{ds}'],
+            }
 
         logger.info(f'Sequence group IDs by dataset for dashboard: {dict(sg_ids_by_dataset)}')
 
         jobs = rna_dashboard.make_dashboards(
             fraser_csv=fraser_csv,
             outrider_csv=outrider_csv,
-            variant_bed=variant_bed,
-            variant_tsv=variant_tsv,
-            output_paths=output,
+            variant_files_by_dataset=variant_files_by_dataset,
+            output_paths_by_dataset=output_paths_by_dataset,
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            sequencing_type=sequencing_type,
+            cell_library_type=cell_library_type,
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)
