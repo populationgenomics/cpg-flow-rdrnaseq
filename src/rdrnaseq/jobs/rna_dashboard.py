@@ -39,9 +39,8 @@ METADATA_QUERY = gql(
 )
 
 
-def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, project_name, meta):
-    for output in outputs:
-        complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
+    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
 
 
 def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str, str | int]]:
@@ -85,6 +84,8 @@ def make_dashboards(
     sg_ids_by_dataset: dict[str, list[str]],
     cohort_id: str,
     job_attrs: dict,
+    sequencing_type: str,
+    cell_library_type: str,
 ) -> list[Job]:
     """
     Create one Hail Batch job per dataset that renders an interactive dashboard.
@@ -176,13 +177,18 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
         )
         reg_job.image(config.config_retrieve('workflow')['driver_image'])
         reg_job.call(
-            register_multiple_analyses,
-            outputs=[str(output_paths[k]) for k in output_paths if k != 'folder'],
+            register_analyses,
+            output=str(output_paths['dashboard_html']),
             analysis_type='web',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,
             project_name=dataset_name,
-            meta={'stage': 'Dashboard', 'dataset': dataset_name, 'cohort_id': cohort_id},
+            meta={
+                'stage': 'Dashboard',
+                'sequencing_type': sequencing_type,
+                'cell_library_type': cell_library_type,
+                'display_url': web_path,
+            },
         )
         reg_job.depends_on(j)
         jobs.append(reg_job)

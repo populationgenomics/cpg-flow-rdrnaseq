@@ -94,9 +94,8 @@ def query_for_latest_analysis(
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 
-def register_multiple_analyses(outputs, analysis_type, cohort_ids, sg_ids, project_name, meta):
-    for output in outputs:
-        complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
+    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
 
 
 def match_variants_and_splicing(
@@ -105,6 +104,8 @@ def match_variants_and_splicing(
     output_by_dataset: dict[str, str],
     cohort_id: str,
     job_attrs: dict,
+    sequencing_type: str,
+    cell_library_type: str,
 ) -> list[Job]:
     """
     Create one Hail Batch job per dataset that runs variant_of_interest_subset.
@@ -175,13 +176,17 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         )
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
         registration_job.call(
-            register_multiple_analyses,
-            outputs=[str(dataset_output) + '.bed', str(dataset_output) + '.tsv', str(coarse_output) + '.tsv'],
+            register_analyses,
+            output=f'{dataset_output}.tsv',
             analysis_type='variantsplicematch',
             cohort_ids=[cohort_id],
             sg_ids=sg_ids,
             project_name=dataset_name,
-            meta={'stage': 'VariantSpliceMatch', 'dataset': dataset_name, 'cohort_id': cohort_id},
+            meta={
+                'stage': 'VariantSpliceMatch',
+                'sequencing_type': sequencing_type,
+                'cell_library_type': cell_library_type,
+            },
         )
         registration_job.depends_on(j)
         jobs.append(registration_job)

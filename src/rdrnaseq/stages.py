@@ -37,6 +37,7 @@ SG_TYPE_QUERY = gql(
 )
 
 
+@functools.cache
 def get_datasets_and_sg_ids(
     cohort: targets.Cohort,
 ) -> tuple[dict[str, targets.Dataset], dict[str, list[str]]]:
@@ -359,6 +360,9 @@ class VariantSpliceMatch(stage.CohortStage):
 
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
+        cell_type, library_type = validate_cohort_types(cohort)
+        sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
+        cell_library_type = f'{cell_type}_{library_type}'
 
         output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
@@ -371,6 +375,8 @@ class VariantSpliceMatch(stage.CohortStage):
             output_by_dataset=output_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            sequencing_type=sequencing_type,
+            cell_library_type=cell_library_type,
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
@@ -407,6 +413,8 @@ class Dashboard(stage.CohortStage):
 
         _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
         cell_type, library_type = validate_cohort_types(cohort)
+        cell_library_type = f'{cell_type}_{library_type}'
+        sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
         folder = f'{cohort.id}_{cell_type}_{library_type}'
 
         variant_files_by_dataset: dict[str, str | Path] = {}
@@ -437,5 +445,7 @@ class Dashboard(stage.CohortStage):
             sg_ids_by_dataset=sg_ids_by_dataset,
             cohort_id=cohort.id,
             job_attrs=self.get_job_attrs(),
+            sequencing_type=sequencing_type,
+            cell_library_type=cell_library_type,
         )
         return self.make_outputs(cohort, data=output, jobs=jobs)
