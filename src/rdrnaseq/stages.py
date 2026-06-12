@@ -22,9 +22,9 @@ from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_d
 
 SG_TYPE_QUERY = gql(
     """
-    query SgTypes($cohort: String!, $sgIds: [String!]!) {
+    query SgTypes($cohort: String!) {
         cohorts(id: {eq: $cohort}) {
-            sequencingGroups(id: {in_: $sgIds}) {
+            sequencingGroups {
                 id
                 type
                 sample {
@@ -59,8 +59,7 @@ def validate_cohort_types(cohort: targets.Cohort) -> tuple[str, str]:
     #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
 
-    all_sg_ids = cohort.get_sequencing_group_ids()
-    result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id, 'sgIds': all_sg_ids})
+    result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id})
     sgs = result['cohorts'][0]['sequencingGroups']
 
     sgs_by_library_type: dict[str, list[str]] = defaultdict(list)
@@ -357,7 +356,6 @@ class VariantSpliceMatch(stage.CohortStage):
         return outputs
 
     def queue_jobs(self, cohort: targets.Cohort, inputs: stage.StageInput) -> stage.StageOutput | None:
-
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
         cell_type, library_type = validate_cohort_types(cohort)
