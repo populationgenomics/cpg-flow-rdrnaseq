@@ -97,7 +97,10 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 samples_needing_bams: dict[str, Job] = {}
 
 
-@stage.stage()
+@stage.stage(
+    analysis_type='cram',
+    analysis_keys=['cram'],
+)
 class TrimAlignRNA(stage.SequencingGroupStage):
     """
     Trim and align RNA-seq FASTQ reads with fastp and STAR
