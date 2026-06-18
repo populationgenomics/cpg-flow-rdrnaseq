@@ -44,7 +44,7 @@ def main():
             if not cram_path.exists():
                 logger.info(f'CRAM file for sequencing group {sg_id} does not exist at expected path: {cram_path}')
                 continue
-            timestamp_completed = datetime.fromtimestamp(cram_path.stat().st_ctime, tz=timezone.utc).strftime(
+            timestamp_completed = datetime.fromtimestamp(cram_path.stat().st_mtime, tz=timezone.utc).strftime(
                 '%Y-%m-%dT%H:%M:%SZ'
             )
             if not args.dry_run:
