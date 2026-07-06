@@ -24,6 +24,7 @@ NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 10)
 
 BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 100)
 PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 10)
+NO_BAMS_ARE_PRESENT = 0
 NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 16)
 
 
@@ -469,7 +470,6 @@ tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples) -> Job | None:
     if all(exists(x) for x in output_paths.values()):
         return None
-    NO_BAMS_ARE_PRESENT = 0
     j, threads = get_fraser_job(
         b,
         'fraser_analysis',

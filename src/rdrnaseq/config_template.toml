@@ -46,7 +46,7 @@ z_cutoff = 0.0
 [cohort_job_resources]
 base_storage_gb=100
 per_bam_storage=10
-ncpu=10
+ncpu=12
 
 [sample_job_resources]
 base_storage_gb=100
