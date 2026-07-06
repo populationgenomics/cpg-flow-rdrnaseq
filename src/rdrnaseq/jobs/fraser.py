@@ -469,14 +469,14 @@ tar -cvzf {j.fds_tar} -C {work_dir}/savedObjects/ {fds_name}/
 def fraser_analysis(b, fds_tar, cohort_id, job_attrs, output_paths, num_samples) -> Job | None:
     if all(exists(x) for x in output_paths.values()):
         return None
-
+    NO_BAMS_ARE_PRESENT = 0
     j, threads = get_fraser_job(
         b,
         'fraser_analysis',
         job_attrs,
         n_samples=num_samples,
         base_storage_gb=BASE_STORAGE_GB_COHORT,
-        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_COHORT,
         machine_required=HIGHMEM,
     )
