@@ -41,4 +41,3 @@ analysis-runner \
     --access-level full \
     --config src/rdrnaseq/config_template.toml \
     python3 src/rdrnaseq/run_workflow_alignment_only.py
-
