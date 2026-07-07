@@ -321,7 +321,7 @@ class Outrider(stage.CohortStage):
         """
         Queue a job to run outrider.
         """
-        requested_nthreads: int = config.config_retrieve(['cohort_job_resources', 'ncpu'])
+        requested_nthreads: int = config.config_retrieve(['outrider', 'ncpu'])
         output = self.expected_outputs(cohort)
         count_inputs = [
             inputs.as_path(sequencing_group, Count, 'count') for sequencing_group in cohort.get_sequencing_groups()

@@ -18,16 +18,18 @@ R_MERGE_NON_SPLIT = 'RDrnaseq/fraser_merge_non_split.R'
 R_JOIN_COUNTS = 'RDrnaseq/fraser_join_counts.R'
 R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
 
-BASE_STORAGE_GB_COHORT = config_retrieve(['cohort_job_resources', 'base_storage_gb'], 50)
-PER_BAM_STORAGE_COHORT = config_retrieve(['cohort_job_resources', 'per_bam_storage'], 15)
+BASE_STORAGE_GB_COHORT = config_retrieve(['fraser', 'cohort_job_resources', 'base_storage_gb'], 50)
+PER_BAM_STORAGE_COHORT = config_retrieve(['fraser', 'cohort_job_resources', 'per_bam_storage'], 15)
 
-NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 12)
+NCPU_COHORT = config_retrieve(['fraser', 'cohort_job_resources', 'ncpu'], 12)
 
-BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 50)
-PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 15)
+BASE_STORAGE_GB_SAMPLE = config_retrieve(['fraser', 'sample_job_resources', 'base_storage_gb'], 50)
+PER_BAM_STORAGE_SAMPLE = config_retrieve(['fraser', 'sample_job_resources', 'per_bam_storage'], 15)
+
+NCPU_SAMPLE = config_retrieve(['fraser', 'sample_job_resources', 'ncpu'], 12)
+
 
 NO_BAMS_ARE_PRESENT = 0
-NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 12)
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
