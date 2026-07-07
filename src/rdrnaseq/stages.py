@@ -56,7 +56,6 @@ def validate_cohort_types(cohort: targets.Cohort) -> tuple[str, str]:
 
     Returns (cell_type, library_type). Raises ValueError if either set has more than one element
     across the entire cohort.
-    #todo: cyclohex treatment is not readily available in metamist, but should be added here when it is.
     """
 
     result = query(SG_TYPE_QUERY, variables={'cohort': cohort.id})
@@ -322,7 +321,7 @@ class Outrider(stage.CohortStage):
         """
         Queue a job to run outrider.
         """
-        requested_nthreads: int = config.config_retrieve(['cohort_job_resources', 'ncpu'])
+        requested_nthreads: int = config.config_retrieve(['outrider', 'ncpu'])
         output = self.expected_outputs(cohort)
         count_inputs = [
             inputs.as_path(sequencing_group, Count, 'count') for sequencing_group in cohort.get_sequencing_groups()

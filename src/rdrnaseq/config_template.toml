@@ -35,20 +35,19 @@ pval_cutoff = 0.1
 delta_psi_cutoff = 0.1
 min_count = 5
 
+[fraser.cohort_job_resources]
+base_storage_gb=50
+per_bam_storage=15
+ncpu=12
+
+[fraser.sample_job_resources]
+base_storage_gb=50
+per_bam_storage=15
+ncpu=12
 
 [outrider]
 pval_cutoff = 0.1
 z_cutoff = 0.0
+ncpu = 12
 
 [variant_splice_match.mt_path]
-
-
-[cohort_job_resources]
-base_storage_gb=100
-per_bam_storage=10
-ncpu=10
-
-[sample_job_resources]
-base_storage_gb=100
-per_bam_storage=10
-ncpu=16

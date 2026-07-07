@@ -321,7 +321,7 @@ def outrider(
     j.image(image_path('outrider'))
 
     # Set resource requirements
-    nthreads = requested_nthreads or 8
+    nthreads = requested_nthreads or 12
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=50)
 
     j.declare_resource_group(
