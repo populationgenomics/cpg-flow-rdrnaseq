@@ -46,8 +46,8 @@ def get_fraser_job(
     machine_required: MachineType,  # would have to import this abstract class
 ) -> tuple[Job, int]:
     """Create a standard FRASER job with common configuration."""
-    if per_bam_storage == 0 :
-        storage_gb = base_storage_gb
+    if per_bam_storage == 0:
+        storage = base_storage_gb
     else:
         storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
 
