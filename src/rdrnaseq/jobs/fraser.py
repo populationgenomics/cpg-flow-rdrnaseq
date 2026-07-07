@@ -18,14 +18,16 @@ R_MERGE_NON_SPLIT = 'RDrnaseq/fraser_merge_non_split.R'
 R_JOIN_COUNTS = 'RDrnaseq/fraser_join_counts.R'
 R_ANALYSIS = 'RDrnaseq/fraser_analysis.R'
 
-BASE_STORAGE_GB_COHORT = config_retrieve(['cohort_job_resources', 'base_storage_gb'], 100)
-PER_BAM_STORAGE_COHORT = config_retrieve(['cohort_job_resources', 'per_bam_storage'], 10)
-NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 10)
+BASE_STORAGE_GB_COHORT = config_retrieve(['cohort_job_resources', 'base_storage_gb'], 50)
+PER_BAM_STORAGE_COHORT = config_retrieve(['cohort_job_resources', 'per_bam_storage'], 15)
 
-BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 100)
-PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 10)
+NCPU_COHORT = config_retrieve(['cohort_job_resources', 'ncpu'], 12)
+
+BASE_STORAGE_GB_SAMPLE = config_retrieve(['sample_job_resources', 'base_storage_gb'], 50)
+PER_BAM_STORAGE_SAMPLE = config_retrieve(['sample_job_resources', 'per_bam_storage'], 15)
+
 NO_BAMS_ARE_PRESENT = 0
-NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 16)
+NCPU_SAMPLE = config_retrieve(['sample_job_resources', 'ncpu'], 12)
 
 
 def fraser_storage_required_gb(num_bams: int, base_storage_gb: int, per_bam_storage_gb: int) -> int:
@@ -44,7 +46,11 @@ def get_fraser_job(
     machine_required: MachineType,  # would have to import this abstract class
 ) -> tuple[Job, int]:
     """Create a standard FRASER job with common configuration."""
-    storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
+    if per_bam_storage == 0 :
+        storage_gb = base_storage_gb
+    else:
+        storage = fraser_storage_required_gb(n_samples, base_storage_gb, per_bam_storage)
+
     j = batch.new_job(name, attributes=job_attrs | {'tool': 'fraser'})
     j.image(config_retrieve(['images', 'fraser']))
     j.command('export HDF5_USE_FILE_LOCKING=FALSE')
@@ -247,7 +253,7 @@ def fraser_count_split_reads(b, fds, bam_rg, sample_id, cohort_id, job_attrs, ou
         job_attrs,
         n_samples=1,
         base_storage_gb=BASE_STORAGE_GB_SAMPLE,
-        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_SAMPLE,
         machine_required=HIGHMEM,
     )
@@ -290,7 +296,7 @@ def fraser_merge_split_reads(
         job_attrs,
         n_samples=len(split_counts),
         base_storage_gb=BASE_STORAGE_GB_COHORT,
-        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_COHORT,
         machine_required=HIGHMEM,
     )
@@ -338,7 +344,7 @@ def fraser_count_non_split_reads(b, fds, bam_rg, coords, sample_id, cohort_id, j
         job_attrs,
         n_samples=1,
         base_storage_gb=BASE_STORAGE_GB_SAMPLE,
-        per_bam_storage=PER_BAM_STORAGE_SAMPLE,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_SAMPLE,
         machine_required=HIGHMEM,
     )
@@ -379,7 +385,7 @@ def fraser_merge_non_split_reads(
         job_attrs,
         n_samples=num_samples,
         base_storage_gb=BASE_STORAGE_GB_COHORT,
-        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_COHORT,
         machine_required=HIGHMEM,
     )
@@ -433,7 +439,7 @@ def fraser_join_counts(
         job_attrs,
         n_samples=num_samples,
         base_storage_gb=BASE_STORAGE_GB_COHORT,
-        per_bam_storage=PER_BAM_STORAGE_COHORT,
+        per_bam_storage=NO_BAMS_ARE_PRESENT,
         ncpu=NCPU_COHORT,
         machine_required=HIGHMEM,
     )
