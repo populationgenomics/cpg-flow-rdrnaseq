@@ -6,6 +6,8 @@ variant_of_interest_subset script, which queries Metamist to map RNA SG IDs
 to genome SG IDs and subsets the MT to matching rare variants.
 """
 
+from functools import cache
+
 from hailtop.batch.job import Job
 from loguru import logger
 
@@ -30,6 +32,7 @@ METAMIST_ANALYSIS_QUERY = graphql.gql(
 )
 
 
+@cache
 def query_for_latest_analysis(
     dataset: str,
     analysis_type: str,
@@ -39,7 +42,6 @@ def query_for_latest_analysis(
 ) -> str | None:
     """
     Query for the latest analysis object of a given type in the requested project.
-
 
     Args:
         dataset (str):         project to query for
@@ -94,11 +96,54 @@ def query_for_latest_analysis(
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 
-def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
-    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+def resolve_annotate_cohort_mt(dataset_name: str) -> str:
+    """Find the AnnotateCohort MT path from config override or Metamist query.
+
+    Hardcodes sequencing_type='genome' because the AnnotateCohort MT is always genome data,
+    and stage_name='AnnotateCohort' because the single-subset architecture requires a
+    cohort-level MT.
+    """
+    mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
+    if mt_path is None:
+        mt_path = query_for_latest_analysis(
+            dataset=dataset_name,
+            analysis_type='matrixtable',
+            sequencing_type='genome',
+            long_read=config.config_retrieve(['workflow', 'long_read'], False),
+            stage_name='AnnotateCohort',
+        )
+    if mt_path is None:
+        raise RuntimeError(f'No AnnotateCohort MatrixTable found for {dataset_name}')
+    return mt_path
+
+
+def subset_cohort_mt(
+    source_mt_path: str,
+    sg_id_file: str,
+    output_mt_path: str,
+    job_attrs: dict,
+) -> Job:
+    """Create a Hail Batch job to subset an AnnotateCohort MT to specific genome SG IDs."""
+    b = get_batch()
+    j = b.new_job('subset_annotate_cohort_mt', attributes=job_attrs | {'tool': 'variant_splice_match'})
+    j.image(config.config_retrieve('workflow')['driver_image'])
+    j.storage('10Gi')
+
+    sgid_file_local = b.read_input(sg_id_file)
+    j.command(
+        command(f"""\
+python3 -m rdrnaseq.scripts.subset_mt \
+    --input {source_mt_path} \
+    --sgs {sgid_file_local} \
+    --output {output_mt_path}
+"""),
+    )
+    return j
 
 
 def match_variants_and_splicing(
+    mt_path: str,
+    subset_job: Job,
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
     output_by_dataset: dict[str, str],
@@ -110,8 +155,8 @@ def match_variants_and_splicing(
     """
     Create one Hail Batch job per dataset that runs variant_of_interest_subset.
 
-    Each job localises the Fraser significant CSV, passes the MT path (read
-    directly from GCS by Hail), and writes a BED + TSV output per dataset.
+    Each job localises the Fraser significant CSV, passes the subsetted MT path
+    (read directly from GCS by Hail), and writes a BED + TSV output per dataset.
     """
     b = get_batch()
     fraser_input = b.read_input(fraser_csv)
@@ -119,31 +164,6 @@ def match_variants_and_splicing(
     jobs: list[Job] = []
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
-        mt_path = config.config_retrieve(['variant_splice_match', 'mt_path', str(dataset_name)], default=None)
-        logger.info(f'Config lookup for variant_splice_match.mt_path.{dataset_name}: {mt_path!r}')
-        if mt_path is None:
-            analysis_type = 'matrixtable'
-
-            seq_type = config.config_retrieve(['workflow', 'variant_splice_match_sequencing_type'], default='genome')
-            long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
-            stage_name = config.config_retrieve(
-                ['workflow', 'variant_splice_match_stage_name'], default='AnnotateDataset'
-            )
-            logger.info(
-                f'Config lookup returned None, querying metamist for latest analysis: '
-                f'analysis_type={analysis_type!r}, sequencing_type={seq_type!r}, '
-                f'long_read={long_read!r}, stage_name={stage_name!r}',
-            )
-            mt_path = query_for_latest_analysis(
-                dataset=dataset_name,
-                analysis_type=analysis_type,
-                sequencing_type=seq_type,
-                long_read=long_read,
-                stage_name=stage_name,
-            )
-            logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
-        if mt_path is None:
-            raise RuntimeError(f'No MT path found for dataset {dataset_name}')
 
         rna_ids_str = ' '.join(sg_ids)
         dataset_output = output_by_dataset[dataset_name]
@@ -154,6 +174,7 @@ def match_variants_and_splicing(
             attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
+        j.depends_on(subset_job)
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
@@ -176,7 +197,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         )
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
         registration_job.call(
-            register_analyses,
+            complete_analysis_job,
             output=f'{dataset_output}.tsv',
             analysis_type='variantsplicematch',
             cohort_ids=[cohort_id],

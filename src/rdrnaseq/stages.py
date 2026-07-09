@@ -15,10 +15,11 @@ from cpg_flow.filetypes import (
     FastqPair,
     FastqPairs,
 )
-from cpg_utils import Path, config
+from cpg_utils import Path, config, to_path
 from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
+from rdrnaseq.scripts.dashboard_utilities import PEDIGREE_QUERY, build_rna_to_genome_map
 
 SG_TYPE_QUERY = gql(
     """
@@ -364,12 +365,45 @@ class VariantSpliceMatch(stage.CohortStage):
         sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
         cell_library_type = f'{cell_type}_{library_type}'
 
+        # Map RNA SG IDs → genome SG IDs using existing dashboard_utilities functions
+        all_rna_ids = list({sg_id for ids in sg_ids_by_dataset.values() for sg_id in ids})
+        pedigree_result = query(
+            PEDIGREE_QUERY,
+            variables={'project': cohort.dataset.name, 'RnaSequencingGroupIds': all_rna_ids},
+        )
+        rna_to_genome = build_rna_to_genome_map(pedigree_result)
+        all_genome_ids = sorted(set().union(*rna_to_genome.values()))
+        logger.info(f'Mapped {len(all_rna_ids)} RNA SG IDs to {len(all_genome_ids)} genome SG IDs')
+
+        # Write genome SG IDs to GCS for the subset job
+        id_file_path = str(
+            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / 'genome_sg_ids.txt'
+        )
+        with to_path(id_file_path).open('w') as f:
+            for sg_id in all_genome_ids:
+                f.write(f'{sg_id}\n')
+
+        # Resolve and subset the AnnotateCohort MT
+        mt_path = variant_splice_match.resolve_annotate_cohort_mt(cohort.dataset.name)
+        subsetted_mt_path = str(
+            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / 'subsetted.mt'
+        )
+        subset_job = variant_splice_match.subset_cohort_mt(
+            source_mt_path=mt_path,
+            sg_id_file=id_file_path,
+            output_mt_path=subsetted_mt_path,
+            job_attrs=self.get_job_attrs(),
+        )
+
+        # Per-dataset variant annotation jobs using subsetted MT
         output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
         for ds in sg_ids_by_dataset:
             output_by_dataset[f'coarse_{ds}'] = str(output[f'coarse_tsv_{ds}']).removesuffix('.tsv')
 
         jobs = variant_splice_match.match_variants_and_splicing(
+            mt_path=subsetted_mt_path,
+            subset_job=subset_job,
             fraser_csv=fraser_csv,
             sg_ids_by_dataset=sg_ids_by_dataset,
             output_by_dataset=output_by_dataset,
@@ -378,7 +412,7 @@ class VariantSpliceMatch(stage.CohortStage):
             sequencing_type=sequencing_type,
             cell_library_type=cell_library_type,
         )
-        return self.make_outputs(cohort, data=output, jobs=jobs)
+        return self.make_outputs(cohort, data=output, jobs=[subset_job, *jobs])
 
 
 @stage.stage(required_stages=[Fraser, Outrider, VariantSpliceMatch])
