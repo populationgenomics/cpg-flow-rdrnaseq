@@ -51,6 +51,5 @@ z_cutoff = 0.0
 ncpu = 12
 
 [variant_splice_match]
-mt_dataset = 'seqr'
 #mt_path = ... override for all mts
 #dataset_name = ... override for a mt from a specific dataset

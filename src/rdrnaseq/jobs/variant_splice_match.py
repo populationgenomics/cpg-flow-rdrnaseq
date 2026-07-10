@@ -107,7 +107,7 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
     mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
     if not isinstance(mt_path, str):
         mt_path = query_for_latest_analysis(
-            dataset=config.config_retrieve(['variant_splice_match', 'mt_dataset'], default='seqr'),
+            dataset='seqr',
             analysis_type='matrixtable',
             sequencing_type='genome',
             long_read=config.config_retrieve(['workflow', 'long_read'], False),
