@@ -107,7 +107,7 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
     mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
     if not isinstance(mt_path, str):
         mt_path = query_for_latest_analysis(
-            dataset='seqr',
+            dataset=config.config_retrieve(['variant_splice_match', 'mt_dataset'], default='seqr'),
             analysis_type='matrixtable',
             sequencing_type='genome',
             long_read=config.config_retrieve(['workflow', 'long_read'], False),
@@ -119,7 +119,6 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
             f'Check that seqr-loader has registered an AnnotateCohort analysis.'
         )
     return mt_path
-
 
 
 def match_variants_and_splicing(
@@ -142,8 +141,15 @@ def match_variants_and_splicing(
     fraser_input = b.read_input(fraser_csv)
 
     jobs: list[Job] = []
+
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
+        if config.config_retrieve(['variant_splice_match', dataset_name], default=None) is not None:
+            logger.warning(
+                f'Dataset config Matrixtable override found for {dataset_name}. '
+                f'using {config.config_retrieve(["variant_splice_match", dataset_name])} mt path instead. ',
+            )
+            mt_path = config.config_retrieve(['variant_splice_match', dataset_name])
 
         rna_ids_str = ' '.join(sg_ids)
         dataset_output = output_by_dataset[dataset_name]
