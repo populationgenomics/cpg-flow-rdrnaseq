@@ -414,7 +414,8 @@ class VariantSpliceMatch(stage.CohortStage):
             sequencing_type=sequencing_type,
             cell_library_type=cell_library_type,
         )
-        return self.make_outputs(cohort, data=output, jobs=[subset_job, *jobs])
+        jobs.append(subset_job)
+        return self.make_outputs(cohort, data=output, jobs=jobs)
 
 
 @stage.stage(required_stages=[Fraser, Outrider, VariantSpliceMatch])
