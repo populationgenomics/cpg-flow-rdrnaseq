@@ -105,7 +105,7 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
     the AnnotateCohort analysis.
     """
     mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
-    if mt_path is None:
+    if not isinstance(mt_path, str):
         mt_path = query_for_latest_analysis(
             dataset='seqr',
             analysis_type='matrixtable',
