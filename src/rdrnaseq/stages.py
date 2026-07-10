@@ -364,12 +364,17 @@ class VariantSpliceMatch(stage.CohortStage):
         sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
         cell_library_type = f'{cell_type}_{library_type}'
 
+        # Resolve the AnnotateCohort MT once for all datasets
+        mt_path = variant_splice_match.resolve_annotate_cohort_mt(cohort.dataset.name)
+
+        # Per-dataset variant annotation jobs
         output = self.expected_outputs(cohort)
         output_by_dataset = {ds: str(output[f'bed_{ds}']).removesuffix('.bed') for ds in sg_ids_by_dataset}
         for ds in sg_ids_by_dataset:
             output_by_dataset[f'coarse_{ds}'] = str(output[f'coarse_tsv_{ds}']).removesuffix('.tsv')
 
         jobs = variant_splice_match.match_variants_and_splicing(
+            mt_path=mt_path,
             fraser_csv=fraser_csv,
             sg_ids_by_dataset=sg_ids_by_dataset,
             output_by_dataset=output_by_dataset,

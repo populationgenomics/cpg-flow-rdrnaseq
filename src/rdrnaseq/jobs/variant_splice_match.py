@@ -6,6 +6,8 @@ variant_of_interest_subset script, which queries Metamist to map RNA SG IDs
 to genome SG IDs and subsets the MT to matching rare variants.
 """
 
+from functools import cache
+
 from hailtop.batch.job import Job
 from loguru import logger
 
@@ -30,6 +32,7 @@ METAMIST_ANALYSIS_QUERY = graphql.gql(
 )
 
 
+@cache
 def query_for_latest_analysis(
     dataset: str,
     analysis_type: str,
@@ -39,7 +42,6 @@ def query_for_latest_analysis(
 ) -> str | None:
     """
     Query for the latest analysis object of a given type in the requested project.
-
 
     Args:
         dataset (str):         project to query for
@@ -94,11 +96,33 @@ def query_for_latest_analysis(
     return analysis_by_date[sorted(analysis_by_date)[-1]]
 
 
-def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, meta):
-    complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
+def resolve_annotate_cohort_mt(dataset_name: str) -> str:
+    """Find the AnnotateCohort MT path from config override or Metamist query.
+
+    Hardcodes sequencing_type='genome' because the AnnotateCohort MT is always genome data,
+    stage_name='AnnotateCohort' because the single-subset architecture requires a
+    cohort-level MT, and dataset='seqr' because that is where seqr-loader registers
+    the AnnotateCohort analysis.
+    """
+    mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
+    if not isinstance(mt_path, str):
+        mt_path = query_for_latest_analysis(
+            dataset='seqr',
+            analysis_type='matrixtable',
+            sequencing_type='genome',
+            long_read=config.config_retrieve(['workflow', 'long_read'], False),
+            stage_name='AnnotateCohort',
+        )
+    if mt_path is None:
+        raise RuntimeError(
+            f'No AnnotateCohort MatrixTable found in the seqr project (queried for cohort {dataset_name}). '
+            f'Check that seqr-loader has registered an AnnotateCohort analysis.'
+        )
+    return mt_path
 
 
 def match_variants_and_splicing(
+    mt_path: str,
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
     output_by_dataset: dict[str, str],
@@ -117,33 +141,15 @@ def match_variants_and_splicing(
     fraser_input = b.read_input(fraser_csv)
 
     jobs: list[Job] = []
+
     for dataset_name, sg_ids in sg_ids_by_dataset.items():
         logger.info(f'Variant annotation for dataset {dataset_name} with {len(sg_ids)} RNA SG IDs')
-        mt_path = config.config_retrieve(['variant_splice_match', 'mt_path', str(dataset_name)], default=None)
-        logger.info(f'Config lookup for variant_splice_match.mt_path.{dataset_name}: {mt_path!r}')
-        if mt_path is None:
-            analysis_type = 'matrixtable'
-
-            seq_type = config.config_retrieve(['workflow', 'variant_splice_match_sequencing_type'], default='genome')
-            long_read = config.config_retrieve(['workflow', 'long_read'], default=False)
-            stage_name = config.config_retrieve(
-                ['workflow', 'variant_splice_match_stage_name'], default='AnnotateDataset'
+        if config.config_retrieve(['variant_splice_match', dataset_name], default=None) is not None:
+            logger.warning(
+                f'Dataset config Matrixtable override found for {dataset_name}. '
+                f'using {config.config_retrieve(["variant_splice_match", dataset_name])} mt path instead. ',
             )
-            logger.info(
-                f'Config lookup returned None, querying metamist for latest analysis: '
-                f'analysis_type={analysis_type!r}, sequencing_type={seq_type!r}, '
-                f'long_read={long_read!r}, stage_name={stage_name!r}',
-            )
-            mt_path = query_for_latest_analysis(
-                dataset=dataset_name,
-                analysis_type=analysis_type,
-                sequencing_type=seq_type,
-                long_read=long_read,
-                stage_name=stage_name,
-            )
-            logger.info(f'query_for_latest_analysis returned: {mt_path!r}')
-        if mt_path is None:
-            raise RuntimeError(f'No MT path found for dataset {dataset_name}')
+            mt_path = config.config_retrieve(['variant_splice_match', dataset_name])
 
         rna_ids_str = ' '.join(sg_ids)
         dataset_output = output_by_dataset[dataset_name]
@@ -176,7 +182,7 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
         )
         registration_job.image(config.config_retrieve('workflow')['driver_image'])
         registration_job.call(
-            register_analyses,
+            complete_analysis_job,
             output=f'{dataset_output}.tsv',
             analysis_type='variantsplicematch',
             cohort_ids=[cohort_id],
