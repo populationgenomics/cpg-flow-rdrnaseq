@@ -377,7 +377,7 @@ class VariantSpliceMatch(stage.CohortStage):
 
         # Write genome SG IDs to GCS for the subset job
         id_file_path = str(
-            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / 'genome_sg_ids.txt'
+            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / cohort.id / 'genome_sg_ids.txt'
         )
         with to_path(id_file_path).open('w') as f:
             for sg_id in all_genome_ids:
@@ -386,7 +386,7 @@ class VariantSpliceMatch(stage.CohortStage):
         # Resolve and subset the AnnotateCohort MT
         mt_path = variant_splice_match.resolve_annotate_cohort_mt(cohort.dataset.name)
         subsetted_mt_path = str(
-            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / 'subsetted.mt'
+            cohort.dataset.tmp_prefix() / 'variant_splice_match' / cell_library_type / cohort.id / 'subsetted.mt'
         )
         subset_job = variant_splice_match.subset_cohort_mt(
             source_mt_path=mt_path,

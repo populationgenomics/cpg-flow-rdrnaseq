@@ -100,13 +100,14 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
     """Find the AnnotateCohort MT path from config override or Metamist query.
 
     Hardcodes sequencing_type='genome' because the AnnotateCohort MT is always genome data,
-    and stage_name='AnnotateCohort' because the single-subset architecture requires a
-    cohort-level MT.
+    stage_name='AnnotateCohort' because the single-subset architecture requires a
+    cohort-level MT, and dataset='seqr' because that is where seqr-loader registers
+    the AnnotateCohort analysis.
     """
     mt_path = config.config_retrieve(['variant_splice_match', 'mt_path'], default=None)
     if mt_path is None:
         mt_path = query_for_latest_analysis(
-            dataset=dataset_name,
+            dataset='seqr',
             analysis_type='matrixtable',
             sequencing_type='genome',
             long_read=config.config_retrieve(['workflow', 'long_read'], False),
