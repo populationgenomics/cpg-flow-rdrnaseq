@@ -114,7 +114,10 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
             stage_name='AnnotateCohort',
         )
     if mt_path is None:
-        raise RuntimeError(f'No AnnotateCohort MatrixTable found for {dataset_name}')
+        raise RuntimeError(
+            f'No AnnotateCohort MatrixTable found in the seqr project (queried for cohort {dataset_name}). '
+            f'Check that seqr-loader has registered an AnnotateCohort analysis.'
+        )
     return mt_path
 
 
