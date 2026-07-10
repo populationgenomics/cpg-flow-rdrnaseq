@@ -365,15 +365,17 @@ class VariantSpliceMatch(stage.CohortStage):
         sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
         cell_library_type = f'{cell_type}_{library_type}'
 
-        # Map RNA SG IDs → genome SG IDs using existing dashboard_utilities functions
-        all_rna_ids = list({sg_id for ids in sg_ids_by_dataset.values() for sg_id in ids})
-        pedigree_result = query(
-            PEDIGREE_QUERY,
-            variables={'project': cohort.dataset.name, 'RnaSequencingGroupIds': all_rna_ids},
-        )
-        rna_to_genome = build_rna_to_genome_map(pedigree_result)
+        # Map RNA SG IDs → genome SG IDs (query Metamist per dataset, because RNA SG IDs are project-scoped)
+        rna_to_genome: dict[str, set[str]] = {}
+        for dataset_name, rna_ids in sg_ids_by_dataset.items():
+            pedigree_result = query(
+                PEDIGREE_QUERY,
+                variables={'project': dataset_name, 'RnaSequencingGroupIds': list(set(rna_ids))},
+            )
+            rna_to_genome.update(build_rna_to_genome_map(pedigree_result))
         all_genome_ids = sorted(set().union(*rna_to_genome.values()))
-        logger.info(f'Mapped {len(all_rna_ids)} RNA SG IDs to {len(all_genome_ids)} genome SG IDs')
+        total_rna_ids = sum(len(ids) for ids in sg_ids_by_dataset.values())
+        logger.info(f'Mapped {total_rna_ids} RNA SG IDs to {len(all_genome_ids)} genome SG IDs')
 
         # Write genome SG IDs to GCS for the subset job
         id_file_path = str(
