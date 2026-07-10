@@ -121,33 +121,9 @@ def resolve_annotate_cohort_mt(dataset_name: str) -> str:
     return mt_path
 
 
-def subset_cohort_mt(
-    source_mt_path: str,
-    sg_id_file: str,
-    output_mt_path: str,
-    job_attrs: dict,
-) -> Job:
-    """Create a Hail Batch job to subset an AnnotateCohort MT to specific genome SG IDs."""
-    b = get_batch()
-    j = b.new_job('subset_annotate_cohort_mt', attributes=job_attrs | {'tool': 'variant_splice_match'})
-    j.image(config.config_retrieve('workflow')['driver_image'])
-    j.storage('10Gi')
-
-    sgid_file_local = b.read_input(sg_id_file)
-    j.command(
-        command(f"""\
-python3 -m rdrnaseq.scripts.subset_mt \
-    --input {source_mt_path} \
-    --sgs {sgid_file_local} \
-    --output {output_mt_path}
-"""),
-    )
-    return j
-
 
 def match_variants_and_splicing(
     mt_path: str,
-    subset_job: Job,
     fraser_csv: str | Path,
     sg_ids_by_dataset: dict[str, list[str]],
     output_by_dataset: dict[str, str],
@@ -159,8 +135,8 @@ def match_variants_and_splicing(
     """
     Create one Hail Batch job per dataset that runs variant_of_interest_subset.
 
-    Each job localises the Fraser significant CSV, passes the subsetted MT path
-    (read directly from GCS by Hail), and writes a BED + TSV output per dataset.
+    Each job localises the Fraser significant CSV, passes the MT path (read
+    directly from GCS by Hail), and writes a BED + TSV output per dataset.
     """
     b = get_batch()
     fraser_input = b.read_input(fraser_csv)
@@ -178,7 +154,6 @@ def match_variants_and_splicing(
             attributes=job_attrs | {'tool': 'variant_splice_match'},
         )
         j.image(config.config_retrieve('workflow')['driver_image'])
-        j.depends_on(subset_job)
         j.command(
             command(f"""\
 python3 -m rdrnaseq.scripts.variant_of_interest_subset \
