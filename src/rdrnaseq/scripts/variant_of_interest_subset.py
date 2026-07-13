@@ -52,7 +52,7 @@ def build_fraser_lookup(fraser_df: pd.DataFrame) -> dict[str, dict[str, list[tup
 def verify_variant_fraser_matches(
     tsv_path: str,
     fraser_csv_path: str,
-    genome_to_rna: dict[str, str],
+    genome_to_rna: dict[str, set[str]],
     rna_to_metadata: dict[str, dict],
     output_tsv_path: str,
     output_bed_path: str,
@@ -89,25 +89,25 @@ def verify_variant_fraser_matches(
         variant_end = pos + max(len(ref), len(alt)) - 1
 
         for genome_id in row['_genome_ids']:
-            rna_id = genome_to_rna.get(genome_id)
-            if rna_id is None:
+            rna_ids = genome_to_rna.get(genome_id)
+            if rna_ids is None:
                 continue
-
-            regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
-            meta = rna_to_metadata.get(rna_id, {})
-            for region_start, region_end, delta_psi, psi_value in regions:
-                dist = compute_span_distance(pos, variant_end, region_start, region_end)
-                if dist <= buffer_bp:
-                    sample_row = {col: row[col] for col in base_cols}
-                    sample_row['matching_genome_sg_id'] = genome_id
-                    sample_row['rna_sg_id'] = rna_id
-                    sample_row['fraser_distance'] = dist
-                    sample_row['deltaPsi'] = delta_psi
-                    sample_row['psiValue'] = psi_value
-                    sample_row['participant_external_id'] = meta.get('participant_external_id', '')
-                    sample_row['family_id'] = meta.get('family_id', '')
-                    sample_row['affected'] = meta.get('affected', 'Unknown')
-                    output_rows.append(sample_row)
+            for rna_id in rna_ids:
+                regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
+                meta = rna_to_metadata.get(rna_id, {})
+                for region_start, region_end, delta_psi, psi_value in regions:
+                    dist = compute_span_distance(pos, variant_end, region_start, region_end)
+                    if dist <= buffer_bp:
+                        sample_row = {col: row[col] for col in base_cols}
+                        sample_row['matching_genome_sg_id'] = genome_id
+                        sample_row['rna_sg_id'] = rna_id
+                        sample_row['fraser_distance'] = dist
+                        sample_row['deltaPsi'] = delta_psi
+                        sample_row['psiValue'] = psi_value
+                        sample_row['participant_external_id'] = meta.get('participant_external_id', '')
+                        sample_row['family_id'] = meta.get('family_id', '')
+                        sample_row['affected'] = meta.get('affected', 'Unknown')
+                        output_rows.append(sample_row)
 
     result_df = pd.DataFrame(output_rows)
     verified_variants = result_df['locus'].nunique() if len(result_df) > 0 else 0
@@ -346,6 +346,10 @@ def main():
     result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
     genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
+    genome_to_rna_full: dict[str, set[str]] = {}
+    for rna_id, genome_ids in rna_to_genome_ids.items():
+        for gid in genome_ids:
+            genome_to_rna_full.setdefault(gid, set()).add(rna_id)
     rna_to_metadata = build_rna_to_metadata_map(result)
 
     coarse_tsv_path = f'{args.output}.tsv'
@@ -373,7 +377,7 @@ def main():
     verify_variant_fraser_matches(
         tsv_path=coarse_tsv_path,
         fraser_csv_path=args.csv,
-        genome_to_rna=genome_to_rna,
+        genome_to_rna=genome_to_rna_full,
         rna_to_metadata=rna_to_metadata,
         output_tsv_path=args.output_tsv,
         output_bed_path=args.output_bed,
