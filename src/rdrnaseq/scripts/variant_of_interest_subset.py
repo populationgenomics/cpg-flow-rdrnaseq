@@ -225,7 +225,6 @@ def map_to_genome_ids(rna_id: str, rna_to_genome_ids: dict[str, set[str]]) -> se
     """Look up genome SG IDs for a given RNA SG ID."""
     genome_ids = rna_to_genome_ids.get(rna_id)
     if genome_ids is None:
-        logger.warning(f'RNA Sequencing Group ID {rna_id} not found in query results, skipping')
         return set()
     return genome_ids
 
