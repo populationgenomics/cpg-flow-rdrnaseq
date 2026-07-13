@@ -13,6 +13,7 @@ adapter_type = "ILLUMINA_TRUSEQ"
 [references]
 ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
 ensg_to_symbol = "gs://cpg-rdnow-test-web/transcriptome/rna_dashboard/ensg_to_symbol.tsv"
+somalier_sites = "gs://cpg-common-main/references/somalier/sites.hg38.vcf.gz"
 
 [references.star]
 ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"
@@ -29,6 +30,7 @@ sambamba = "australia-southeast1-docker.pkg.dev/cpg-common/images/sambamba:1.0.1
 samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0.1.26-1"
 samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
 subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"
+somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
 
 [fraser]
 pval_cutoff = 0.1

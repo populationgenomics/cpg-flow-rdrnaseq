@@ -230,7 +230,11 @@ def build_genome_to_rna_map(rna_to_genome_ids: dict[str, set[str]]) -> dict[str,
     for rna_id, genome_ids in rna_to_genome_ids.items():
         for gid in genome_ids:
             if gid in genome_to_rna:
-                raise ValueError(f'Genome SG: {gid} linked to multiple RNA SGs: {genome_to_rna[gid]}, {rna_id}')
+                logger.info(
+                    f'Genome SG {gid} linked to multiple RNA SGs: {genome_to_rna[gid]}, {rna_id} '
+                    f'— both will receive variant annotations in the verify step'
+                )
+                continue
             genome_to_rna[gid] = rna_id
     return genome_to_rna
 

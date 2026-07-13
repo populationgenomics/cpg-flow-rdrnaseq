@@ -4,6 +4,14 @@ For each FRASER significant region (±200bp buffer), finds variants where at lea
 carrier (het or hom-alt) has a genome SG ID matching the RNA SG ID flagged by FRASER (which has a rna sg id and
 is mapped to the same participant via Metamist).
 Exports as a BED-like TSV with all variant annotations.
+
+genome_to_rna_full exists to rectify an edge case where two sg ids of different samples of the same type
+had different sgs of the same type so they'll have
+the same variants mapped to em in the fine search but on genome sg id in the coarse search
+
+In short: Corase search requires one to one mapping between sg and genome id, but fine search
+allows one to many mapping between rna sg and genome sg ids.
+so that rna sgs with the same genome sgs get the variants they need
 """
 
 import argparse
@@ -52,7 +60,7 @@ def build_fraser_lookup(fraser_df: pd.DataFrame) -> dict[str, dict[str, list[tup
 def verify_variant_fraser_matches(
     tsv_path: str,
     fraser_csv_path: str,
-    genome_to_rna: dict[str, str],
+    genome_to_rna: dict[str, set[str]],
     rna_to_metadata: dict[str, dict],
     output_tsv_path: str,
     output_bed_path: str,
@@ -89,25 +97,25 @@ def verify_variant_fraser_matches(
         variant_end = pos + max(len(ref), len(alt)) - 1
 
         for genome_id in row['_genome_ids']:
-            rna_id = genome_to_rna.get(genome_id)
-            if rna_id is None:
+            rna_ids = genome_to_rna.get(genome_id)
+            if rna_ids is None:
                 continue
-
-            regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
-            meta = rna_to_metadata.get(rna_id, {})
-            for region_start, region_end, delta_psi, psi_value in regions:
-                dist = compute_span_distance(pos, variant_end, region_start, region_end)
-                if dist <= buffer_bp:
-                    sample_row = {col: row[col] for col in base_cols}
-                    sample_row['matching_genome_sg_id'] = genome_id
-                    sample_row['rna_sg_id'] = rna_id
-                    sample_row['fraser_distance'] = dist
-                    sample_row['deltaPsi'] = delta_psi
-                    sample_row['psiValue'] = psi_value
-                    sample_row['participant_external_id'] = meta.get('participant_external_id', '')
-                    sample_row['family_id'] = meta.get('family_id', '')
-                    sample_row['affected'] = meta.get('affected', 'Unknown')
-                    output_rows.append(sample_row)
+            for rna_id in rna_ids:
+                regions = fraser_lookup.get(rna_id, {}).get(chrom, [])
+                meta = rna_to_metadata.get(rna_id, {})
+                for region_start, region_end, delta_psi, psi_value in regions:
+                    dist = compute_span_distance(pos, variant_end, region_start, region_end)
+                    if dist <= buffer_bp:
+                        sample_row = {col: row[col] for col in base_cols}
+                        sample_row['matching_genome_sg_id'] = genome_id
+                        sample_row['rna_sg_id'] = rna_id
+                        sample_row['fraser_distance'] = dist
+                        sample_row['deltaPsi'] = delta_psi
+                        sample_row['psiValue'] = psi_value
+                        sample_row['participant_external_id'] = meta.get('participant_external_id', '')
+                        sample_row['family_id'] = meta.get('family_id', '')
+                        sample_row['affected'] = meta.get('affected', 'Unknown')
+                        output_rows.append(sample_row)
 
     result_df = pd.DataFrame(output_rows)
     verified_variants = result_df['locus'].nunique() if len(result_df) > 0 else 0
@@ -225,7 +233,6 @@ def map_to_genome_ids(rna_id: str, rna_to_genome_ids: dict[str, set[str]]) -> se
     """Look up genome SG IDs for a given RNA SG ID."""
     genome_ids = rna_to_genome_ids.get(rna_id)
     if genome_ids is None:
-        logger.warning(f'RNA Sequencing Group ID {rna_id} not found in query results, skipping')
         return set()
     return genome_ids
 
@@ -243,6 +250,11 @@ def subset_mt_to_variants_of_interest(
     logger.info('Filtering to FRASER significant regions')
     mt = hl.filter_intervals(mt, hail_intervals)
 
+    relevant_genome_ids = hl.literal(set(genome_to_rna.keys()))
+    mt = mt.filter_cols(relevant_genome_ids.contains(mt.s))
+
+    mt = mt.annotate_rows(carriers=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.collect_as_set(mt.s)))
+
     ht = mt.rows()
 
     logger.info('Annotating variants with CSV region SG IDs')
@@ -252,9 +264,6 @@ def subset_mt_to_variants_of_interest(
         fraser_regions=interval_annot.fraser_regions,
     )
 
-    ht = ht.annotate(
-        carriers=ht.samples_num_alt['1'].union(ht.samples_num_alt['2']),
-    )
     ht = ht.annotate(
         matching_samples=ht.carriers.intersection(ht.genome_sg_ids),
     )
@@ -344,6 +353,13 @@ def main():
     result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
     genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
+    # This exists to rectify an edge case where two sg ids of different samples of the same type
+    # had different sgs of the same type so they'll have
+    # the same variants mapped to em in the fine search but on genome sg id in the coarse search
+    genome_to_rna_full: dict[str, set[str]] = {}
+    for rna_id, genome_ids in rna_to_genome_ids.items():
+        for gid in genome_ids:
+            genome_to_rna_full.setdefault(gid, set()).add(rna_id)
     rna_to_metadata = build_rna_to_metadata_map(result)
 
     coarse_tsv_path = f'{args.output}.tsv'
@@ -371,7 +387,7 @@ def main():
     verify_variant_fraser_matches(
         tsv_path=coarse_tsv_path,
         fraser_csv_path=args.csv,
-        genome_to_rna=genome_to_rna,
+        genome_to_rna=genome_to_rna_full,
         rna_to_metadata=rna_to_metadata,
         output_tsv_path=args.output_tsv,
         output_bed_path=args.output_bed,
