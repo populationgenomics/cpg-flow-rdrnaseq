@@ -220,7 +220,7 @@ class Somalier(stage.SequencingGroupStage):
         cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
         jobs = SomalierExtract.extract_somalier(
             cram_path=cram,
-            output=output,
+            output=output['somalier'],
             job_attrs=self.get_job_attrs(sequencing_group),
         )
 
