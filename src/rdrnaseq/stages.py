@@ -200,7 +200,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 @stage.stage(required_stages=TrimAlignRNA, analysis_type='somalier', analysis_key='somalier')
 class Somalier(stage.SequencingGroupStage):
     """
-    Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
+    Generate Somalier fingerprint files from CRAM files for RNA-seq samples.
     """
 
     def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
