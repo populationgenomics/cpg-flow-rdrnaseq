@@ -18,7 +18,17 @@ from cpg_flow.filetypes import (
 from cpg_utils import Path, config
 from metamist.graphql import gql, query
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match, SomalierExtract
+from rdrnaseq.jobs import (
+    SomalierExtract,
+    align_rna,
+    bam_to_cram,
+    count,
+    fraser,
+    outrider,
+    rna_dashboard,
+    trim,
+    variant_splice_match,
+)
 
 SG_TYPE_QUERY = gql(
     """
@@ -185,6 +195,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         # Create outputs and return jobs
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+
 
 @stage.stage(required_stages=TrimAlignRNA)
 class Somalier(stage.SequencingGroupStage):

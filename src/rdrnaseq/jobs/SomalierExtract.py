@@ -2,9 +2,9 @@
 Job for CRAM fingerprinting using Somalier.
 """
 
-from cpg_utils import Path, config, hail_batch
 from hailtop.batch.job import Job
-from pygments.lexer import default
+
+from cpg_utils import Path, config, hail_batch
 
 
 def extract_somalier(
@@ -15,7 +15,7 @@ def extract_somalier(
     """Run `somalier extract` to generate a fingerprint (i.e. a `*.somalier` file)."""
 
     batch_instance = hail_batch.get_batch()
-    default_job_storage= 50
+    default_job_storage = 50
 
     job = batch_instance.new_job('Somalier extract', job_attrs | {'tool': 'somalier'})
 
