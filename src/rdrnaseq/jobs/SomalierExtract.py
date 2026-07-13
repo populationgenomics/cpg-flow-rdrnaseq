@@ -20,8 +20,8 @@ def extract_somalier(
     job = batch_instance.new_job('Somalier extract', job_attrs | {'tool': 'somalier'})
 
     job.image(config.config_retrieve(['images', 'somalier']))
-    storage_gb = default_job_storage
-    job.storage(f'{storage_gb}GB')
+
+    job.storage(f'{default_job_storage}GB')
 
     ref = hail_batch.fasta_res_group(batch_instance)
 
