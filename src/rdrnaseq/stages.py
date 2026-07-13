@@ -18,7 +18,7 @@ from cpg_flow.filetypes import (
 from cpg_utils import Path, config
 from metamist.graphql import gql, query
 
-from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match
+from rdrnaseq.jobs import align_rna, bam_to_cram, count, fraser, outrider, rna_dashboard, trim, variant_splice_match, SomalierExtract
 
 SG_TYPE_QUERY = gql(
     """
@@ -185,6 +185,35 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         # Create outputs and return jobs
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+
+@stage.stage(required_stages=TrimAlignRNA)
+class Somalier(stage.SequencingGroupStage):
+    """
+    Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
+    """
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        """
+        Generate a text file output containing read counts.
+        """
+        return {
+            'somalier_file': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram.somalier',
+        }
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        """
+        Queue a job to count the reads with featureCounts.
+        """
+        output = self.expected_outputs(sequencing_group)
+
+        cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        jobs = SomalierExtract.extract_somalier(
+            cram_path=cram,
+            output=output,
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+
+        return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
 
 @stage.stage(required_stages=TrimAlignRNA)
