@@ -197,7 +197,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=TrimAlignRNA, analysis_type='somalier', analysis_key='somalier')
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='somalier', analysis_keys=['somalier'])
 class Somalier(stage.SequencingGroupStage):
     """
     Generate Somalier fingerprint files from CRAM files for RNA-seq samples.
