@@ -197,7 +197,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=TrimAlignRNA)
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='somalier', analysis_key='somalier')
 class Somalier(stage.SequencingGroupStage):
     """
     Count RNA seq reads mapping to genes and/or transcripts using featureCounts.
@@ -208,7 +208,7 @@ class Somalier(stage.SequencingGroupStage):
         Generate a text file output containing read counts.
         """
         return {
-            'somalier_file': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram.somalier',
+            'somalier': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram.somalier',
         }
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
