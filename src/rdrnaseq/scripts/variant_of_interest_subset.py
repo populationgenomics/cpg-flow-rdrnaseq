@@ -243,6 +243,11 @@ def subset_mt_to_variants_of_interest(
     logger.info('Filtering to FRASER significant regions')
     mt = hl.filter_intervals(mt, hail_intervals)
 
+    relevant_genome_ids = hl.literal(set(genome_to_rna.keys()))
+    mt = mt.filter_cols(relevant_genome_ids.contains(mt.s))
+
+    mt = mt.annotate_rows(carriers=hl.agg.filter(mt.GT.is_non_ref(), hl.agg.collect_as_set(mt.s)))
+
     ht = mt.rows()
 
     logger.info('Annotating variants with CSV region SG IDs')
@@ -252,9 +257,6 @@ def subset_mt_to_variants_of_interest(
         fraser_regions=interval_annot.fraser_regions,
     )
 
-    ht = ht.annotate(
-        carriers=ht.samples_num_alt['1'].union(ht.samples_num_alt['2']),
-    )
     ht = ht.annotate(
         matching_samples=ht.carriers.intersection(ht.genome_sg_ids),
     )
