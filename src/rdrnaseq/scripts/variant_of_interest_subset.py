@@ -4,6 +4,14 @@ For each FRASER significant region (±200bp buffer), finds variants where at lea
 carrier (het or hom-alt) has a genome SG ID matching the RNA SG ID flagged by FRASER (which has a rna sg id and
 is mapped to the same participant via Metamist).
 Exports as a BED-like TSV with all variant annotations.
+
+genome_to_rna_full exists to rectify an edge case where two sg ids of different samples of the same type
+had different sgs of the same type so they'll have
+the same variants mapped to em in the fine search but on genome sg id in the coarse search
+
+In short: Corase search requires one to one mapping between sg and genome id, but fine search
+allows one to many mapping between rna sg and genome sg ids.
+so that rna sgs with the same genome sgs get the variants they need
 """
 
 import argparse
@@ -345,6 +353,9 @@ def main():
     result = query(PEDIGREE_QUERY, variables=variables)
     rna_to_genome_ids = build_rna_to_genome_map(result)
     genome_to_rna: dict[str, str] = build_genome_to_rna_map(rna_to_genome_ids)
+    # This exists to rectify an edge case where two sg ids of different samples of the same type
+    # had different sgs of the same type so they'll have
+    # the same variants mapped to em in the fine search but on genome sg id in the coarse search
     genome_to_rna_full: dict[str, set[str]] = {}
     for rna_id, genome_ids in rna_to_genome_ids.items():
         for gid in genome_ids:
