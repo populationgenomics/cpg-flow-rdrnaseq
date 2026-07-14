@@ -185,13 +185,14 @@ python3 -m rdrnaseq.scripts.variant_of_interest_subset \
             complete_analysis_job,
             output=f'{dataset_output}.tsv',
             analysis_type='variantsplicematch',
-            cohort_ids=[cohort_id],
+            cohort_ids=[],
             sg_ids=sg_ids,
             project_name=dataset_name,
             meta={
                 'stage': 'VariantSpliceMatch',
                 'sequencing_type': sequencing_type,
                 'cell_library_type': cell_library_type,
+                'cohort_id': cohort_id,
             },
         )
         registration_job.depends_on(j)
