@@ -575,13 +575,19 @@ function showRegionDetails(chr, start, end) {
 
 // ─── Variant table filter ───────────────────────────────────────────────────
 function applyVariantFilter() {
-    const maxDist = parseFloat(document.getElementById('fraser-dist-thresh').value);
-    const filtered = variantRows.filter(r => r.fraser_distance !== null && r.fraser_distance <= maxDist);
-    variantDT = buildDT('variant-table', filtered, window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+    variantDT = buildDT('variant-table', getFilteredVariants(), window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
 }
 function resetVariantFilter() {
-    document.getElementById('fraser-dist-thresh').value = 200;
-    variantDT = buildDT('variant-table', variantRows, window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+    document.getElementById('fraser-dist-thresh').value = 0;
+    variantDT = buildDT('variant-table', getFilteredVariants(), window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
+}
+function getFilteredVariants() {
+    const families = $('#family-filter').val() || [];
+    const maxDist = parseFloat(document.getElementById('fraser-dist-thresh').value);
+    let rows = variantRows;
+    if (families.length) rows = rows.filter(r => families.includes(r.family_id));
+    if (!isNaN(maxDist) && maxDist > 0) rows = rows.filter(r => r.fraser_distance !== null && r.fraser_distance <= maxDist);
+    return rows;
 }
 
 // ─── IGV ─────────────────────────────────────────────────────────────────────
@@ -644,11 +650,9 @@ function applyThresholds() {
     }
     renderStats(outriderRows.length ? common.length : null);
 
-   const vView = families.length ? variantRows.filter(r => families.includes(r.family_id)) : variantRows;
     if (variantRows.length) {
-        variantDT = buildDT('variant-table', vView, VARIANT_COLS, variantDT);
+        variantDT = buildDT('variant-table', getFilteredVariants(), window.VARIANT_COLS || VARIANT_COLS_BASE, variantDT);
     }
-
 }
 
 function resetFilters() {
