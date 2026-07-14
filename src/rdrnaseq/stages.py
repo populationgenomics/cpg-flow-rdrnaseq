@@ -221,6 +221,7 @@ class Somalier(stage.SequencingGroupStage):
         jobs = SomalierExtract.extract_somalier(
             cram_path=cram,
             output=output['somalier'],
+            sample_name=sequencing_group.id,
             job_attrs=self.get_job_attrs(sequencing_group),
         )
 
