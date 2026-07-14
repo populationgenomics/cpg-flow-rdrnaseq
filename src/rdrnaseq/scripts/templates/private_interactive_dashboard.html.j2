@@ -710,7 +710,7 @@ async function init() {
                 const locParts = (r.locus || '').split(':');
                 const chrom = (locParts[0] || '').replace('chr', '');
                 r.variant_id = chrom && locParts[1] ? chrom + '-' + locParts[1] + '-' + alleles.join('-') : '';
-   				r.seqr_link = SEQR_LINKS[r.variant_id] || '';
+   				  r.seqr_link = SEQR_LINKS[r.variant_id + '|' + r.family_id] || '';
                 const tid = r.transcript_id || '';
                 const sym = r.gene_symbol || '';
                 const rawHgvsc = r.hgvsc || '';

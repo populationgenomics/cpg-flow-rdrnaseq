@@ -238,9 +238,10 @@ def main() -> None:
                 # grab alleles and sanitize for use in URL
                 alleles = ast.literal_eval(variant['alleles'])
                 variant_id = f'{chrom}-{pos}-{"-".join(alleles)}'
-                link = link_engine.build_link(variant['family_id'], variant_id)
+                family_id = variant['family_id']
+                link = link_engine.build_link(family_id, variant_id)
                 if link is not None:
-                    seqr_links[variant_id] = link
+                    seqr_links[f'{variant_id}|{family_id}'] = link
     else:
         logging.warning('\nNo variant TSV provided, skipping Seqr link generation.')
 
