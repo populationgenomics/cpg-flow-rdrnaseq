@@ -180,7 +180,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
             register_analyses,
             output=str(output_paths['dashboard_html']),
             analysis_type='web',
-            cohort_ids=[cohort_id],
+            cohort_ids=[],
             sg_ids=sg_ids,
             project_name=dataset_name,
             meta={
@@ -188,6 +188,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
                 'sequencing_type': sequencing_type,
                 'cell_library_type': cell_library_type,
                 'display_url': web_path,
+                'cohort_id': cohort_id,
             },
         )
         reg_job.depends_on(j)
