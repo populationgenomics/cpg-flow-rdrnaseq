@@ -13,6 +13,7 @@ from cpg_utils.hail_batch import command, get_batch
 
 def bam_to_cram(
     input_bam: ResourceGroup,
+    outputs: dict[str, str],
     job_attrs: dict,
     requested_nthreads: int | None = None,
     reference_fasta_path: str | None = None,
@@ -47,9 +48,10 @@ def bam_to_cram(
         },
     )
 
-    cmd = f'samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} \
-        | tee {j.sorted_cram["cram"]} \
-        | samtools index -@ {res.get_nthreads() - 1} - {j.sorted_cram["cram.crai"]}'
+    cmd = f"""
+    samtools view -@ {res.get_nthreads() - 1} -T {fasta.fasta} -C {input_bam.bam} \
+    --write-index -O cram,version=3.0 -o {j.sorted_cram.cram}
+    """
     j.command(command(cmd, monitor_space=True))
 
     return j, j.sorted_cram
