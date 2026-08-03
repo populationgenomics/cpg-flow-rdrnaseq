@@ -13,7 +13,6 @@ from cpg_utils.hail_batch import command, get_batch
 
 def bam_to_cram(
     input_bam: ResourceGroup,
-    outputs: dict[str, str],
     job_attrs: dict,
     requested_nthreads: int | None = None,
     reference_fasta_path: str | None = None,
