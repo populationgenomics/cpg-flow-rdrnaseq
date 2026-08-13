@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>FRASER/OUTRIDER Results Dashboard</title>
+    <title>{% if display_name %}{{ display_name }} — {% endif %}FRASER/OUTRIDER Results Dashboard</title>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/igv@2.15.8/dist/igv.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
@@ -61,11 +61,19 @@
         .glossary-body dt { font-weight: bold; color: #333; margin-top: 6px; }
         .glossary-body dd { margin: 2px 0 0 16px; color: #555; }
         .plot-caption { color: #777; font-size: 0.9em; margin: -8px 0 12px 0; font-style: italic; }
+        .dashboard-subheader { text-align: center; color: #555; font-size: 1.1em; margin: -8px 0 16px; }
+        .sg-ids-panel { background: #f9f9f9; border: 1px solid #e0e0e0; border-radius: 5px; margin-bottom: 20px; }
+        .sg-ids-panel summary { cursor: pointer; padding: 8px 12px; font-weight: bold; color: #555; font-size: 0.9em; }
+        .sg-ids-panel summary:hover { background: #f0f0f0; border-radius: 5px; }
+        .sg-ids-inline { margin: 0; padding: 4px 12px 8px; font-size: 0.85em; color: #444; line-height: 1.6; }
     </style>
 </head>
 <body>
 <div class="container">
     <h1>FRASER / OUTRIDER Results Dashboard</h1>
+    {% if display_name or cell_library_type %}
+    <p class="dashboard-subheader">{{ display_name }}{% if display_name and cell_library_type %} &mdash; {% endif %}{{ cell_library_type }}</p>
+    {% endif %}
 
     <details class="glossary-panel">
         <summary>Dashboard Guide &amp; Glossary</summary>
@@ -107,6 +115,13 @@
 
     <div id="main-content">
         <div class="stats-grid" id="stats-grid"></div>
+
+        {% if sg_ids %}
+        <details class="sg-ids-panel">
+            <summary>Sequencing Groups Analysed ({{ sg_ids|length }})</summary>
+            <p class="sg-ids-inline">{{ sg_ids | join(', ') }}</p>
+        </details>
+        {% endif %}
 
         <div class="controls">
             <div class="control-group">
