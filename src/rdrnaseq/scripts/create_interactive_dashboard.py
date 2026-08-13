@@ -65,7 +65,9 @@ def render_dashboard(
     env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
     template = env.get_template(template_name)
 
-    display_cell_library_type = cell_library_type.replace('_', ' ').replace('-', ' ').title() if cell_library_type else ''
+    display_cell_library_type = (
+        cell_library_type.replace('_', ' ').replace('-', ' ').title() if cell_library_type else ''
+    )
 
     html_content = template.render(
         fraser_csv_filename=fraser_csv_filename,

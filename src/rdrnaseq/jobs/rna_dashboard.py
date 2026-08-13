@@ -44,9 +44,7 @@ def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, m
     complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
 
 
-def get_cpg_metadata(
-    dataset_name: str, sg_ids: list[str]
-) -> tuple[dict[str, dict[str, str | int]], str]:
+def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> tuple[dict[str, dict[str, str | int]], str]:
     """
     Query metamist for SG ID -> family/participant metadata.
 
