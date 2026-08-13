@@ -52,6 +52,9 @@ def render_dashboard(
     variant_tsv_filename: str | None = None,
     seqr_links: dict[str, str] | None = None,
     template_name: str = 'interactive_dashboard.html.j2',
+    display_name: str = '',
+    cell_library_type: str = '',
+    sg_ids: list[str] | None = None,
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
 
@@ -61,6 +64,8 @@ def render_dashboard(
     template_dir = Path(__file__).parent / 'templates'
     env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
     template = env.get_template(template_name)
+
+    display_cell_library_type = cell_library_type.replace('_', ' ').replace('-', ' ').title() if cell_library_type else ''
 
     html_content = template.render(
         fraser_csv_filename=fraser_csv_filename,
@@ -74,6 +79,9 @@ def render_dashboard(
         default_zscore_threshold=zscore_threshold,
         seqr_links=seqr_links or {},
         genome='hg38',
+        display_name=display_name,
+        cell_library_type=display_cell_library_type,
+        sg_ids=sg_ids or [],
     )
 
     with open(output_path, 'w') as f:
@@ -159,6 +167,9 @@ Examples:
     )
     parser.add_argument('--dataset-name', required=True, help='CPG dataset name (e.g. rdnow)')
     parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
+    parser.add_argument('--display-name', default='', help='Project display name from metamist')
+    parser.add_argument('--cell-library-type', default='', help='Cell/library type (e.g. fibroblast_polyA)')
+    parser.add_argument('--sg-ids', nargs='*', default=[], help='Sequencing group IDs analysed')
 
     return parser.parse_args()
 
@@ -261,6 +272,9 @@ def main() -> None:
         'variant_bed_filename': args.variant_bed_filename,
         'variant_tsv_filename': args.variant_tsv_filename,
         'seqr_links': seqr_links,
+        'display_name': args.display_name,
+        'cell_library_type': args.cell_library_type,
+        'sg_ids': args.sg_ids,
     }
 
     render_dashboard(output_path=args.output, **render_kwargs)
