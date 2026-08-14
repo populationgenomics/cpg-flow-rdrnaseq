@@ -140,6 +140,8 @@ def make_dashboards(
             csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{meta["affected"]}')
         family_csv_content = '\n'.join(csv_lines)
 
+        external_ids = ' '.join(str(cpg_metadata[sid]['external_id']) for sid in sg_ids)
+
         j.command(
             command(f"""\
 cat > /tmp/family_mapping.csv << 'FAMILY_EOF'
@@ -164,7 +166,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --cohort-id {cohort_id} \
     --display-name '{display_name}' \
     --cell-library-type '{cell_library_type}' \
-    --sg-ids {' '.join(sg_ids)}
+    --external-ids {external_ids}
 """),
         )
         for k, p in output_paths.items():

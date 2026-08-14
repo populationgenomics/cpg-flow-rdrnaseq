@@ -54,7 +54,7 @@ def render_dashboard(
     template_name: str = 'interactive_dashboard.html.j2',
     display_name: str = '',
     cell_library_type: str = '',
-    sg_ids: list[str] | None = None,
+    external_ids: list[str] | None = None,
 ) -> None:
     """Render the dashboard HTML using Jinja2 template.
 
@@ -83,7 +83,7 @@ def render_dashboard(
         genome='hg38',
         display_name=display_name,
         cell_library_type=display_cell_library_type,
-        sg_ids=sg_ids or [],
+        external_ids=external_ids or [],
     )
 
     with open(output_path, 'w') as f:
@@ -171,7 +171,7 @@ Examples:
     parser.add_argument('--cohort-id', required=True, help='Cohort ID (e.g. COH10509)')
     parser.add_argument('--display-name', default='', help='Project display name from metamist')
     parser.add_argument('--cell-library-type', default='', help='Cell/library type (e.g. fibroblast_polyA)')
-    parser.add_argument('--sg-ids', nargs='*', default=[], help='Sequencing group IDs analysed')
+    parser.add_argument('--external-ids', nargs='*', default=[], help='Participant external IDs analysed')
 
     return parser.parse_args()
 
@@ -276,7 +276,7 @@ def main() -> None:
         'seqr_links': seqr_links,
         'display_name': args.display_name,
         'cell_library_type': args.cell_library_type,
-        'sg_ids': args.sg_ids,
+        'external_ids': args.external_ids,
     }
 
     render_dashboard(output_path=args.output, **render_kwargs)

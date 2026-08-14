@@ -116,10 +116,10 @@
     <div id="main-content">
         <div class="stats-grid" id="stats-grid"></div>
 
-        {% if sg_ids %}
+        {% if external_ids %}
         <details class="sg-ids-panel">
-            <summary>Sequencing Groups Analysed ({{ sg_ids|length }})</summary>
-            <p class="sg-ids-inline">{{ sg_ids | join(', ') }}</p>
+            <summary>Samples Analysed ({{ external_ids|length }})</summary>
+            <p class="sg-ids-inline">{{ external_ids | join(', ') }}</p>
         </details>
         {% endif %}
 
