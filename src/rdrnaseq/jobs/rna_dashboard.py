@@ -175,7 +175,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
             b.write_output(j.out[k], str(p))
 
         web_path = (
-            f'https://main-web.populationgenomics.org.au/{dataset_name}'
+            f'{config.config_retrieve(["storage", dataset_name, "web_url"])}'
             f'/transcriptome/dashboard/{output_paths["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
