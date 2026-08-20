@@ -19,6 +19,7 @@ METADATA_QUERY = gql(
     """
     query Pedigree($project: String!, $sgIds: [String!]!) {
         project(name: $project) {
+            meta
             sequencingGroups(id: {in_: $sgIds}) {
                 id
                 sample {
@@ -43,17 +44,21 @@ def register_analyses(output, analysis_type, cohort_ids, sg_ids, project_name, m
     complete_analysis_job(output, analysis_type, cohort_ids, sg_ids, project_name, meta)
 
 
-def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str, str | int]]:
+def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> tuple[dict[str, dict[str, str | int]], str]:
     """
     Query metamist for SG ID -> family/participant metadata.
 
-    Returns a dict mapping cpg_id to {family_id, external_id, affected}.
+    Returns a tuple of (cpg_metadata, display_name) where cpg_metadata maps
+    cpg_id to {family_id, external_id, affected} and display_name is the
+    project's display name from metamist (falls back to dataset_name).
     Runs at stage construction time (not inside the batch job).
     """
     query_dataset = dataset_name
 
     logger.info(f'Querying metamist project={query_dataset!r} for {len(sg_ids)} SG IDs: {sg_ids}')
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
+
+    display_name = result.get('project', {}).get('meta', {}).get('display_name', dataset_name)
 
     returned_sgs = result.get('project', {}).get('sequencingGroups', [])
     logger.info(f'Metamist returned {len(returned_sgs)} sequencing groups')
@@ -73,7 +78,7 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> dict[str, dict[str
             continue
 
     logger.info(f'Built metadata for {len(cpg_metadata)}/{len(sg_ids)} SG IDs')
-    return cpg_metadata
+    return cpg_metadata, display_name
 
 
 def make_dashboards(
@@ -114,7 +119,7 @@ def make_dashboards(
         output_paths = output_paths_by_dataset[dataset_name]
 
         logger.info(f'Processing dataset {dataset_name} with SG IDs: {sg_ids}')
-        cpg_metadata = get_cpg_metadata(dataset_name, sg_ids)
+        cpg_metadata, display_name = get_cpg_metadata(dataset_name, sg_ids)
 
         j = b.new_job(f'rna_dashboard_{dataset_name}_{cohort_id}', attributes=job_attrs | {'tool': 'rna_dashboard'})
         j.image(config.config_retrieve('workflow')['driver_image'])
@@ -134,6 +139,8 @@ def make_dashboards(
         for cpg_id, meta in cpg_metadata.items():
             csv_lines.append(f'{cpg_id},{meta["family_id"]},{meta["external_id"]},{meta["affected"]}')
         family_csv_content = '\n'.join(csv_lines)
+
+        external_ids = ' '.join(str(cpg_metadata[sid]['external_id']) for sid in sg_ids)
 
         j.command(
             command(f"""\
@@ -156,7 +163,10 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
     --variant-bed-filename rna_dashboard.variants.bed \
     --variant-tsv-filename rna_dashboard.variants.tsv \
     --dataset-name {dataset_name} \
-    --cohort-id {cohort_id}
+    --cohort-id {cohort_id} \
+    --display-name '{display_name}' \
+    --cell-library-type '{cell_library_type}' \
+    --external-ids {external_ids}
 """),
         )
         for k, p in output_paths.items():
@@ -165,7 +175,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
             b.write_output(j.out[k], str(p))
 
         web_path = (
-            f'https://main-web.populationgenomics.org.au/{dataset_name}'
+            f'{config.config_retrieve(["storage", dataset_name, "web_url"])}'
             f'/transcriptome/dashboard/{output_paths["folder"]}/rna_dashboard.html'
         )
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
