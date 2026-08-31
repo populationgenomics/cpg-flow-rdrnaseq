@@ -16,6 +16,7 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
+from cpg_utils.hail_batch import get_batch
 from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import (
@@ -23,9 +24,12 @@ from rdrnaseq.jobs import (
     align_rna,
     bam_to_cram,
     count,
+    fastp_qc,
     fraser,
+    multiqc,
     outrider,
     rna_dashboard,
+    samtools_stats,
     trim,
     variant_splice_match,
 )
@@ -106,7 +110,86 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 samples_needing_bams: dict[str, Job] = {}
 
 
+@stage.stage(analysis_type='qc', analysis_keys=['qc_json'])
+class FastpQC(stage.SequencingGroupStage):
+    """Run fastp in QC-only mode and check per-sample thresholds."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
+        if not get_trim_inputs(sequencing_group):
+            return None
+        prefix = sequencing_group.dataset.prefix() / 'qc' / 'fastp'
+        return {
+            'qc_json': prefix / f'{sequencing_group.id}.fastp.json',
+            'qc_html': prefix / f'{sequencing_group.id}.fastp.html',
+            'status': prefix / f'{sequencing_group.id}.qc_status.txt',
+        }
+
+    def queue_jobs(
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,
+    ) -> stage.StageOutput | None:
+        input_fq_pairs = get_trim_inputs(sequencing_group)
+        if not isinstance(input_fq_pairs, FastqPairs):
+            raise Exception(f'Invalid FASTQ input for {sequencing_group}')
+
+        outputs = self.expected_outputs(sequencing_group)
+        jobs = fastp_qc.fastp_qc(
+            input_fq_pairs=input_fq_pairs,
+            sg_id=sequencing_group.id,
+            qc_json_path=outputs['qc_json'],
+            qc_html_path=outputs['qc_html'],
+            status_path=outputs['status'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+
+
+@stage.stage(required_stages=[FastpQC], analysis_type='qc', analysis_keys=['json', 'html'])
+class FastpMultiQC(stage.DatasetStage):
+    """Aggregate fastp QC reports with MultiQC, check thresholds, send Slack, record Metamist flags."""
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        sg_hash = dataset.get_alignment_inputs_hash()
+        return {
+            'html': dataset.web_prefix() / 'qc' / 'fastp' / sg_hash / 'multiqc.html',
+            'latest': dataset.web_prefix() / 'qc' / 'fastp' / 'latest' / 'multiqc.html',
+            'json': dataset.prefix() / 'qc' / 'fastp' / sg_hash / 'multiqc_data.json',
+            'checks': dataset.prefix() / 'qc' / 'fastp' / sg_hash / 'qc-checks.json',
+        }
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+        outputs = self.expected_outputs(dataset)
+
+        qc_json_by_sgid = inputs.as_path_by_target(FastpQC)
+        paths = [str(v['qc_json']) for v in qc_json_by_sgid.values()]
+
+        if base_url := dataset.web_url():
+            html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
+        else:
+            html_url = None
+
+        send_to_slack = config.config_retrieve(['workflow', 'fastp_multiqc', 'send_to_slack'], default=True)
+
+        jobs = multiqc.multiqc(
+            tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'fastp',
+            paths=paths,
+            ending_to_trim={'.fastp.json'},
+            modules_to_trim_endings={'fastp'},
+            dataset=dataset,
+            outputs=outputs,
+            out_checks_path=outputs['checks'],
+            out_html_url=html_url,
+            job_attrs=self.get_job_attrs(dataset),
+            sequencing_group_id_map=dataset.rich_id_map(),
+            label='Fastp',
+            send_to_slack=send_to_slack,
+        )
+        return self.make_outputs(dataset, data=outputs, jobs=jobs)
+
+
 @stage.stage(
+    required_stages=FastpQC,
     analysis_type='cram',
     analysis_keys=['cram'],
 )
@@ -138,6 +221,9 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         outputs = self.expected_outputs(sequencing_group)
         attributes = self.get_job_attrs(sequencing_group)
+
+        qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+        qc_status_path = qc_outputs['status']
 
         jobs = []
 
@@ -172,6 +258,10 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             path=outputs['cram'],
             index_path=f'{outputs["cram"]!s}.crai',
         )
+
+        b = get_batch()
+        status_local = b.read_input(str(qc_status_path))
+
         try:
             align_jobs = align_rna.align(
                 fastq_pairs=trimmed_fastq_pairs,
@@ -179,6 +269,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_bam=aligned_bam,
                 output_cram=aligned_cram,
                 job_attrs=attributes,
+                qc_status_file=status_local,
             )
             logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
