@@ -92,6 +92,8 @@ class Fastp:
         nthreads: int = 3,
         polyg: bool = True,
         polyx: bool = False,
+        json_path: str | None = None,
+        html_path: str | None = None,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
@@ -119,6 +121,10 @@ class Fastp:
             self.command.append('--disable_trim_poly_g')
         if polyx:
             self.command.append('--trim_poly_x')
+        if json_path:
+            self.command.extend(['--json', str(json_path)])
+        if html_path:
+            self.command.extend(['--html', str(html_path)])
 
     def __str__(self) -> str:
         return ' '.join(self.command)
