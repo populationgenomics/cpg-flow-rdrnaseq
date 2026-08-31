@@ -318,6 +318,25 @@ class Somalier(stage.SequencingGroupStage):
 
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='qc', analysis_keys=['stats'])
+class SamtoolsStats(stage.SequencingGroupStage):
+    """Run samtools stats on aligned CRAMs for post-alignment QC."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        return {
+            'stats': sequencing_group.dataset.prefix() / 'qc' / 'samtools_stats' / f'{sequencing_group.id}.stats.txt',
+        }
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        output = self.expected_outputs(sequencing_group)
+        cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        j = samtools_stats.samtools_stats(
+            input_cram=cram,
+            output_stats=output['stats'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=output, jobs=j)
+
 
 @stage.stage(required_stages=TrimAlignRNA)
 class Count(stage.SequencingGroupStage):
