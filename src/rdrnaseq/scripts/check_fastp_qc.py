@@ -15,16 +15,10 @@ import click
 
 from cpg_utils import config
 
-from rdrnaseq.utils import QcFlag
+from rdrnaseq.utils import DIRECTIONS, QcFlag, load_thresholds, worst_breach
 
 logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
-
-DIRECTIONS: dict[str, tuple[str, Any]] = {
-    'under': ('<', lambda val, thresh: val < thresh),
-    'over': ('>', lambda val, thresh: val > thresh),
-}
-SEVERITIES: tuple[str, ...] = ('fail', 'warn')
 
 # Maps config metric keys to (json_path, description) in fastp JSON.
 # json_path is a dot-separated path into the fastp JSON structure.
@@ -47,7 +41,7 @@ FASTP_METRIC_MAP: dict[str, tuple[str, str]] = {
 
 def resolve_json_path(data: dict, path: str) -> float | None:
     """Walk a dot-separated path into a nested dict, returning None if any key is missing."""
-    current = data
+    current: Any = data
     for key in path.split('.'):
         if not isinstance(current, dict) or key not in current:
             return None
@@ -56,27 +50,6 @@ def resolve_json_path(data: dict, path: str) -> float | None:
         return float(current)
     except (TypeError, ValueError):
         return None
-
-
-def load_thresholds() -> dict[str, dict[str, dict[str, float]]]:
-    """Read thresholds from config: {direction: {metric: {severity: threshold}}}."""
-    seq_type = config.config_retrieve(['workflow', 'sequencing_type'])
-    thresholds: dict[str, dict[str, dict[str, float]]] = {d: {} for d in DIRECTIONS}
-    for severity in SEVERITIES:
-        for direction in DIRECTIONS:
-            configured = config.config_retrieve(['qc_thresholds', seq_type, severity, direction], {})
-            for metric, threshold in configured.items():
-                thresholds[direction].setdefault(metric, {})[severity] = threshold
-    return thresholds
-
-
-def worst_breach(val: float, tiers: dict[str, float], direction: str) -> tuple[str, float] | None:
-    """Return (severity, threshold) of the most severe tier breached, else None."""
-    _, breaches = DIRECTIONS[direction]
-    for severity in SEVERITIES:
-        if severity in tiers and breaches(val, tiers[severity]):
-            return severity, tiers[severity]
-    return None
 
 
 def extract_metrics(fastp_data: dict) -> dict[str, float]:
@@ -102,7 +75,8 @@ def main(
 ):
     """Check fastp QC metrics against configured thresholds."""
     today = datetime.now()  # noqa: DTZ005
-    thresholds = load_thresholds()
+    seq_type = config.config_retrieve(['workflow', 'sequencing_type'])
+    thresholds = load_thresholds(seq_type)
 
     if not any(thresholds[d] for d in DIRECTIONS):
         logging.warning('No qc_thresholds configured; all samples will pass.')
