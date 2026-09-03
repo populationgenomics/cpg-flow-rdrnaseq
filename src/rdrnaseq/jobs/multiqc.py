@@ -2,7 +2,7 @@
 Batch jobs to run MultiQC, check thresholds, and record QC flags.
 """
 
-from hailtop.batch import Batch, ResourceFile
+from hailtop.batch import Batch, Resource, ResourceFile
 from hailtop.batch.job import Job
 
 from cpg_flow import resources, targets
@@ -99,10 +99,9 @@ def multiqc(
         check_j.depends_on(mqc_j)
         all_jobs.append(check_j)
 
-        dataset_name = config.dataset_for_access_level(dataset.name)
         record_j = _record_qc_flags_job(
             b=batch_instance,
-            dataset_name=dataset_name,
+            dataset_name=dataset.name,
             label=label,
             sg_id_mapping_file=sg_id_mapping_file,
             check_multiqc_json_file=check_j.output,
@@ -116,7 +115,7 @@ def multiqc(
 
 def _rich_sequencing_group_id_seds(
     rich_id_map: dict[str, str],
-    file_names: list[str | ResourceFile],
+    file_names: list[str | Resource | ResourceFile],
 ) -> str:
     """Extend sequencing group IDs in files with external IDs via sed."""
     cmd = ''
@@ -128,7 +127,7 @@ def _rich_sequencing_group_id_seds(
 
 def _check_report_job(
     b: Batch,
-    multiqc_json_file: ResourceFile,
+    multiqc_json_file: Resource | ResourceFile,
     dataset_name: str,
     multiqc_html_url: str | None = None,
     label: str | None = None,
@@ -165,8 +164,8 @@ def _record_qc_flags_job(
     b: Batch,
     dataset_name: str,
     label: str,
-    sg_id_mapping_file: ResourceFile,
-    check_multiqc_json_file: ResourceFile,
+    sg_id_mapping_file: Resource | ResourceFile,
+    check_multiqc_json_file: Resource | ResourceFile,
     job_attrs: dict | None = None,
 ) -> Job:
     """Record QC flags in Metamist."""
