@@ -133,7 +133,11 @@ class FastpQC(stage.SequencingGroupStage):
         if not isinstance(input_fq_pairs, FastqPairs):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
+        # CPG-Flow only calls queue_jobs when expected_outputs returned non-None,
+        # but mypy can't infer that, so we narrow the type explicitly.
         outputs = self.expected_outputs(sequencing_group)
+        if not outputs:
+            raise RuntimeError(f'queue_jobs called for {sequencing_group} but expected_outputs returned None')
         jobs = fastp_qc.fastp_qc(
             input_fq_pairs=input_fq_pairs,
             sg_id=sequencing_group.id,
@@ -222,17 +226,16 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         outputs = self.expected_outputs(sequencing_group)
         attributes = self.get_job_attrs(sequencing_group)
 
-        qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
-        qc_status_path = qc_outputs['status']
-
-        jobs = []
-
-        # Run trim
         input_fq_pairs = get_trim_inputs(sequencing_group)
         if not input_fq_pairs:
             return self.make_outputs(target=sequencing_group, error_msg='No FASTQ input found')
         if not isinstance(input_fq_pairs, FastqPairs):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
+
+        qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+        qc_status_path = qc_outputs['status']
+
+        jobs = []
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
@@ -317,6 +320,7 @@ class Somalier(stage.SequencingGroupStage):
         )
 
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
+
 
 @stage.stage(required_stages=TrimAlignRNA, analysis_type='qc', analysis_keys=['stats'])
 class SamtoolsStats(stage.SequencingGroupStage):
