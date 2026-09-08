@@ -25,9 +25,7 @@ logging.getLogger().setLevel(logging.DEBUG)
 
 def warn_unmatched_metrics(sections: list[dict[str, Any]], seq_type: str) -> None:
     """Log a warning for any configured threshold metric MultiQC never surfaced."""
-    present_metrics = {
-        metric for section in sections for val_by_metric in section.values() for metric in val_by_metric
-    }
+    present_metrics = {metric for section in sections for val_by_metric in section.values() for metric in val_by_metric}
     thresholds = load_thresholds(seq_type)
     configured_metrics = {metric for by_metric in thresholds.values() for metric in by_metric}
 
