@@ -23,10 +23,10 @@ logging.basicConfig()
 logging.getLogger().setLevel(logging.DEBUG)
 
 
-def warn_unmatched_metrics(sections: dict[str, Any], seq_type: str) -> None:
+def warn_unmatched_metrics(sections: list[dict[str, Any]], seq_type: str) -> None:
     """Log a warning for any configured threshold metric MultiQC never surfaced."""
     present_metrics = {
-        metric for section in sections.values() for val_by_metric in section.values() for metric in val_by_metric
+        metric for section in sections for val_by_metric in section.values() for metric in val_by_metric
     }
     thresholds = load_thresholds(seq_type)
     configured_metrics = {metric for by_metric in thresholds.values() for metric in by_metric}
@@ -55,7 +55,7 @@ def run(
         d = json.load(f)
         sections = d['report_general_stats_data']
 
-    sections_summary = ', '.join(f'{name}={len(section)} samples' for name, section in sections.items())
+    sections_summary = ', '.join(f'section_{i}={len(section)} samples' for i, section in enumerate(sections))
     logging.info(f'report_general_stats_data: {sections_summary}')
 
     warn_unmatched_metrics(sections, seq_type)
@@ -65,7 +65,7 @@ def run(
     qc_flags_by_sample: dict[str, list[QcFlag]] = defaultdict(list)
     for direction, metric_tiers in thresholds.items():
         sign = DIRECTIONS[direction][0]
-        for section_name, section in sections.items():
+        for section_idx, section in enumerate(sections):
             for sample, val_by_metric in section.items():
                 for metric, tiers in metric_tiers.items():
                     if metric not in val_by_metric:
@@ -93,7 +93,7 @@ def run(
                             value=val,
                             comparison=sign,
                             threshold=threshold,
-                            section=section_name,
+                            section=f'section_{section_idx}',
                             date=today.isoformat(timespec='seconds'),
                             ar_guid=config.try_get_ar_guid(),
                             severity=severity,
