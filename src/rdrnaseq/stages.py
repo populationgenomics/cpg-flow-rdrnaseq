@@ -165,8 +165,8 @@ class FastpMultiQC(stage.DatasetStage):
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         outputs = self.expected_outputs(dataset)
 
-        qc_json_by_sgid = inputs.as_path_by_target(FastpQC)
-        paths = [str(v['qc_json']) for v in qc_json_by_sgid.values()]
+        qc_json_by_sgid = inputs.as_path_by_target(FastpQC, key='qc_json')
+        paths = [str(p) for p in qc_json_by_sgid.values()]
 
         if base_url := dataset.web_url():
             html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
