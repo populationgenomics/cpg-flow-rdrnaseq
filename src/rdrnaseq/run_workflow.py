@@ -16,10 +16,12 @@ from cpg_flow.workflow import run_workflow
 from rdrnaseq.stages import (
     Count,
     Dashboard,
-    FastpMultiQC,
     FastpQC,
+    FastqScreen,
     Fraser,
     Outrider,
+    PicardRnaSeqMetrics,
+    QcMultiQC,
     SamtoolsStats,
     Somalier,
     TrimAlignRNA,
@@ -43,11 +45,13 @@ def cli_main() -> None:
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
     stages = [
         FastpQC,
-        FastpMultiQC,
+        FastqScreen,
         TrimAlignRNA,
         Count,
         Somalier,
         SamtoolsStats,
+        PicardRnaSeqMetrics,
+        QcMultiQC,
         Fraser,
         Outrider,
         VariantSpliceMatch,
