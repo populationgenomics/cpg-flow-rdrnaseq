@@ -25,9 +25,11 @@ from rdrnaseq.jobs import (
     bam_to_cram,
     count,
     fastp_qc,
+    fastq_screen,
     fraser,
     multiqc,
     outrider,
+    picard_rnaseq_metrics,
     rna_dashboard,
     samtools_stats,
     trim,
@@ -149,47 +151,38 @@ class FastpQC(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
-@stage.stage(required_stages=[FastpQC], analysis_type='qc', analysis_keys=['json', 'html'])
-class FastpMultiQC(stage.DatasetStage):
-    """Aggregate fastp QC reports with MultiQC, check thresholds, send Slack, record Metamist flags."""
+@stage.stage(analysis_type='qc', analysis_keys=['screen_txt'])
+class FastqScreen(stage.SequencingGroupStage):
+    """Screen raw FASTQs against a reference panel for contamination."""
 
-    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
-        sg_hash = dataset.get_alignment_inputs_hash()
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
+        if not get_trim_inputs(sequencing_group):
+            return None
+        prefix = sequencing_group.dataset.prefix() / 'qc' / 'fastq_screen'
         return {
-            'html': dataset.web_prefix() / 'qc' / 'fastp' / sg_hash / 'multiqc.html',
-            'latest': dataset.web_prefix() / 'qc' / 'fastp' / 'latest' / 'multiqc.html',
-            'json': dataset.prefix() / 'qc' / 'fastp' / sg_hash / 'multiqc_data.json',
-            'checks': dataset.prefix() / 'qc' / 'fastp' / sg_hash / 'qc-checks.json',
+            'screen_txt': prefix / f'{sequencing_group.id}_screen.txt',
+            'screen_html': prefix / f'{sequencing_group.id}_screen.html',
         }
 
-    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
-        outputs = self.expected_outputs(dataset)
+    def queue_jobs(
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,
+    ) -> stage.StageOutput | None:
+        input_fq_pairs = get_trim_inputs(sequencing_group)
+        if not isinstance(input_fq_pairs, FastqPairs):
+            raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
-        qc_json_by_sgid = inputs.as_path_by_target(FastpQC, key='qc_json')
-        paths = [str(p) for p in qc_json_by_sgid.values()]
-
-        if base_url := dataset.web_url():
-            html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
-        else:
-            html_url = None
-
-        send_to_slack = config.config_retrieve(['workflow', 'fastp_multiqc', 'send_to_slack'], default=True)
-
-        jobs = multiqc.multiqc(
-            tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'fastp',
-            paths=paths,
-            ending_to_trim={'.fastp.json'},
-            modules_to_trim_endings={'fastp'},
-            dataset=dataset,
-            outputs=outputs,
-            out_checks_path=outputs['checks'],
-            out_html_url=html_url,
-            job_attrs=self.get_job_attrs(dataset),
-            sequencing_group_id_map=dataset.rich_id_map(),
-            label='Fastp',
-            send_to_slack=send_to_slack,
+        outputs = self.expected_outputs(sequencing_group)
+        if not outputs:
+            raise RuntimeError(f'queue_jobs called for {sequencing_group} but expected_outputs returned None')
+        jobs = fastq_screen.fastq_screen(
+            input_fq_pairs=input_fq_pairs,
+            output_txt=outputs['screen_txt'],
+            output_html=outputs['screen_html'],
+            job_attrs=self.get_job_attrs(sequencing_group),
         )
-        return self.make_outputs(dataset, data=outputs, jobs=jobs)
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
 
 
 @stage.stage(
@@ -232,8 +225,10 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         if not isinstance(input_fq_pairs, FastqPairs):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
-        qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
-        qc_status_path = qc_outputs['status']
+        gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
+        if gate_enabled:
+            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+            qc_status_path = qc_outputs['status']
 
         jobs = []
         trimmed_fastq_pairs = []
@@ -263,7 +258,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         )
 
         b = get_batch()
-        status_local = b.read_input(str(qc_status_path))
+        status_local = b.read_input(str(qc_status_path)) if gate_enabled else None
 
         try:
             align_jobs = align_rna.align(
@@ -340,6 +335,83 @@ class SamtoolsStats(stage.SequencingGroupStage):
             job_attrs=self.get_job_attrs(sequencing_group),
         )
         return self.make_outputs(sequencing_group, data=output, jobs=j)
+
+
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='qc', analysis_keys=['metrics'])
+class PicardRnaSeqMetrics(stage.SequencingGroupStage):
+    """Run Picard CollectRnaSeqMetrics for RNA-specific alignment QC."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        return {
+            'metrics': sequencing_group.dataset.prefix()
+            / 'qc'
+            / 'picard_rnaseq_metrics'
+            / f'{sequencing_group.id}.rnaseq_metrics',
+        }
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        output = self.expected_outputs(sequencing_group)
+        cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        j = picard_rnaseq_metrics.collect_rnaseq_metrics(
+            input_cram=cram,
+            output_metrics=output['metrics'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=output, jobs=j)
+
+
+@stage.stage(
+    required_stages=[FastpQC, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
+    analysis_type='qc',
+    analysis_keys=['json', 'html'],
+)
+class QcMultiQC(stage.DatasetStage):
+    """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        sg_hash = dataset.get_alignment_inputs_hash()
+        return {
+            'html': dataset.web_prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc.html',
+            'latest': dataset.web_prefix() / 'qc' / 'multiqc' / 'latest' / 'multiqc.html',
+            'json': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc_data.json',
+            'checks': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'qc-checks.json',
+        }
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+        outputs = self.expected_outputs(dataset)
+        paths: list[str] = []
+
+        for target_paths in inputs.as_path_by_target(FastpQC, key='qc_json').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(FastqScreen, key='screen_txt').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(SamtoolsStats, key='stats').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values():
+            paths.append(str(target_paths))
+
+        if base_url := dataset.web_url():
+            html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
+        else:
+            html_url = None
+
+        send_to_slack = config.config_retrieve(['workflow', 'qc_multiqc', 'send_to_slack'], default=True)
+
+        jobs = multiqc.multiqc(
+            tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'qc',
+            paths=paths,
+            ending_to_trim={'.fastp.json', '_screen.txt', '.stats.txt', '.rnaseq_metrics'},
+            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
+            dataset=dataset,
+            outputs=outputs,
+            out_checks_path=outputs['checks'],
+            out_html_url=html_url,
+            job_attrs=self.get_job_attrs(dataset),
+            sequencing_group_id_map=dataset.rich_id_map(),
+            label='rna',
+            send_to_slack=send_to_slack,
+        )
+        return self.make_outputs(dataset, data=outputs, jobs=jobs)
 
 
 @stage.stage(required_stages=TrimAlignRNA)
