@@ -1,5 +1,5 @@
 """
-Run Picard CollectRnaSeqMetrics on a CRAM file for RNA-specific QC.
+Run Picard CollectRnaSeqMetrics on a BAM file for RNA-specific QC.
 """
 
 from hailtop.batch.job import Job
@@ -10,7 +10,7 @@ from cpg_utils.hail_batch import command, get_batch
 
 
 def collect_rnaseq_metrics(
-    input_cram: str | Path,
+    input_bam: str | Path,
     output_metrics: Path,
     job_attrs: dict[str, str],
 ) -> Job:
@@ -28,7 +28,7 @@ def collect_rnaseq_metrics(
         dict=star_dict,
         fai=f'{star_fasta}.fai',
     )
-    cram_input = b.read_input_group(**{'cram': str(input_cram), 'cram.crai': f'{input_cram}.crai'})
+    bam_input = b.read_input_group(**{'bam': str(input_bam), 'bam.bai': f'{input_bam}.bai'})
     ref_flat = b.read_input(config.config_retrieve(['references', 'ref_flat']))
 
     rib_intervals_cmd = ''
@@ -41,7 +41,7 @@ def collect_rnaseq_metrics(
         command(
             f"""\
             picard -Xms1g -Xmx3g CollectRnaSeqMetrics \
-              -I {cram_input.cram} \
+              -I {bam_input.bam} \
               -O {j.metrics} \
               -R {reference.base} \
               -REF_FLAT {ref_flat} \

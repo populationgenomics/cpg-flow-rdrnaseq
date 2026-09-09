@@ -351,13 +351,29 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
         output = self.expected_outputs(sequencing_group)
-        cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
+
+        jobs: list[Job] = []
+        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
+            bam_job = bam_to_cram.cram_to_bam(
+                input_cram_path=cram_and_bam_paths['cram'],
+                output_bam=cram_and_bam_paths['bam'],
+                job_attrs=self.get_job_attrs(target=sequencing_group),
+            )
+            logger.info(f'Generating BAM for {sequencing_group.id} (PicardRnaSeqMetrics stage)')
+            samples_needing_bams[sequencing_group.id] = bam_job
+            jobs.append(bam_job)
+
         j = picard_rnaseq_metrics.collect_rnaseq_metrics(
-            input_cram=cram,
+            input_bam=cram_and_bam_paths['bam'],
             output_metrics=output['metrics'],
             job_attrs=self.get_job_attrs(sequencing_group),
         )
-        return self.make_outputs(sequencing_group, data=output, jobs=j)
+        if sequencing_group.id in samples_needing_bams:
+            j.depends_on(samples_needing_bams[sequencing_group.id])
+        jobs.append(j)
+
+        return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
 
 @stage.stage(
