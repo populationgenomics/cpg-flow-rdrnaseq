@@ -6,7 +6,7 @@ from hailtop.batch.job import Job
 
 from cpg_flow.resources import STANDARD
 from cpg_utils import Path, config
-from cpg_utils.hail_batch import command, fasta_res_group, get_batch
+from cpg_utils.hail_batch import command, get_batch
 
 
 def collect_rnaseq_metrics(
@@ -21,7 +21,12 @@ def collect_rnaseq_metrics(
     j.image(config.config_retrieve(['images', 'picard']))
     STANDARD.set_resources(j=j, ncpu=2, storage_gb=30)
 
-    reference = fasta_res_group(b)
+    star_fasta = config.config_retrieve(['references', 'star', 'fasta'])
+    reference = b.read_input_group(
+        base=star_fasta,
+        dict=star_fasta.replace('.fa', '.dict'),
+        fai=f'{star_fasta}.fai',
+    )
     cram_input = b.read_input_group(**{'cram': str(input_cram), 'cram.crai': f'{input_cram}.crai'})
     ref_flat = b.read_input(config.config_retrieve(['references', 'ref_flat']))
 
