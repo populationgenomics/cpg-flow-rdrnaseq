@@ -22,9 +22,10 @@ def collect_rnaseq_metrics(
     STANDARD.set_resources(j=j, ncpu=2, storage_gb=30)
 
     star_fasta = config.config_retrieve(['references', 'star', 'fasta'])
+    star_dict = config.config_retrieve(['references', 'star', 'dict'], star_fasta.replace('.fa', '.dict'))
     reference = b.read_input_group(
         base=star_fasta,
-        dict=star_fasta.replace('.fa', '.dict'),
+        dict=star_dict,
         fai=f'{star_fasta}.fai',
     )
     cram_input = b.read_input_group(**{'cram': str(input_cram), 'cram.crai': f'{input_cram}.crai'})

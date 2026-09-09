@@ -50,7 +50,7 @@ def fastq_screen(
     conf_lines = [f'THREADS\t{nthreads}']
     for name, rg in genomes.items():
         conf_lines.append(f'DATABASE\t{name}\t{rg}')
-    write_conf = ' && '.join([f"echo '{line}' >> /tmp/fastq_screen.conf" for line in conf_lines])
+    write_conf = ' && '.join([f'echo "{line}" >> /tmp/fastq_screen.conf' for line in conf_lines])
 
     j.command(
         command(
