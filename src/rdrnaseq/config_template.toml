@@ -31,6 +31,7 @@ samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0
 samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
 subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"
 somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
+multiqc = "australia-southeast1-docker.pkg.dev/cpg-common/images/multiqc:1.14-1"
 
 [fraser]
 pval_cutoff = 0.1
@@ -51,6 +52,30 @@ ncpu=12
 pval_cutoff = 0.1
 z_cutoff = 0.0
 ncpu = 12
+
+[workflow.fastp_qc]
+# When true, samples that fail QC thresholds are blocked from alignment.
+# Set to false to let all samples through (flags are still recorded).
+block_failed_samples = true
+# Per-sample override: these SG IDs bypass the gate even if they fail.
+# skip_gate_for = ["CPG123456", "CPG789012"]
+
+[workflow.fastp_multiqc]
+send_to_slack = true
+
+[qc_thresholds.transcriptome.fail.under]
+"after_filtering_q30_rate" = 0.70
+"after_filtering_total_reads" = 1000000
+
+[qc_thresholds.transcriptome.warn.under]
+"after_filtering_q30_rate" = 0.80
+"after_filtering_total_reads" = 5000000
+
+[qc_thresholds.transcriptome.fail.over]
+"duplication_rate" = 0.80
+
+[qc_thresholds.transcriptome.warn.over]
+"duplication_rate" = 0.50
 
 [variant_splice_match]
 #mt_path = ... override for all mts

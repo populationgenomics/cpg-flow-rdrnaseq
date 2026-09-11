@@ -60,6 +60,7 @@ def align(
     job_attrs: dict,
     output_bam: BamPath,
     output_cram: CramPath,
+    qc_status_file=None,
 ) -> list[Job]:
     """
     Align (potentially multiple) FASTQ pairs using STAR,
@@ -89,6 +90,7 @@ def align(
             sample_name=sample_name,
             star_ref=star_ref,  # Pass the instantiated ref
             job_attrs=job_attrs,
+            qc_status_file=qc_status_file if _job_idx == 1 else None,
         )
         jobs.append(j)
         aligned_bams.append(bam)
@@ -148,6 +150,7 @@ def align_fq_pair(
     sample_name: str,
     star_ref: GCPStarReference,  # Received as argument
     job_attrs: dict,
+    qc_status_file=None,
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Takes an input FastqPair object, and creates a job to align it using STAR.
@@ -163,7 +166,20 @@ def align_fq_pair(
     # If possible, could check fastq size, but keeping safe default.
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=200)
 
+    gate_cmd = ''
+    if qc_status_file:
+        gate_cmd = f"""
+        QC_STATUS=$(head -1 {qc_status_file})
+        if [ "$QC_STATUS" = "FAIL" ]; then
+            echo "Sample {sample_name} failed pre-alignment QC, skipping alignment"
+            cat {qc_status_file}
+            exit 1
+        fi
+        echo "Sample {sample_name} passed pre-alignment QC, proceeding"
+        """
+
     j.command(f"""
+        {gate_cmd}
         STAR \\
         --runThreadN {(res.get_nthreads() - 1)} \\
         --genomeDir $(dirname {star_ref.genome_res_group.genome!s}) \\
