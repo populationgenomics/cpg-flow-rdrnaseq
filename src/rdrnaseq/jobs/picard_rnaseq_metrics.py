@@ -38,8 +38,6 @@ def collect_rnaseq_metrics(
         rib_intervals = b.read_input(rib_intervals_path)
         rib_intervals_cmd = f'-RIBOSOMAL_INTERVALS {rib_intervals}'
 
-    stop_after = config.config_retrieve(['workflow', 'picard_rnaseq_metrics', 'stop_after'], 10000000)
-
     j.command(
         command(
             f"""\
@@ -50,7 +48,6 @@ def collect_rnaseq_metrics(
               -REF_FLAT {ref_flat} \
               {rib_intervals_cmd} \
               -STRAND_SPECIFICITY SECOND_READ_TRANSCRIPTION_STRAND \
-              -STOP_AFTER {stop_after} \
               -VALIDATION_STRINGENCY SILENT
             """,
             monitor_space=True,
