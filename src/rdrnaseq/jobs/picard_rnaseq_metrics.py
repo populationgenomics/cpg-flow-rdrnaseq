@@ -19,7 +19,8 @@ def collect_rnaseq_metrics(
 
     j = b.new_bash_job('PicardRnaSeqMetrics', job_attrs | {'tool': 'picard'})
     j.image(config.config_retrieve(['images', 'picard']))
-    STANDARD.set_resources(j=j, ncpu=2, storage_gb=30)
+    STANDARD.set_resources(j=j, ncpu=2, mem_gb=16, storage_gb=30)
+    j.spot(config.config_retrieve(['workflow', 'picard_rnaseq_metrics', 'spot'], True))
 
     star_fasta = config.config_retrieve(['references', 'star', 'fasta'])
     star_dict = config.config_retrieve(['references', 'star', 'dict'], star_fasta.replace('.fa', '.dict'))
@@ -37,6 +38,8 @@ def collect_rnaseq_metrics(
         rib_intervals = b.read_input(rib_intervals_path)
         rib_intervals_cmd = f'-RIBOSOMAL_INTERVALS {rib_intervals}'
 
+    stop_after = config.config_retrieve(['workflow', 'picard_rnaseq_metrics', 'stop_after'], 10000000)
+
     j.command(
         command(
             f"""\
@@ -47,6 +50,7 @@ def collect_rnaseq_metrics(
               -REF_FLAT {ref_flat} \
               {rib_intervals_cmd} \
               -STRAND_SPECIFICITY SECOND_READ_TRANSCRIPTION_STRAND \
+              -STOP_AFTER {stop_after} \
               -VALIDATION_STRINGENCY SILENT
             """,
             monitor_space=True,
