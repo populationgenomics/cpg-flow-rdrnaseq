@@ -46,6 +46,7 @@ def fastp_qc(
         fastp_j.image(image_path('fastp'))
         res = STANDARD.set_resources(j=fastp_j, ncpu=nthreads, storage_gb=30)
 
+        # No --out1/--out2: fastp runs in report-only mode
         fastp_cmd = (
             f'fastp'
             f' --in1 {fq_resources.r1}'
