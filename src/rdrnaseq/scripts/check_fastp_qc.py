@@ -6,19 +6,16 @@ thresholds. Writes a plain-text status file used by the alignment gate.
 """
 
 import json
-import logging
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
 import click
+from loguru import logger
 
 from cpg_utils import config
 
 from rdrnaseq.utils import DIRECTIONS, QcFlag, load_thresholds, worst_breach
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
 
 # Maps config metric keys to (json_path, description) in fastp JSON.
 # json_path is a dot-separated path into the fastp JSON structure.
@@ -79,7 +76,7 @@ def main(
     thresholds = load_thresholds(seq_type)
 
     if not any(thresholds[d] for d in DIRECTIONS):
-        logging.warning('No qc_thresholds configured; all samples will pass.')
+        logger.warning('No qc_thresholds configured; all samples will pass.')
 
     all_flags: list[QcFlag] = []
 
@@ -94,16 +91,16 @@ def main(
             for metric, tiers in metric_tiers.items():
                 if metric not in metrics:
                     if metric in FASTP_METRIC_MAP:
-                        logging.warning(f'{sample_id}: metric {metric!r} not found in fastp JSON')
+                        logger.warning(f'{sample_id}: metric {metric!r} not found in fastp JSON')
                     continue
                 val = metrics[metric]
                 verdict = worst_breach(val, tiers, direction)
                 if verdict is None:
-                    logging.info(f'{sample_id}: {metric}={val:.4f} within thresholds')
+                    logger.info(f'{sample_id}: {metric}={val:.4f} within thresholds')
                     continue
                 severity, threshold = verdict
                 icon = '!' if severity == 'fail' else '?'
-                logging.info(f'{icon} {sample_id}: {metric}={val:.4f}{sign}{threshold:.4f} [{severity}]')
+                logger.info(f'{icon} {sample_id}: {metric}={val:.4f}{sign}{threshold:.4f} [{severity}]')
                 all_flags.append(
                     QcFlag(
                         flag=metric,
@@ -122,10 +119,10 @@ def main(
     skip_gate_for: list[str] = config.config_retrieve(['workflow', 'fastp_qc', 'skip_gate_for'], [])
 
     if has_fail and not block_failed:
-        logging.warning(f'{sample_id}: would FAIL but block_failed_samples is false — forcing PASS')
+        logger.warning(f'{sample_id}: would FAIL but block_failed_samples is false — forcing PASS')
         status = 'PASS'
     elif has_fail and sample_id in skip_gate_for:
-        logging.warning(f'{sample_id}: would FAIL but is in skip_gate_for override list — forcing PASS')
+        logger.warning(f'{sample_id}: would FAIL but is in skip_gate_for override list — forcing PASS')
         status = 'PASS'
     else:
         status = 'FAIL' if has_fail else 'PASS'
@@ -145,7 +142,7 @@ def main(
             json.dump(result, f, indent=2)
 
     n_fail = sum(1 for f in all_flags if f.severity == 'fail')
-    logging.info(f'{sample_id}: QC status = {status} ({len(all_flags)} flags, {n_fail} fail)')
+    logger.info(f'{sample_id}: QC status = {status} ({len(all_flags)} flags, {n_fail} fail)')
 
 
 if __name__ == '__main__':
