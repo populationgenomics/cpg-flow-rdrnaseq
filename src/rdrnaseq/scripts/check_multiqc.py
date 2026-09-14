@@ -3,21 +3,18 @@ Checks metrics in MultiQC output against configurable thresholds.
 """
 
 import json
-import logging
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime
 from typing import Any
 
 import click
+from loguru import logger
 
 from cpg_utils import config, to_path
 from cpg_utils.slack import send_message
 
 from rdrnaseq.utils import DIRECTIONS, QcFlag, load_thresholds, worst_breach
-
-logging.basicConfig()
-logging.getLogger().setLevel(logging.DEBUG)
 
 
 def warn_unmatched_metrics(sections: list[dict[str, Any]], seq_type: str) -> None:
@@ -27,9 +24,9 @@ def warn_unmatched_metrics(sections: list[dict[str, Any]], seq_type: str) -> Non
     configured_metrics = {metric for by_metric in thresholds.values() for metric in by_metric}
 
     if not configured_metrics:
-        logging.warning(f'No qc_thresholds configured for sequencing_type={seq_type!r}; nothing will be checked.')
+        logger.warning(f'No qc_thresholds configured for sequencing_type={seq_type!r}; nothing will be checked.')
     for metric in sorted(configured_metrics - present_metrics):
-        logging.warning(
+        logger.warning(
             f'Configured threshold metric {metric!r} not found in any MultiQC section for '
             f'sequencing_type={seq_type!r}; this threshold will not be checked.',
         )
@@ -50,7 +47,7 @@ def run(
         sections = d['report_general_stats_data']
 
     sections_summary = ', '.join(f'section_{i}={len(section)} samples' for i, section in enumerate(sections))
-    logging.info(f'report_general_stats_data: {sections_summary}')
+    logger.info(f'report_general_stats_data: {sections_summary}')
 
     warn_unmatched_metrics(sections, seq_type)
 
@@ -67,14 +64,14 @@ def run(
                     try:
                         val = float(val_by_metric[metric])
                     except (TypeError, ValueError):
-                        logging.warning(
+                        logger.warning(
                             f'{sample}: metric {metric!r} has non-numeric value '
                             f'{val_by_metric[metric]!r}; skipping threshold check.',
                         )
                         continue
                     verdict = worst_breach(val, tiers, direction)
                     if verdict is None:
-                        logging.info(f'{sample}: {metric}={val:0.2f} within thresholds')
+                        logger.info(f'{sample}: {metric}={val:0.2f} within thresholds')
                         continue
                     severity, threshold = verdict
                     icon = '!' if severity == 'fail' else '?'
@@ -93,8 +90,8 @@ def run(
                             severity=severity,
                         ),
                     )
-                    logging.info(f'{icon} {sample}: {line}')
-    logging.info('')
+                    logger.info(f'{icon} {sample}: {line}')
+    logger.info('')
 
     report_title = title or 'MultiQC report'
     title_line = f'*[{dataset}]* <{html_url}|{report_title}>' if dataset and html_url else report_title
@@ -110,7 +107,7 @@ def run(
     else:
         messages.append(f'{title_line}')
     text = '\n'.join(messages)
-    logging.info(text)
+    logger.info(text)
 
     result: dict[str, Any] = {
         'title': report_title,
@@ -134,8 +131,8 @@ def _write_and_notify(result: dict[str, Any], text: str, output_json_path: str |
     if config.config_retrieve(['workflow', 'qc_multiqc', 'send_to_slack'], default=True):
         try:
             send_message(text)
-        except Exception:
-            logging.exception('Failed to send Slack notification — continuing without it')
+        except (OSError, ValueError):
+            logger.exception('Failed to send Slack notification — continuing without it')
 
 
 @click.command()
