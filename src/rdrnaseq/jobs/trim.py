@@ -92,6 +92,8 @@ class Fastp:
         nthreads: int = 3,
         polyg: bool = True,
         polyx: bool = False,
+        json_path: str | None = None,
+        html_path: str | None = None,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
@@ -119,6 +121,10 @@ class Fastp:
             self.command.append('--disable_trim_poly_g')
         if polyx:
             self.command.append('--trim_poly_x')
+        if json_path:
+            self.command.extend(['--json', str(json_path)])
+        if html_path:
+            self.command.extend(['--html', str(html_path)])
 
     def __str__(self) -> str:
         return ' '.join(self.command)
@@ -132,6 +138,7 @@ def trim(
     job_attrs: dict[str, str],
     output_fq_pair: FastqPair | None = None,
     requested_nthreads: int | None = None,
+    qc_status_file=None,
 ) -> tuple[Job | None, FastqPair]:
     """
     Takes an input FastqPair object, and creates a job to trim the FASTQs using fastp.
@@ -204,6 +211,15 @@ def trim(
         polyg=trim_config.get('polyG', True),
         polyx=trim_config.get('polyX', False),
     )
+    if qc_status_file:
+        trim_j.command(f"""\
+            QC_STATUS=$(head -1 {qc_status_file})
+            if [ "$QC_STATUS" = "FAIL" ]; then
+                echo "Sample failed pre-alignment QC, skipping trim"
+                cat {qc_status_file}
+                exit 1
+            fi
+        """)
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 
     # Write output to file

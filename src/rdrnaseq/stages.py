@@ -16,6 +16,7 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
+from cpg_utils.hail_batch import get_batch
 from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import (
@@ -23,9 +24,14 @@ from rdrnaseq.jobs import (
     align_rna,
     bam_to_cram,
     count,
+    fastp_qc,
+    fastq_screen,
     fraser,
+    multiqc,
     outrider,
+    picard_rnaseq_metrics,
     rna_dashboard,
+    samtools_stats,
     trim,
     variant_splice_match,
 )
@@ -106,7 +112,104 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 samples_needing_bams: dict[str, Job] = {}
 
 
+def ensure_bam(
+    sequencing_group: targets.SequencingGroup,
+    cram_and_bam_paths: dict[str, str | Path],
+    job_attrs: dict,
+) -> list[Job]:
+    """If no BAM exists or is in-flight, schedule a CRAM→BAM conversion and register it."""
+    if utils.exists(cram_and_bam_paths['bam']) or sequencing_group.id in samples_needing_bams:
+        return []
+    bam_job = bam_to_cram.cram_to_bam(
+        input_cram_path=cram_and_bam_paths['cram'],
+        output_bam=cram_and_bam_paths['bam'],
+        job_attrs=job_attrs,
+    )
+    samples_needing_bams[sequencing_group.id] = bam_job
+    return [bam_job]
+
+
+def depend_on_bam(job: Job, sequencing_group_id: str) -> None:
+    """Wire up depends_on for an in-flight BAM creation job, if one exists."""
+    if parent := samples_needing_bams.get(sequencing_group_id):
+        job.depends_on(parent)
+
+
+@stage.stage(analysis_type='qc', analysis_keys=['qc_json'])
+class FastpQC(stage.SequencingGroupStage):
+    """Run fastp in QC-only mode and check per-sample thresholds."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
+        if not get_trim_inputs(sequencing_group):
+            return None
+        prefix = sequencing_group.dataset.prefix() / 'qc' / 'fastp'
+        return {
+            'qc_json': prefix / f'{sequencing_group.id}.fastp.json',
+            'qc_html': prefix / f'{sequencing_group.id}.fastp.html',
+            'status': prefix / f'{sequencing_group.id}.qc_status.txt',
+        }
+
+    def queue_jobs(
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,
+    ) -> stage.StageOutput | None:
+        input_fq_pairs = get_trim_inputs(sequencing_group)
+        if not isinstance(input_fq_pairs, FastqPairs):
+            raise Exception(f'Invalid FASTQ input for {sequencing_group}')
+
+        # CPG-Flow only calls queue_jobs when expected_outputs returned non-None,
+        # but mypy can't infer that, so we narrow the type explicitly.
+        outputs = self.expected_outputs(sequencing_group)
+        if not outputs:
+            raise RuntimeError(f'queue_jobs called for {sequencing_group} but expected_outputs returned None')
+        jobs = fastp_qc.fastp_qc(
+            input_fq_pairs=input_fq_pairs,
+            sg_id=sequencing_group.id,
+            qc_json_path=outputs['qc_json'],
+            qc_html_path=outputs['qc_html'],
+            status_path=outputs['status'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+
+
+@stage.stage(analysis_type='qc', analysis_keys=['screen_txt'])
+class FastqScreen(stage.SequencingGroupStage):
+    """Screen raw FASTQs against a reference panel for contamination."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
+        if not get_trim_inputs(sequencing_group):
+            return None
+        prefix = sequencing_group.dataset.prefix() / 'qc' / 'fastq_screen'
+        return {
+            'screen_txt': prefix / f'{sequencing_group.id}_screen.txt',
+            'screen_html': prefix / f'{sequencing_group.id}_screen.html',
+        }
+
+    def queue_jobs(
+        self,
+        sequencing_group: targets.SequencingGroup,
+        inputs: stage.StageInput,
+    ) -> stage.StageOutput | None:
+        input_fq_pairs = get_trim_inputs(sequencing_group)
+        if not isinstance(input_fq_pairs, FastqPairs):
+            raise Exception(f'Invalid FASTQ input for {sequencing_group}')
+
+        outputs = self.expected_outputs(sequencing_group)
+        if not outputs:
+            raise RuntimeError(f'queue_jobs called for {sequencing_group} but expected_outputs returned None')
+        jobs = fastq_screen.fastq_screen(
+            input_fq_pairs=input_fq_pairs,
+            output_txt=outputs['screen_txt'],
+            output_html=outputs['screen_html'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
+
+
 @stage.stage(
+    required_stages=FastpQC,
     analysis_type='cram',
     analysis_keys=['cram'],
 )
@@ -139,19 +242,26 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         outputs = self.expected_outputs(sequencing_group)
         attributes = self.get_job_attrs(sequencing_group)
 
-        jobs = []
-
-        # Run trim
         input_fq_pairs = get_trim_inputs(sequencing_group)
         if not input_fq_pairs:
             return self.make_outputs(target=sequencing_group, error_msg='No FASTQ input found')
         if not isinstance(input_fq_pairs, FastqPairs):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
+
+        gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
+        qc_status_file = None
+        if gate_enabled:
+            b = get_batch()
+            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+            qc_status_file = b.read_input(str(qc_outputs['status']))
+
+        jobs = []
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
                 input_fq_pair=fq_pair,
                 job_attrs=attributes,
+                qc_status_file=qc_status_file,
             )
             if j:
                 if not isinstance(j, Job):
@@ -161,7 +271,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 raise Exception(f'Error trimming FASTQs for {sequencing_group}')
             trimmed_fastq_pairs.append(out_fqs)
 
-        # Run alignment
         trimmed_fastq_pairs = FastqPairs(trimmed_fastq_pairs)
 
         aligned_bam = BamPath(
@@ -172,6 +281,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             path=outputs['cram'],
             index_path=f'{outputs["cram"]!s}.crai',
         )
+
         try:
             align_jobs = align_rna.align(
                 fastq_pairs=trimmed_fastq_pairs,
@@ -228,6 +338,105 @@ class Somalier(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
 
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='qc', analysis_keys=['stats'])
+class SamtoolsStats(stage.SequencingGroupStage):
+    """Run samtools stats on aligned CRAMs for post-alignment QC."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        return {
+            'stats': sequencing_group.dataset.prefix() / 'qc' / 'samtools_stats' / f'{sequencing_group.id}.stats.txt',
+        }
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        output = self.expected_outputs(sequencing_group)
+        cram = inputs.as_str(sequencing_group, TrimAlignRNA, 'cram')
+        j = samtools_stats.samtools_stats(
+            input_cram=cram,
+            output_stats=output['stats'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        return self.make_outputs(sequencing_group, data=output, jobs=j)
+
+
+@stage.stage(required_stages=TrimAlignRNA, analysis_type='qc', analysis_keys=['metrics'])
+class PicardRnaSeqMetrics(stage.SequencingGroupStage):
+    """Run Picard CollectRnaSeqMetrics for RNA-specific alignment QC."""
+
+    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path]:
+        return {
+            'metrics': sequencing_group.dataset.prefix()
+            / 'qc'
+            / 'picard_rnaseq_metrics'
+            / f'{sequencing_group.id}.rnaseq_metrics',
+        }
+
+    def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
+        output = self.expected_outputs(sequencing_group)
+        cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
+
+        jobs = ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
+        j = picard_rnaseq_metrics.collect_rnaseq_metrics(
+            input_bam=cram_and_bam_paths['bam'],
+            output_metrics=output['metrics'],
+            job_attrs=self.get_job_attrs(sequencing_group),
+        )
+        depend_on_bam(j, sequencing_group.id)
+        jobs.append(j)
+
+        return self.make_outputs(sequencing_group, data=output, jobs=jobs)
+
+
+@stage.stage(
+    required_stages=[FastpQC, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
+    analysis_type='qc',
+    analysis_keys=['json', 'html'],
+)
+class QcMultiQC(stage.DatasetStage):
+    """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        sg_hash = dataset.get_alignment_inputs_hash()
+        return {
+            'html': dataset.web_prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc.html',
+            'latest': dataset.web_prefix() / 'qc' / 'multiqc' / 'latest' / 'multiqc.html',
+            'json': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc_data.json',
+            'checks': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'qc-checks.json',
+        }
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
+        outputs = self.expected_outputs(dataset)
+        paths: list[str] = []
+
+        for target_paths in inputs.as_path_by_target(FastpQC, key='qc_json').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(FastqScreen, key='screen_txt').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(SamtoolsStats, key='stats').values():
+            paths.append(str(target_paths))
+        for target_paths in inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values():
+            paths.append(str(target_paths))
+
+        if base_url := dataset.web_url():
+            html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
+        else:
+            raise ValueError(f'Dataset {dataset.name} has no web_url configured — cannot generate MultiQC HTML link')
+
+        jobs = multiqc.multiqc(
+            tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'qc',
+            paths=paths,
+            ending_to_trim={'.fastp.json', '_screen.txt', '.stats.txt', '.rnaseq_metrics'},
+            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
+            dataset=dataset,
+            outputs=outputs,
+            out_checks_path=outputs['checks'],
+            out_html_url=html_url,
+            job_attrs=self.get_job_attrs(dataset),
+            sequencing_group_id_map=dataset.rich_id_map(),
+            label='rna',
+        )
+        return self.make_outputs(dataset, data=outputs, jobs=jobs)
+
+
 @stage.stage(required_stages=TrimAlignRNA)
 class Count(stage.SequencingGroupStage):
     """
@@ -244,26 +453,10 @@ class Count(stage.SequencingGroupStage):
         }
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
-        """
-        Queue a job to count the reads with featureCounts.
-        """
         outputs = self.expected_outputs(sequencing_group)
-
-        jobs = []
-
         cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
 
-        # if this stage is running, this sample needs to have a BAM
-        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
-            bam_job = bam_to_cram.cram_to_bam(
-                input_cram_path=cram_and_bam_paths['cram'],
-                output_bam=cram_and_bam_paths['bam'],
-                job_attrs=self.get_job_attrs(target=sequencing_group),
-            )
-            logger.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
-            samples_needing_bams[sequencing_group.id] = bam_job
-            jobs.append(bam_job)
-
+        ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
         count_job = count.count(
             input_bam=cram_and_bam_paths['bam'],
             output_path=outputs['count'],
@@ -271,10 +464,7 @@ class Count(stage.SequencingGroupStage):
             sg_id=sequencing_group.id,
             job_attrs=self.get_job_attrs(sequencing_group),
         )
-
-        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
-        if sequencing_group.id in samples_needing_bams:
-            count_job.depends_on(samples_needing_bams[sequencing_group.id])
+        depend_on_bam(count_job, sequencing_group.id)
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=count_job)
 
@@ -308,16 +498,7 @@ class Fraser(stage.CohortStage):
 
         for sequencing_group in cohort.get_sequencing_groups():
             cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
-            # if this stage is running, this sample needs to have a BAM
-            if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
-                bam_job = bam_to_cram.cram_to_bam(
-                    input_cram_path=cram_and_bam_paths['cram'],
-                    output_bam=cram_and_bam_paths['bam'],
-                    job_attrs=self.get_job_attrs(target=sequencing_group),
-                )
-                logger.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
-                samples_needing_bams[sequencing_group.id] = bam_job
-
+            ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
         jobs = fraser.fraser_pipeline(
@@ -329,14 +510,9 @@ class Fraser(stage.CohortStage):
         )
 
         jobs = [x for x in jobs if x is not None]
-        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
         for sequencing_group in cohort.get_sequencing_groups():
-            parent_job = samples_needing_bams.get(sequencing_group.id)
-            if parent_job and jobs:
-                for j in jobs:
-                    # We already cleaned 'jobs', but a final check doesn't hurt
-                    if j is not None:
-                        j.depends_on(parent_job)
+            for j in jobs:
+                depend_on_bam(j, sequencing_group.id)
 
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
