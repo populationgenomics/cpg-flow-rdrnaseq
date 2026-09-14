@@ -14,7 +14,7 @@ def multiqc(
     tmp_prefix: Path,
     paths: list[Path | str],
     outputs: dict[str, Path],
-    out_html_url: str | None,
+    out_html_url: str,
     out_checks_path: Path | None,
     label: str,
     ending_to_trim: set[str],
@@ -22,7 +22,6 @@ def multiqc(
     job_attrs: dict,
     sequencing_group_id_map: dict[str, str],
     extra_config: dict | None = None,
-    send_to_slack: bool = True,
 ) -> list[Job]:
     """Run MultiQC, then check thresholds, then record flags in Metamist."""
     batch_instance = hail_batch.get_batch()
@@ -46,8 +45,9 @@ def multiqc(
             for sgid, new_sgid in sequencing_group_id_map.items():
                 fh.write('\t'.join([sgid, new_sgid]) + '\n')
 
-    file_list = batch_instance.read_input(file_list_path)
     sg_id_mapping_file = batch_instance.read_input(sg_id_mapping_file_path)
+
+    qc_inputs = [batch_instance.read_input(str(p)) for p in paths]
 
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
@@ -58,10 +58,11 @@ def multiqc(
             serialised = f'{k}: {v}'
             extra_config_param += f'--cl-config "{serialised}" \\\n            '
 
+    copy_inputs = '\n'.join(f'cp {inp} inputs/' for inp in qc_inputs)
     mqc_j.command(
         f"""
         mkdir inputs
-        cat {file_list} | gcloud storage cp -I inputs/
+        {copy_inputs}
 
         multiqc -f inputs -o output \\
         --replace-names {sg_id_mapping_file} \\
@@ -76,8 +77,7 @@ def multiqc(
         cp output/report_data/multiqc_data.json {mqc_j.json}
         """
     )
-    if out_html_url:
-        mqc_j.command(f'echo "HTML URL: {out_html_url}"')
+    mqc_j.command(f'echo "HTML URL: {out_html_url}"')
 
     batch_instance.write_output(mqc_j.html, outputs['html'])
     batch_instance.write_output(mqc_j.html, outputs['latest'])
@@ -94,7 +94,6 @@ def multiqc(
             label=label,
             out_checks_path=out_checks_path,
             job_attrs=job_attrs,
-            send_to_slack=send_to_slack,
         )
         check_j.depends_on(mqc_j)
         all_jobs.append(check_j)
@@ -129,12 +128,11 @@ def _check_report_job(
     b: Batch,
     multiqc_json_file: Resource | ResourceFile,
     dataset_name: str,
-    multiqc_html_url: str | None = None,
-    label: str | None = None,
+    multiqc_html_url: str,
+    label: str,
     rich_id_map: dict[str, str] | None = None,
     out_checks_path: Path | None = None,
     job_attrs: dict | None = None,
-    send_to_slack: bool = True,
 ) -> Job:
     """Check MultiQC JSON and send Slack notification."""
     title = f'MultiQC [{label}]' if label else 'MultiQC'
@@ -150,8 +148,7 @@ def _check_report_job(
     --html-url {multiqc_html_url} \\
     --dataset {dataset_name} \\
     --title "{title}" \\
-    --output-json {check_j.output} \\
-    --{'no-' if not send_to_slack else ''}send-to-slack
+    --output-json {check_j.output}
     """
 
     check_j.command(cmd)

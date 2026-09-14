@@ -226,6 +226,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
         gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
+        qc_status_path = None
         if gate_enabled:
             qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
             qc_status_path = qc_outputs['status']
@@ -409,9 +410,7 @@ class QcMultiQC(stage.DatasetStage):
         if base_url := dataset.web_url():
             html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
         else:
-            html_url = None
-
-        send_to_slack = config.config_retrieve(['workflow', 'qc_multiqc', 'send_to_slack'], default=True)
+            raise ValueError(f'Dataset {dataset.name} has no web_url configured — cannot generate MultiQC HTML link')
 
         jobs = multiqc.multiqc(
             tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'qc',
@@ -425,7 +424,6 @@ class QcMultiQC(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
             sequencing_group_id_map=dataset.rich_id_map(),
             label='rna',
-            send_to_slack=send_to_slack,
         )
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 

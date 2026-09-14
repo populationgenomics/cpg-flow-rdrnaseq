@@ -43,7 +43,6 @@ def run(
     html_url: str | None = None,
     dataset: str | None = None,
     title: str | None = None,
-    send_to_slack: bool = True,
     output_json_path: str | None = None,
 ) -> dict[str, Any]:
     seq_type = config.config_retrieve(['workflow', 'sequencing_type'])
@@ -116,9 +115,6 @@ def run(
     text = '\n'.join(messages)
     logging.info(text)
 
-    if send_to_slack:
-        send_message(text)
-
     result: dict[str, Any] = {
         'title': report_title,
         'dataset': dataset,
@@ -128,11 +124,21 @@ def run(
         'qc_flags': {sample: [asdict(flag) for flag in flags] for sample, flags in qc_flags_by_sample.items()},
     }
 
+    _write_and_notify(result, text, output_json_path)
+    return result
+
+
+def _write_and_notify(result: dict[str, Any], text: str, output_json_path: str | None) -> None:
+    """Write JSON output and optionally send Slack notification."""
     if output_json_path:
         with to_path(output_json_path).open('w') as f:
             json.dump(result, f, indent=2)
 
-    return result
+    if config.config_retrieve(['workflow', 'qc_multiqc', 'send_to_slack'], default=True):
+        try:
+            send_message(text)
+        except Exception:
+            logging.exception('Failed to send Slack notification — continuing without it')
 
 
 @click.command()
@@ -140,14 +146,12 @@ def run(
 @click.option('--html-url', 'html_url', help='MultiQC HTML URL')
 @click.option('--dataset', 'dataset', help='Dataset name')
 @click.option('--title', 'title', help='Report title')
-@click.option('--send-to-slack/--no-send-to-slack', 'send_to_slack', help='Send to Slack')
 @click.option('--output-json', 'output_json_path', help='Path to write structured QC flags JSON output')
 def main(
     multiqc_json_path: str,
     html_url: str | None = None,
     dataset: str | None = None,
     title: str | None = None,
-    send_to_slack: bool = True,
     output_json_path: str | None = None,
 ):
     """Check metrics in MultiQC json against thresholds, send Slack, write flags."""
@@ -156,7 +160,6 @@ def main(
         html_url=html_url,
         dataset=dataset,
         title=title,
-        send_to_slack=send_to_slack,
         output_json_path=output_json_path,
     )
 

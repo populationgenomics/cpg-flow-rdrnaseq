@@ -39,6 +39,15 @@ SG_META_MUTATION = gql(
 )
 
 
+def _make_qc_flag(sg_id: str, flag: dict, source: str) -> QcFlag:
+    """Construct a QcFlag from a dict, logging the dict contents on failure."""
+    try:
+        return QcFlag(**flag)
+    except TypeError:
+        logger.error(f'{sg_id} :: Cannot construct QcFlag from {source} flag dict: {flag}')
+        raise
+
+
 def compare_qc_flag(current_flag: dict, new_flag: dict) -> bool:
     """Returns True if the two flags refer to the same QC issue and the current flag is still unresolved."""
     return (
@@ -104,7 +113,7 @@ def reconcile_sg_qc_flags(
                 transition = f' ({old_severity} -> {flag["severity"]})' if old_severity != flag.get('severity') else ''
                 logger.info(f"{sg_id} :: {report} flag '{flag['flag']}' updated{transition}.")
                 stats['updated'] += 1
-            final_flags.append(QcFlag(**flag))
+            final_flags.append(_make_qc_flag(sg_id, flag, 'existing'))
     else:
         logger.info(f'{sg_id} :: No existing {report} flags, adding {len(new_qc_flags)} new flags.')
 
@@ -112,7 +121,7 @@ def reconcile_sg_qc_flags(
         if (flag['section'], flag['flag']) in existing_flag_keys:
             continue
         logger.info(f"{sg_id} :: Adding new {report} flag '{flag['flag']}'.")
-        final_flags.append(QcFlag(**flag))
+        final_flags.append(_make_qc_flag(sg_id, flag, 'new'))
         stats['added'] += 1
 
     query(
