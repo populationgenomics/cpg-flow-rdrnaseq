@@ -14,24 +14,44 @@ adapter_type = "ILLUMINA_TRUSEQ"
 ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
 ensg_to_symbol = "gs://cpg-rdnow-test-web/transcriptome/rna_dashboard/ensg_to_symbol.tsv"
 somalier_sites = "gs://cpg-common-main/references/somalier/sites.hg38.vcf.gz"
+ref_flat = "gs://cpg-common-test/references/hg38/v0/refFlat.txt"
+ribosomal_intervals = "gs://cpg-common-test/references/hg38/v0/ribosomal.interval_list"
 
 [references.star]
 ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"
 gtf = "gs://cpg-common-main/references/star/hg38/hg38.gtf"
 fasta = "gs://cpg-common-main/references/star/hg38/hg38.fa"
+dict = "gs://cpg-common-test/references/star/hg38/hg38.dict"
+
+[references.fastq_screen_genomes]
+Human = "gs://cpg-common-test/references/fastq_screen/Human/Homo_sapiens.GRCh38"
+Mouse = "gs://cpg-common-test/references/fastq_screen/Mouse/Mus_musculus.GRCm38"
+Rat = "gs://cpg-common-test/references/fastq_screen/Rat/Rnor_6.0"
+Drosophila = "gs://cpg-common-test/references/fastq_screen/Drosophila/BDGP6"
+Worm = "gs://cpg-common-test/references/fastq_screen/Worm/Caenorhabditis_elegans.WBcel235"
+Yeast = "gs://cpg-common-test/references/fastq_screen/Yeast/Saccharomyces_cerevisiae.R64-1-1"
+Arabidopsis = "gs://cpg-common-test/references/fastq_screen/Arabidopsis/Arabidopsis_thaliana.TAIR10"
+Ecoli = "gs://cpg-common-test/references/fastq_screen/E_coli/Ecoli"
+rRNA = "gs://cpg-common-test/references/fastq_screen/rRNA/GRCm38_rRNA"
+MT = "gs://cpg-common-test/references/fastq_screen/Mitochondria/mitochondria"
+PhiX = "gs://cpg-common-test/references/fastq_screen/PhiX/phi_plus_SNPs"
+Lambda = "gs://cpg-common-test/references/fastq_screen/Lambda/Lambda"
+Vectors = "gs://cpg-common-test/references/fastq_screen/Vectors/Vectors"
+Adapters = "gs://cpg-common-test/references/fastq_screen/Adapters/Contaminants"
 
 [images]
 star = "australia-southeast1-docker.pkg.dev/cpg-common/images/star:2.7.10b"
 fastp = "australia-southeast1-docker.pkg.dev/cpg-common/images/fastp:1.0.1-1"
 fraser = "australia-southeast1-docker.pkg.dev/cpg-common/images/fraser:2.4.6-1"
 outrider = "australia-southeast1-docker.pkg.dev/cpg-common/images/outrider:1.18.1"
-picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:2.27.4"
+picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:3.5.0-1"
 sambamba = "australia-southeast1-docker.pkg.dev/cpg-common/images/sambamba:1.0.1"
 samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0.1.26-1"
 samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
 subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"
 somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
 multiqc = "australia-southeast1-docker.pkg.dev/cpg-common/images/multiqc:1.14-1"
+fastq_screen = "australia-southeast1-docker.pkg.dev/cpg-common/images-dev/fastq_screen:0.15.3-1"
 
 [fraser]
 pval_cutoff = 0.1
@@ -60,23 +80,38 @@ block_failed_samples = true
 # Per-sample override: these SG IDs bypass the gate even if they fail.
 # skip_gate_for = ["CPG123456", "CPG789012"]
 
-[workflow.fastp_multiqc]
+[workflow.qc_multiqc]
 send_to_slack = true
 
 [qc_thresholds.transcriptome.fail.under]
 "after_filtering_q30_rate" = 0.70
 "after_filtering_total_reads" = 1000000
+"pct_mrna_bases" = 0.30
 
 [qc_thresholds.transcriptome.warn.under]
 "after_filtering_q30_rate" = 0.80
 "after_filtering_total_reads" = 5000000
+"pct_mrna_bases" = 0.50
 
 [qc_thresholds.transcriptome.fail.over]
 "duplication_rate" = 0.80
+"pct_ribosomal_bases" = 0.30
 
 [qc_thresholds.transcriptome.warn.over]
 "duplication_rate" = 0.50
+"pct_ribosomal_bases" = 0.10
+"median_5prime_to_3prime_bias" = 2.0
+
+# Contamination (FastQ Screen) — set after reviewing first run.
+# Metric keys must match MultiQC's fastq_screen column names.
+# "pct_one_hit_one_library_Ecoli" = 0.0
+# "pct_one_hit_one_library_Mouse" = 0.0
 
 [variant_splice_match]
 #mt_path = ... override for all mts
 #dataset_name = ... override for a mt from a specific dataset
+
+[slack]
+channel = 'workflows-qc'
+token_secret_id = 'slack-seqr-loader-token'
+token_project_id = 'seqr-308602'
