@@ -39,10 +39,14 @@ SG_META_MUTATION = gql(
 )
 
 
+_QC_FLAG_FIELDS = set(QcFlag.__dataclass_fields__)
+
+
 def _make_qc_flag(sg_id: str, flag: dict, source: str) -> QcFlag:
-    """Construct a QcFlag from a dict, logging the dict contents on failure."""
+    """Construct a QcFlag from a dict, filtering to known fields."""
+    known = {k: flag[k] for k in _QC_FLAG_FIELDS if k in flag}
     try:
-        return QcFlag(**flag)
+        return QcFlag(**known)
     except TypeError:
         logger.error(f'{sg_id} :: Cannot construct QcFlag from {source} flag dict: {flag}')
         raise
