@@ -249,30 +249,19 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
         gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
+        qc_status_file = None
+        if gate_enabled:
+            b = get_batch()
+            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+            qc_status_file = b.read_input(str(qc_outputs['status']))
 
         jobs = []
-        b = get_batch()
-
-        if gate_enabled:
-            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
-            status_local = b.read_input(str(qc_outputs['status']))
-            gate_j = b.new_bash_job('QC gate', attributes | {'tool': 'gate'})
-            gate_j.command(f"""\
-                QC_STATUS=$(head -1 {status_local})
-                if [ "$QC_STATUS" = "FAIL" ]; then
-                    echo "Sample {sequencing_group.id} failed pre-alignment QC"
-                    cat {status_local}
-                    exit 1
-                fi
-                echo "Sample {sequencing_group.id} passed pre-alignment QC"
-            """)
-            jobs.append(gate_j)
-
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
                 input_fq_pair=fq_pair,
                 job_attrs=attributes,
+                qc_status_file=qc_status_file,
             )
             if j:
                 if not isinstance(j, Job):
@@ -301,9 +290,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_cram=aligned_cram,
                 job_attrs=attributes,
             )
-            if gate_enabled:
-                for aj in align_jobs:
-                    aj.depends_on(gate_j)
             logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
