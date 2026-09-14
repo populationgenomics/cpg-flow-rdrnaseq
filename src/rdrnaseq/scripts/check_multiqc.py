@@ -1,8 +1,5 @@
 """
 Checks metrics in MultiQC output against configurable thresholds.
-
-Sends a Slack notification about flagged samples. To enable, set SLACK_TOKEN
-and SLACK_CHANNEL environment variables, and add the Slack app to the channel.
 """
 
 import json

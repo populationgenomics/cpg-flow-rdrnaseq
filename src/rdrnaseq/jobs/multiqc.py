@@ -21,11 +21,9 @@ def multiqc(
     modules_to_trim_endings: set[str],
     job_attrs: dict,
     sequencing_group_id_map: dict[str, str],
-    extra_config: dict | None = None,
 ) -> list[Job]:
     """Run MultiQC, then check thresholds, then record flags in Metamist."""
     batch_instance = hail_batch.get_batch()
-    extra_config = extra_config or {}
 
     title = f'MultiQC [{label}]'
 
@@ -34,13 +32,10 @@ def multiqc(
     mqc_j.cpu(8)
     mqc_j.storage('20Gi')
 
-    file_list_path = tmp_prefix / f'{dataset.get_alignment_inputs_hash()}_multiqc-file-list.txt'
     sg_id_mapping_file_path = tmp_prefix / f'{dataset.get_alignment_inputs_hash()}_rename-sg-map.tsv'
 
     dry_run = config.config_retrieve(['workflow', 'dry_run'], False)
     if not dry_run:
-        with file_list_path.open('w') as f:
-            f.writelines([f'{p}\n' for p in paths])
         with sg_id_mapping_file_path.open('w') as fh:
             for sgid, new_sgid in sequencing_group_id_map.items():
                 fh.write('\t'.join([sgid, new_sgid]) + '\n')
@@ -51,12 +46,6 @@ def multiqc(
 
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
-
-    extra_config_param = ''
-    if extra_config:
-        for k, v in extra_config.items():
-            serialised = f'{k}: {v}'
-            extra_config_param += f'--cl-config "{serialised}" \\\n            '
 
     copy_inputs = '\n'.join(f'cp {inp} inputs/' for inp in qc_inputs)
     mqc_j.command(
@@ -71,7 +60,6 @@ def multiqc(
         --cl-config "extra_fn_clean_exts: [{joined_endings}]" \\
         --cl-config "max_table_rows: 10000" \\
         --cl-config "use_filename_as_sample_name: [{joined_modules}]" \\
-        {extra_config_param}
 
         cp output/report.html {mqc_j.html}
         cp output/report_data/multiqc_data.json {mqc_j.json}
