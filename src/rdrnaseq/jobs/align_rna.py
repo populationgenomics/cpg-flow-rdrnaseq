@@ -60,7 +60,6 @@ def align(
     job_attrs: dict,
     output_bam: BamPath,
     output_cram: CramPath,
-    qc_status_file=None,
 ) -> list[Job]:
     """
     Align (potentially multiple) FASTQ pairs using STAR,
@@ -82,15 +81,14 @@ def align(
     jobs = []
     aligned_bams = []
 
-    for _job_idx, fq_pair in enumerate(fastq_pairs, 1):
+    for fq_pair in fastq_pairs:
         if not isinstance(fq_pair, FastqPair):
             raise TypeError(f'fastq_pairs must contain FastqPair objects, not {type(fq_pair)}')
         j, bam = align_fq_pair(
             fastq_pair=fq_pair,
             sample_name=sample_name,
-            star_ref=star_ref,  # Pass the instantiated ref
+            star_ref=star_ref,
             job_attrs=job_attrs,
-            qc_status_file=qc_status_file if _job_idx == 1 else None,
         )
         jobs.append(j)
         aligned_bams.append(bam)
@@ -148,9 +146,8 @@ def align(
 def align_fq_pair(
     fastq_pair: FastqPair,
     sample_name: str,
-    star_ref: GCPStarReference,  # Received as argument
+    star_ref: GCPStarReference,
     job_attrs: dict,
-    qc_status_file=None,
 ) -> tuple[Job, hb.ResourceFile]:
     """
     Takes an input FastqPair object, and creates a job to align it using STAR.
@@ -161,25 +158,9 @@ def align_fq_pair(
     j.image(config.config_retrieve(['images', 'star']))
 
     nthreads = 8
-
-    # Optimize storage: 200GB is generous.
-    # If possible, could check fastq size, but keeping safe default.
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=200)
 
-    gate_cmd = ''
-    if qc_status_file:
-        gate_cmd = f"""
-        QC_STATUS=$(head -1 {qc_status_file})
-        if [ "$QC_STATUS" = "FAIL" ]; then
-            echo "Sample {sample_name} failed pre-alignment QC, skipping alignment"
-            cat {qc_status_file}
-            exit 1
-        fi
-        echo "Sample {sample_name} passed pre-alignment QC, proceeding"
-        """
-
     j.command(f"""
-        {gate_cmd}
         STAR \\
         --runThreadN {(res.get_nthreads() - 1)} \\
         --genomeDir $(dirname {star_ref.genome_res_group.genome!s}) \\
