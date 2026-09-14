@@ -112,6 +112,29 @@ def get_trim_inputs(sequencing_group: targets.SequencingGroup) -> FastqPairs | N
 samples_needing_bams: dict[str, Job] = {}
 
 
+def ensure_bam(
+    sequencing_group: targets.SequencingGroup,
+    cram_and_bam_paths: dict[str, str | Path],
+    job_attrs: dict,
+) -> list[Job]:
+    """If no BAM exists or is in-flight, schedule a CRAM→BAM conversion and register it."""
+    if utils.exists(cram_and_bam_paths['bam']) or sequencing_group.id in samples_needing_bams:
+        return []
+    bam_job = bam_to_cram.cram_to_bam(
+        input_cram_path=cram_and_bam_paths['cram'],
+        output_bam=cram_and_bam_paths['bam'],
+        job_attrs=job_attrs,
+    )
+    samples_needing_bams[sequencing_group.id] = bam_job
+    return [bam_job]
+
+
+def depend_on_bam(job: Job, sequencing_group_id: str) -> None:
+    """Wire up depends_on for an in-flight BAM creation job, if one exists."""
+    if parent := samples_needing_bams.get(sequencing_group_id):
+        job.depends_on(parent)
+
+
 @stage.stage(analysis_type='qc', analysis_keys=['qc_json'])
 class FastpQC(stage.SequencingGroupStage):
     """Run fastp in QC-only mode and check per-sample thresholds."""
@@ -226,12 +249,25 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
         gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
-        qc_status_path = None
-        if gate_enabled:
-            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
-            qc_status_path = qc_outputs['status']
 
         jobs = []
+        b = get_batch()
+
+        if gate_enabled:
+            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
+            status_local = b.read_input(str(qc_outputs['status']))
+            gate_j = b.new_bash_job('QC gate', attributes | {'tool': 'gate'})
+            gate_j.command(f"""\
+                QC_STATUS=$(head -1 {status_local})
+                if [ "$QC_STATUS" = "FAIL" ]; then
+                    echo "Sample {sequencing_group.id} failed pre-alignment QC"
+                    cat {status_local}
+                    exit 1
+                fi
+                echo "Sample {sequencing_group.id} passed pre-alignment QC"
+            """)
+            jobs.append(gate_j)
+
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
@@ -246,7 +282,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 raise Exception(f'Error trimming FASTQs for {sequencing_group}')
             trimmed_fastq_pairs.append(out_fqs)
 
-        # Run alignment
         trimmed_fastq_pairs = FastqPairs(trimmed_fastq_pairs)
 
         aligned_bam = BamPath(
@@ -258,9 +293,6 @@ class TrimAlignRNA(stage.SequencingGroupStage):
             index_path=f'{outputs["cram"]!s}.crai',
         )
 
-        b = get_batch()
-        status_local = b.read_input(str(qc_status_path)) if gate_enabled else None
-
         try:
             align_jobs = align_rna.align(
                 fastq_pairs=trimmed_fastq_pairs,
@@ -268,8 +300,10 @@ class TrimAlignRNA(stage.SequencingGroupStage):
                 output_bam=aligned_bam,
                 output_cram=aligned_cram,
                 job_attrs=attributes,
-                qc_status_file=status_local,
             )
+            if gate_enabled:
+                for aj in align_jobs:
+                    aj.depends_on(gate_j)
             logger.debug(f'Generating BAM for {sequencing_group.id} (Align stage)')
 
             # during this run, this SG will have a BAM created
@@ -354,24 +388,13 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
         output = self.expected_outputs(sequencing_group)
         cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
 
-        jobs: list[Job] = []
-        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
-            bam_job = bam_to_cram.cram_to_bam(
-                input_cram_path=cram_and_bam_paths['cram'],
-                output_bam=cram_and_bam_paths['bam'],
-                job_attrs=self.get_job_attrs(target=sequencing_group),
-            )
-            logger.info(f'Generating BAM for {sequencing_group.id} (PicardRnaSeqMetrics stage)')
-            samples_needing_bams[sequencing_group.id] = bam_job
-            jobs.append(bam_job)
-
+        jobs = ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
         j = picard_rnaseq_metrics.collect_rnaseq_metrics(
             input_bam=cram_and_bam_paths['bam'],
             output_metrics=output['metrics'],
             job_attrs=self.get_job_attrs(sequencing_group),
         )
-        if sequencing_group.id in samples_needing_bams:
-            j.depends_on(samples_needing_bams[sequencing_group.id])
+        depend_on_bam(j, sequencing_group.id)
         jobs.append(j)
 
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
@@ -444,26 +467,10 @@ class Count(stage.SequencingGroupStage):
         }
 
     def queue_jobs(self, sequencing_group: targets.SequencingGroup, inputs: stage.StageInput) -> stage.StageOutput:
-        """
-        Queue a job to count the reads with featureCounts.
-        """
         outputs = self.expected_outputs(sequencing_group)
-
-        jobs = []
-
         cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
 
-        # if this stage is running, this sample needs to have a BAM
-        if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
-            bam_job = bam_to_cram.cram_to_bam(
-                input_cram_path=cram_and_bam_paths['cram'],
-                output_bam=cram_and_bam_paths['bam'],
-                job_attrs=self.get_job_attrs(target=sequencing_group),
-            )
-            logger.info(f'Generating BAM for {sequencing_group.id} (Count stage)')
-            samples_needing_bams[sequencing_group.id] = bam_job
-            jobs.append(bam_job)
-
+        ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
         count_job = count.count(
             input_bam=cram_and_bam_paths['bam'],
             output_path=outputs['count'],
@@ -471,10 +478,7 @@ class Count(stage.SequencingGroupStage):
             sg_id=sequencing_group.id,
             job_attrs=self.get_job_attrs(sequencing_group),
         )
-
-        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
-        if sequencing_group.id in samples_needing_bams:
-            count_job.depends_on(samples_needing_bams[sequencing_group.id])
+        depend_on_bam(count_job, sequencing_group.id)
 
         return self.make_outputs(sequencing_group, data=outputs, jobs=count_job)
 
@@ -508,16 +512,7 @@ class Fraser(stage.CohortStage):
 
         for sequencing_group in cohort.get_sequencing_groups():
             cram_and_bam_paths = inputs.as_dict(sequencing_group, TrimAlignRNA)
-            # if this stage is running, this sample needs to have a BAM
-            if not (utils.exists(cram_and_bam_paths['bam']) or (sequencing_group.id in samples_needing_bams)):
-                bam_job = bam_to_cram.cram_to_bam(
-                    input_cram_path=cram_and_bam_paths['cram'],
-                    output_bam=cram_and_bam_paths['bam'],
-                    job_attrs=self.get_job_attrs(target=sequencing_group),
-                )
-                logger.info(f'Generating BAM for {sequencing_group.id} (FRASER stage)')
-                samples_needing_bams[sequencing_group.id] = bam_job
-
+            ensure_bam(sequencing_group, cram_and_bam_paths, self.get_job_attrs(target=sequencing_group))
             bam_inputs.append((sequencing_group.id, cram_and_bam_paths['bam']))
 
         jobs = fraser.fraser_pipeline(
@@ -529,14 +524,9 @@ class Fraser(stage.CohortStage):
         )
 
         jobs = [x for x in jobs if x is not None]
-        # if there was a non-alignment BAM creation job, this job must wait for that to conclude
         for sequencing_group in cohort.get_sequencing_groups():
-            parent_job = samples_needing_bams.get(sequencing_group.id)
-            if parent_job and jobs:
-                for j in jobs:
-                    # We already cleaned 'jobs', but a final check doesn't hurt
-                    if j is not None:
-                        j.depends_on(parent_job)
+            for j in jobs:
+                depend_on_bam(j, sequencing_group.id)
 
         return self.make_outputs(cohort, data=output, jobs=jobs)
 
