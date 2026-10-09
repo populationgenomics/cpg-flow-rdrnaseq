@@ -16,7 +16,6 @@ from cpg_flow.filetypes import (
     FastqPairs,
 )
 from cpg_utils import Path, config
-from cpg_utils.hail_batch import get_batch
 from metamist.graphql import gql, query
 
 from rdrnaseq.jobs import (
@@ -24,7 +23,6 @@ from rdrnaseq.jobs import (
     align_rna,
     bam_to_cram,
     count,
-    fastp_qc,
     fastq_screen,
     fraser,
     multiqc,
@@ -135,45 +133,6 @@ def depend_on_bam(job: Job, sequencing_group_id: str) -> None:
         job.depends_on(parent)
 
 
-@stage.stage(analysis_type='qc', analysis_keys=['qc_json'])
-class FastpQC(stage.SequencingGroupStage):
-    """Run fastp in QC-only mode and check per-sample thresholds."""
-
-    def expected_outputs(self, sequencing_group: targets.SequencingGroup) -> dict[str, Path] | None:
-        if not get_trim_inputs(sequencing_group):
-            return None
-        prefix = sequencing_group.dataset.prefix() / 'qc' / 'fastp'
-        return {
-            'qc_json': prefix / f'{sequencing_group.id}.fastp.json',
-            'qc_html': prefix / f'{sequencing_group.id}.fastp.html',
-            'status': prefix / f'{sequencing_group.id}.qc_status.txt',
-        }
-
-    def queue_jobs(
-        self,
-        sequencing_group: targets.SequencingGroup,
-        inputs: stage.StageInput,
-    ) -> stage.StageOutput | None:
-        input_fq_pairs = get_trim_inputs(sequencing_group)
-        if not isinstance(input_fq_pairs, FastqPairs):
-            raise Exception(f'Invalid FASTQ input for {sequencing_group}')
-
-        # CPG-Flow only calls queue_jobs when expected_outputs returned non-None,
-        # but mypy can't infer that, so we narrow the type explicitly.
-        outputs = self.expected_outputs(sequencing_group)
-        if not outputs:
-            raise RuntimeError(f'queue_jobs called for {sequencing_group} but expected_outputs returned None')
-        jobs = fastp_qc.fastp_qc(
-            input_fq_pairs=input_fq_pairs,
-            sg_id=sequencing_group.id,
-            qc_json_path=outputs['qc_json'],
-            qc_html_path=outputs['qc_html'],
-            status_path=outputs['status'],
-            job_attrs=self.get_job_attrs(sequencing_group),
-        )
-        return self.make_outputs(sequencing_group, data=outputs, jobs=jobs)
-
-
 @stage.stage(analysis_type='qc', analysis_keys=['screen_txt'])
 class FastqScreen(stage.SequencingGroupStage):
     """Screen raw FASTQs against a reference panel for contamination."""
@@ -209,7 +168,6 @@ class FastqScreen(stage.SequencingGroupStage):
 
 
 @stage.stage(
-    required_stages=FastpQC,
     analysis_type='cram',
     analysis_keys=['cram'],
 )
@@ -248,20 +206,12 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         if not isinstance(input_fq_pairs, FastqPairs):
             raise Exception(f'Invalid FASTQ input for {sequencing_group}')
 
-        gate_enabled = config.config_retrieve(['workflow', 'fastp_qc', 'block_failed_samples'], True)
-        qc_status_file = None
-        if gate_enabled:
-            b = get_batch()
-            qc_outputs = inputs.as_dict(sequencing_group, FastpQC)
-            qc_status_file = b.read_input(str(qc_outputs['status']))
-
         jobs = []
         trimmed_fastq_pairs = []
         for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
                 input_fq_pair=fq_pair,
                 job_attrs=attributes,
-                qc_status_file=qc_status_file,
             )
             if j:
                 if not isinstance(j, Job):
@@ -387,7 +337,7 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
 
 
 @stage.stage(
-    required_stages=[FastpQC, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
+    required_stages=[FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
     analysis_keys=['json', 'html'],
 )
@@ -407,8 +357,6 @@ class QcMultiQC(stage.DatasetStage):
         outputs = self.expected_outputs(dataset)
         paths: list[str] = []
 
-        for target_paths in inputs.as_path_by_target(FastpQC, key='qc_json').values():
-            paths.append(str(target_paths))
         for target_paths in inputs.as_path_by_target(FastqScreen, key='screen_txt').values():
             paths.append(str(target_paths))
         for target_paths in inputs.as_path_by_target(SamtoolsStats, key='stats').values():
@@ -424,8 +372,8 @@ class QcMultiQC(stage.DatasetStage):
         jobs = multiqc.multiqc(
             tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'qc',
             paths=paths,
-            ending_to_trim={'.fastp.json', '_screen.txt', '.stats.txt', '.rnaseq_metrics'},
-            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
+            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics'},
+            modules_to_trim_endings={'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             dataset=dataset,
             outputs=outputs,
             out_checks_path=outputs['checks'],

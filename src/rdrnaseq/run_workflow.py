@@ -16,7 +16,6 @@ from cpg_flow.workflow import run_workflow
 from rdrnaseq.stages import (
     Count,
     Dashboard,
-    FastpQC,
     FastqScreen,
     Fraser,
     Outrider,
@@ -44,7 +43,6 @@ def cli_main() -> None:
     # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
     # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
     stages = [
-        FastpQC,
         FastqScreen,
         TrimAlignRNA,
         Count,
