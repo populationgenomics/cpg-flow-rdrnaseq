@@ -33,12 +33,11 @@ DATASET_SGS_QUERY = gql(
 )
 
 METRIC_LABELS: dict[str, tuple[str, str, int]] = {
-    'pct_mrna_bases': ('mRNA bases', '%', 100),
-    'pct_intronic_bases': ('Intronic bases', '%', 100),
-    'median_5prime_to_3prime_bias': ("5'-3' bias", '', 1),
-    'median_cv_coverage': ('Coverage CV', '', 1),
+    'PCT_MRNA_BASES': ('mRNA bases', '%', 1),
+    'PCT_INTRONIC_BASES': ('Intronic bases', '%', 1),
+    'MEDIAN_5PRIME_TO_3PRIME_BIAS': ("5'-3' bias", '', 1),
+    'MEDIAN_CV_COVERAGE': ('Coverage CV', '', 1),
     'reads_mapped_percent': ('Reads mapped', '%', 1),
-    'pct_one_hit_one_library_rRNA': ('rRNA (FastQ Screen)', '%', 1),
 }
 
 SECTION_LABELS: dict[str, str] = {
