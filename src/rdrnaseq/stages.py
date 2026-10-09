@@ -4,6 +4,7 @@ Re-implementation of a production-pipelines RNAseq pipeline, using CPG-Flow
 
 import functools
 from collections import defaultdict
+from datetime import datetime, timezone
 
 from hailtop.batch.job import Job
 from loguru import logger
@@ -30,6 +31,7 @@ from rdrnaseq.jobs import (
     picard_rnaseq_metrics,
     rna_dashboard,
     samtools_stats,
+    sg_qc_report,
     trim,
     variant_splice_match,
 )
@@ -381,6 +383,40 @@ class QcMultiQC(stage.DatasetStage):
             job_attrs=self.get_job_attrs(dataset),
             sequencing_group_id_map=dataset.rich_id_map(),
             label='rna',
+        )
+        return self.make_outputs(dataset, data=outputs, jobs=jobs)
+
+
+def _convert_to_web_url(path: Path, dataset: targets.Dataset) -> str:
+    if base_url := dataset.web_url():
+        return str(path).replace(str(dataset.web_prefix()), base_url)
+    return str(path)
+
+
+@stage.stage(required_stages=QcMultiQC, forced=True)
+class GenerateSgQcReport(stage.DatasetStage):
+    """Query Metamist for all rna_qc_flags and render an HTML summary report."""
+
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+        timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d_%H%M%S')
+        return {
+            'timestamped': dataset.web_prefix() / 'qc' / timestamp / 'sg_qc_report.html',
+            'html': dataset.web_prefix() / 'qc' / 'sg_qc_report.html',
+        }
+
+    def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
+        outputs = self.expected_outputs(dataset)
+        out_html_url = _convert_to_web_url(outputs['html'], dataset)
+        multiqc_url = _convert_to_web_url(
+            inputs.as_path_by_target(QcMultiQC, 'latest')[dataset.name],
+            dataset,
+        )
+        jobs = sg_qc_report.sg_qc_report_job(
+            dataset=dataset.name,
+            outputs=outputs,
+            out_html_url=out_html_url,
+            multiqc_url=multiqc_url,
+            job_attrs=self.get_job_attrs(dataset),
         )
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
 

@@ -16,6 +16,7 @@ from cpg_flow.workflow import run_workflow
 from rdrnaseq.stages import (
     Count,
     FastqScreen,
+    GenerateSgQcReport,
     PicardRnaSeqMetrics,
     QcMultiQC,
     SamtoolsStats,
@@ -46,6 +47,7 @@ def cli_main() -> None:
         SamtoolsStats,
         PicardRnaSeqMetrics,
         QcMultiQC,
+        GenerateSgQcReport,
     ]
     run_workflow(name='rdrnaseq', stages=stages, dry_run=args.dry_run)
 
