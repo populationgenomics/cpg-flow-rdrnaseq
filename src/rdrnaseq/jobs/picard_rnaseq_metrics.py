@@ -48,7 +48,7 @@ def collect_rnaseq_metrics(
                 SUBSAMPLE_BAM={bam_input.bam}
             else
                 FRAC=$(awk "BEGIN {{printf \\"%.6f\\", {SUBSAMPLE_TARGET}/$TOTAL}}")
-                samtools view -b -s 42.$FRAC --threads 1 {bam_input.bam} > /tmp/subsample.bam
+                samtools view -b -s $FRAC --seed 42 --threads 1 {bam_input.bam} > /tmp/subsample.bam
                 samtools index /tmp/subsample.bam
                 SUBSAMPLE_BAM=/tmp/subsample.bam
             fi
