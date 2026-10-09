@@ -8,18 +8,20 @@ from cpg_flow.resources import STANDARD
 from cpg_utils import Path, config
 from cpg_utils.hail_batch import command, get_batch
 
+SUBSAMPLE_TARGET = 1_000_000
+
 
 def collect_rnaseq_metrics(
     input_bam: str | Path,
     output_metrics: Path,
     job_attrs: dict[str, str],
 ) -> Job:
-    """Run Picard CollectRnaSeqMetrics and write the output."""
+    """Subsample BAM to ~1M reads, then run Picard CollectRnaSeqMetrics."""
     b = get_batch()
 
     j = b.new_bash_job('PicardRnaSeqMetrics', job_attrs | {'tool': 'picard'})
     j.image(config.config_retrieve(['images', 'picard']))
-    STANDARD.set_resources(j=j, ncpu=2, mem_gb=16, storage_gb=30)
+    STANDARD.set_resources(j=j, ncpu=2, mem_gb=8, storage_gb=30)
     j.spot(config.config_retrieve(['workflow', 'picard_rnaseq_metrics', 'spot'], True))
 
     star_fasta = config.config_retrieve(['references', 'star', 'fasta'])
@@ -41,8 +43,18 @@ def collect_rnaseq_metrics(
     j.command(
         command(
             f"""\
+            TOTAL=$(samtools idxstats {bam_input.bam} | awk '{{s+=$3+$4}} END {{print s}}')
+            if [ "$TOTAL" -le {SUBSAMPLE_TARGET} ]; then
+                SUBSAMPLE_BAM={bam_input.bam}
+            else
+                FRAC=$(awk "BEGIN {{printf \\"%.6f\\", {SUBSAMPLE_TARGET}/$TOTAL}}")
+                samtools view -b -s 42.$FRAC --threads 1 {bam_input.bam} > /tmp/subsample.bam
+                samtools index /tmp/subsample.bam
+                SUBSAMPLE_BAM=/tmp/subsample.bam
+            fi
+
             picard -Xms1g -Xmx3g CollectRnaSeqMetrics \
-              -I {bam_input.bam} \
+              -I $SUBSAMPLE_BAM \
               -O {j.metrics} \
               -R {reference.base} \
               -REF_FLAT {ref_flat} \
