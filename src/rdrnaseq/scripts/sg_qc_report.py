@@ -116,29 +116,36 @@ def build_sections(reports: list[SGReport]) -> tuple[list[dict], list[dict]]:
             active.sort(key=lambda f: (SEVERITY_RANK.get(f['severity'], 0), f['date_full']))
             n_fail = sum(1 for f in active if f['severity'] == 'fail')
             n_warn = sum(1 for f in active if f['severity'] == 'warn')
-            unresolved.append({
-                'sg_id': report.sg_id,
-                'flags': active,
-                'count_summary': f'{len(active)} active flag' + ('' if len(active) == 1 else 's'),
-                'n_fail': n_fail,
-                'n_warn': n_warn,
-                'row_severity': 'fail' if n_fail else 'warn',
-                'sort_key': (0 if n_fail else 1, report.sg_id),
-            })
+            unresolved.append(
+                {
+                    'sg_id': report.sg_id,
+                    'flags': active,
+                    'count_summary': f'{len(active)} active flag' + ('' if len(active) == 1 else 's'),
+                    'n_fail': n_fail,
+                    'n_warn': n_warn,
+                    'row_severity': 'fail' if n_fail else 'warn',
+                    'sort_key': (0 if n_fail else 1, report.sg_id),
+                }
+            )
         if past:
             past.sort(key=lambda f: f['date_full'], reverse=True)
-            resolved.append({
-                'sg_id': report.sg_id,
-                'flags': past,
-                'count_summary': f'{len(past)} resolved flag' + ('' if len(past) == 1 else 's'),
-                'n_fail': 0,
-                'n_warn': 0,
-                'row_severity': '',
-                'sort_key': (2, report.sg_id),
-            })
+            resolved.append(
+                {
+                    'sg_id': report.sg_id,
+                    'flags': past,
+                    'count_summary': f'{len(past)} resolved flag' + ('' if len(past) == 1 else 's'),
+                    'n_fail': 0,
+                    'n_warn': 0,
+                    'row_severity': '',
+                    'sort_key': (2, report.sg_id),
+                }
+            )
 
-    unresolved.sort(key=lambda row: row['sort_key'])
-    resolved.sort(key=lambda row: row['sort_key'])
+    def _sort_key(row: dict) -> tuple[int, str]:
+        return row['sort_key']
+
+    unresolved.sort(key=_sort_key)
+    resolved.sort(key=_sort_key)
     return unresolved, resolved
 
 
