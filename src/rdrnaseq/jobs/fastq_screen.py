@@ -46,7 +46,7 @@ def fastq_screen(
 
     j = b.new_bash_job('FastqScreen', job_attrs | {'tool': 'fastq_screen'})
     j.image(config.config_retrieve(['images', 'fastq_screen']))
-    STANDARD.set_resources(j=j, ncpu=nthreads, mem_gb=16, storage_gb=storage_gb)
+    STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=storage_gb)
 
     conf_lines = [f'THREADS\t{nthreads}']
     for name, rg in genomes.items():

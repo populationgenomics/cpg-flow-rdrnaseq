@@ -13,6 +13,7 @@ import jinja2
 from loguru import logger
 
 from cpg_utils import config, to_path
+from cpg_utils.slack import send_message
 from metamist.graphql import gql, query
 
 from rdrnaseq.utils import QcFlag
@@ -215,6 +216,77 @@ def render_report(dataset: str, reports: list[SGReport], *, summary: dict, multi
     )
 
 
+def _plural(count: int, noun: str) -> str:
+    return f'{count} {noun}' if count == 1 else f'{count} {noun}s'
+
+
+def _metric_breakdown(reports: list[SGReport]) -> list[str]:
+    """Per-metric counts for active flags, sorted by frequency."""
+    counts: dict[str, int] = {}
+    for r in reports:
+        for f in r.flags:
+            if not f.resolved:
+                counts[f.flag] = counts.get(f.flag, 0) + 1
+    if not counts:
+        return []
+    return [f' - {_metric_label(k)[0]}: {v}' for k, v in sorted(counts.items(), key=lambda x: -x[1])]
+
+
+def summary_message_text(
+    dataset: str,
+    *,
+    out_html_url: str,
+    multiqc_url: str,
+    summary: dict,
+    reports: list[SGReport],
+) -> str:
+    messages = [
+        f'*[{dataset}]* <{out_html_url}|RNA QC flags report>',
+        f'<{multiqc_url}|MultiQC report>',
+    ]
+
+    if not summary['active_flags']:
+        messages.append(f'✅ No active QC flags across {_plural(summary["total_sgs"], "sequencing group")}')
+    else:
+        parts = []
+        if summary['active_fail']:
+            parts.append(f'{summary["active_fail"]} failing')
+        if summary['active_warn']:
+            parts.append(f'{summary["active_warn"]} warning')
+        severity_detail = f' ({", ".join(parts)})' if parts else ''
+        sgs = _plural(summary['sgs_affected'], 'sequencing group')
+        messages.append(f'🚩 *{_plural(summary["active_flags"], "active flag")}*{severity_detail} across {sgs}')
+        messages.extend(_metric_breakdown(reports))
+
+    if summary['resolved_flags']:
+        messages.append(f'✔️ {_plural(summary["resolved_flags"], "flag")} previously resolved')
+
+    return '\n'.join(messages)
+
+
+def _send_slack_summary(
+    dataset: str,
+    *,
+    out_html_url: str,
+    multiqc_url: str,
+    summary: dict,
+    reports: list[SGReport],
+) -> None:
+    text = summary_message_text(
+        dataset,
+        out_html_url=out_html_url,
+        multiqc_url=multiqc_url,
+        summary=summary,
+        reports=reports,
+    )
+    logger.info(f'{dataset} :: Slack summary:\n{text}')
+    if config.config_retrieve(['workflow', 'qc_multiqc', 'send_to_slack'], default=True):
+        try:
+            send_message(text)
+        except (OSError, ValueError):
+            logger.exception('Failed to send Slack notification — continuing without it')
+
+
 def _metamist_project(dataset: str) -> str:
     """Append access-level suffix so the Metamist project name resolves correctly."""
     access_level = config.get_access_level()
@@ -246,6 +318,14 @@ def main(dataset: str, output: str, timestamped_output: str, out_html_url: str, 
     logger.info(f'{dataset} :: Wrote timestamped report to {timestamped_output}')
 
     logger.info(f'{dataset} :: Report available at {out_html_url}')
+
+    _send_slack_summary(
+        dataset,
+        out_html_url=out_html_url,
+        multiqc_url=multiqc_url,
+        summary=summary,
+        reports=reports,
+    )
 
 
 if __name__ == '__main__':
