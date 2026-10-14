@@ -12,7 +12,7 @@ from pathlib import Path
 import jinja2
 from loguru import logger
 
-from cpg_utils import to_path
+from cpg_utils import config, to_path
 from metamist.graphql import gql, query
 
 from rdrnaseq.utils import QcFlag
@@ -215,9 +215,19 @@ def render_report(dataset: str, reports: list[SGReport], *, summary: dict, multi
     )
 
 
+def _metamist_project(dataset: str) -> str:
+    """Append access-level suffix so the Metamist project name resolves correctly."""
+    access_level = config.get_access_level()
+    suffix = f'-{access_level}'
+    if not dataset.endswith(suffix):
+        return f'{dataset}{suffix}'
+    return dataset
+
+
 def main(dataset: str, output: str, timestamped_output: str, out_html_url: str, multiqc_url: str):
-    logger.info(f'{dataset} :: Querying Metamist for RNA QC flags')
-    response = query(DATASET_SGS_QUERY, variables={'dataset': dataset})
+    project = _metamist_project(dataset)
+    logger.info(f'{dataset} :: Querying Metamist project {project} for RNA QC flags')
+    response = query(DATASET_SGS_QUERY, variables={'dataset': project})
     sequencing_groups = response['project']['sequencingGroups']
     logger.info(f'{dataset} :: Found {len(sequencing_groups)} sequencing groups')
 

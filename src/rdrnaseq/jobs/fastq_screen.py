@@ -38,14 +38,15 @@ def fastq_screen(
 ) -> list[Job]:
     """Screen R1 of the first FASTQ pair against a reference panel for contamination."""
     b = get_batch()
-    nthreads = config.config_retrieve(['workflow', 'fastq_screen', 'nthreads'], 8)
+    nthreads = config.config_retrieve(['workflow', 'fastq_screen', 'nthreads'], 4)
+    storage_gb = config.config_retrieve(['workflow', 'fastq_screen', 'storage_gb'], 40)
 
     genomes = _localize_genomes(b)
     fq_resources = input_fq_pairs[0].as_resources(b)
 
     j = b.new_bash_job('FastqScreen', job_attrs | {'tool': 'fastq_screen'})
     j.image(config.config_retrieve(['images', 'fastq_screen']))
-    STANDARD.set_resources(j=j, ncpu=nthreads, storage_gb=75)
+    STANDARD.set_resources(j=j, ncpu=nthreads, mem_gb=16, storage_gb=storage_gb)
 
     conf_lines = [f'THREADS\t{nthreads}']
     for name, rg in genomes.items():

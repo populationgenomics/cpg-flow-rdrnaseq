@@ -5,6 +5,7 @@ from datetime import datetime
 import click
 from loguru import logger
 
+from cpg_utils import config
 from metamist.graphql import gql, query
 
 from rdrnaseq.utils import QcFlag
@@ -156,6 +157,8 @@ def main(
 ):
     """Read QC flags JSON and update SG meta in Metamist."""
     today = datetime.now()  # noqa: DTZ005
+    access_level = config.get_access_level()
+    project = dataset if dataset.endswith(f'-{access_level}') else f'{dataset}-{access_level}'
 
     with open(sg_id_mapping_file) as f:
         sg_id_map = dict(line.strip().split('\t') for line in f if line.strip())
@@ -163,13 +166,13 @@ def main(
     with open(qc_flags_json_path) as f:
         qc_flags_data = json.load(f)
 
-    response = query(DATASET_SG_META_QUERY, variables={'dataset': dataset})
+    response = query(DATASET_SG_META_QUERY, variables={'dataset': project})
     sequencing_groups = response['project']['sequencingGroups']
 
     new_flags_by_sg = qc_flags_data['qc_flags']
     for sg in sequencing_groups:
         if sg['id'] in sg_id_map:
-            reconcile_sg_qc_flags(sg, new_flags_by_sg, dataset, label, today)
+            reconcile_sg_qc_flags(sg, new_flags_by_sg, project, label, today)
 
 
 if __name__ == '__main__':
