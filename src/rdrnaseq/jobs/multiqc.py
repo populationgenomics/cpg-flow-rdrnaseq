@@ -47,7 +47,7 @@ def multiqc(
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
 
-    copy_inputs = '\n'.join(f'ln -s {inp} inputs/' for inp in qc_inputs)
+    copy_inputs = '\n'.join(f'mv {inp} inputs/' for inp in qc_inputs)
     mqc_j.command(
         f"""
         mkdir inputs
