@@ -394,13 +394,12 @@ class GenerateSgQcReport(stage.DatasetStage):
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         outputs = self.expected_outputs(dataset)
-        web_base = dataset.web_url() or ''
-        multiqc_url = f'{web_base}/qc/multiqc/latest/multiqc.html'
+        multiqc_outputs = inputs.as_dict_by_target(QcMultiQC)[dataset.name]
         jobs = sg_qc_report.sg_qc_report_job(
             dataset=dataset.name,
             outputs=outputs,
             out_html_url=str(outputs['html_url']),
-            multiqc_url=multiqc_url,
+            multiqc_url=str(multiqc_outputs['latest_url']),
             job_attrs=self.get_job_attrs(dataset),
         )
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
