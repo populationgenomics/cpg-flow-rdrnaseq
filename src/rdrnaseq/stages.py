@@ -211,11 +211,11 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         jobs = []
         trimmed_fastq_pairs = []
-        for i, fq_pair in enumerate(input_fq_pairs):
+        for fq_pair in input_fq_pairs:
             j, out_fqs = trim.trim(
                 input_fq_pair=fq_pair,
                 job_attrs=attributes,
-                fastp_json_path=outputs['fastp_json'] if i == 0 else None,
+                fastp_json_path=outputs['fastp_json'],
             )
             if j:
                 if not isinstance(j, Job):

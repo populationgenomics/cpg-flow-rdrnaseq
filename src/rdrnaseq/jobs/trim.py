@@ -135,7 +135,7 @@ def trim(
     job_attrs: dict[str, str],
     output_fq_pair: FastqPair | None = None,
     requested_nthreads: int | None = None,
-    fastp_json_path: Path | str | None = None,
+    fastp_json_path: Path | str = '',
 ) -> tuple[Job | None, FastqPair]:
     """
     Takes an input FastqPair object, and creates a job to trim the FASTQs using fastp.
@@ -207,7 +207,7 @@ def trim(
         nthreads=res.get_nthreads(),  # uses actual threads allocated
         polyg=trim_config.get('polyG', True),
         polyx=trim_config.get('polyX', False),
-        json_path=str(trim_j.fastp_json) if fastp_json_path else None,
+        json_path=str(trim_j.fastp_json),
     )
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 
@@ -215,7 +215,6 @@ def trim(
     if output_fq_pair:
         b.write_output(out_fqs.r1, str(output_fq_pair.r1))
         b.write_output(out_fqs.r2, str(output_fq_pair.r2))
-    if fastp_json_path:
-        b.write_output(trim_j.fastp_json, str(fastp_json_path))
+    b.write_output(trim_j.fastp_json, str(fastp_json_path))
 
     return trim_j, out_fqs
