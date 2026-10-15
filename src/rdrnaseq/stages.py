@@ -188,6 +188,7 @@ class TrimAlignRNA(stage.SequencingGroupStage):
         return {
             'cram': sequencing_group.dataset.prefix() / 'cram' / f'{sequencing_group.id}.cram',
             'bam': str(sequencing_group.dataset.tmp_prefix() / 'bam' / f'{sequencing_group.id}.bam'),
+            'fastp_json': sequencing_group.dataset.prefix() / 'qc' / 'fastp' / f'{sequencing_group.id}.fastp.json',
         }
 
     def queue_jobs(
@@ -210,10 +211,11 @@ class TrimAlignRNA(stage.SequencingGroupStage):
 
         jobs = []
         trimmed_fastq_pairs = []
-        for fq_pair in input_fq_pairs:
+        for i, fq_pair in enumerate(input_fq_pairs):
             j, out_fqs = trim.trim(
                 input_fq_pair=fq_pair,
                 job_attrs=attributes,
+                fastp_json_path=outputs['fastp_json'] if i == 0 else None,
             )
             if j:
                 if not isinstance(j, Job):
@@ -339,7 +341,7 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
 
 
 @stage.stage(
-    required_stages=[FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
+    required_stages=[TrimAlignRNA, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
     analysis_keys=['json', 'html'],
 )
@@ -361,14 +363,15 @@ class QcMultiQC(stage.DatasetStage):
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         outputs = self.expected_outputs(dataset)
         paths: list[str] = []
+        paths.extend(map(str, inputs.as_path_by_target(TrimAlignRNA, key='fastp_json').values()))
         paths.extend(map(str, inputs.as_path_by_target(FastqScreen, key='screen_txt').values()))
         paths.extend(map(str, inputs.as_path_by_target(SamtoolsStats, key='stats').values()))
         paths.extend(map(str, inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values()))
 
         jobs = multiqc.multiqc(
             paths=paths,
-            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics'},
-            modules_to_trim_endings={'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
+            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics', '.fastp.json'},
+            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             dataset=dataset,
             outputs=outputs,
             out_checks_path=outputs['checks'],

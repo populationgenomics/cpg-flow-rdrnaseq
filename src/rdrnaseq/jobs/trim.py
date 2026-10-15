@@ -11,7 +11,7 @@ from hailtop.batch.job import Job
 from cpg_flow.filetypes import FastqPair
 from cpg_flow.resources import STANDARD
 from cpg_flow.utils import can_reuse
-from cpg_utils import config
+from cpg_utils import Path, config
 from cpg_utils.config import image_path
 from cpg_utils.hail_batch import command, get_batch
 
@@ -93,7 +93,6 @@ class Fastp:
         polyg: bool = True,
         polyx: bool = False,
         json_path: str | None = None,
-        html_path: str | None = None,
     ):
         try:
             adapters: AdapterPair = AdapterPairs[adapter_type].value
@@ -123,8 +122,6 @@ class Fastp:
             self.command.append('--trim_poly_x')
         if json_path:
             self.command.extend(['--json', str(json_path)])
-        if html_path:
-            self.command.extend(['--html', str(html_path)])
 
     def __str__(self) -> str:
         return ' '.join(self.command)
@@ -138,6 +135,7 @@ def trim(
     job_attrs: dict[str, str],
     output_fq_pair: FastqPair | None = None,
     requested_nthreads: int | None = None,
+    fastp_json_path: Path | str | None = None,
 ) -> tuple[Job | None, FastqPair]:
     """
     Takes an input FastqPair object, and creates a job to trim the FASTQs using fastp.
@@ -209,6 +207,7 @@ def trim(
         nthreads=res.get_nthreads(),  # uses actual threads allocated
         polyg=trim_config.get('polyG', True),
         polyx=trim_config.get('polyX', False),
+        json_path=str(trim_j.fastp_json) if fastp_json_path else None,
     )
     trim_j.command(command(str(trim_cmd), monitor_space=True))
 
@@ -216,5 +215,7 @@ def trim(
     if output_fq_pair:
         b.write_output(out_fqs.r1, str(output_fq_pair.r1))
         b.write_output(out_fqs.r2, str(output_fq_pair.r2))
+    if fastp_json_path:
+        b.write_output(trim_j.fastp_json, str(fastp_json_path))
 
     return trim_j, out_fqs
