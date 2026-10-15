@@ -338,12 +338,6 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
 
-def _convert_to_web_url(path: Path, dataset: targets.Dataset) -> str:
-    if base_url := dataset.web_url():
-        return str(path).replace(str(dataset.web_prefix()), base_url)
-    return str(path)
-
-
 @stage.stage(
     required_stages=[FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
@@ -352,11 +346,14 @@ def _convert_to_web_url(path: Path, dataset: targets.Dataset) -> str:
 class QcMultiQC(stage.DatasetStage):
     """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
 
-    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path | str]:
         sg_hash = dataset.get_alignment_inputs_hash()
+        web_base = dataset.web_url() or ''
         return {
             'html': dataset.web_prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc.html',
+            'html_url': f'{web_base}/qc/multiqc/{sg_hash}/multiqc.html',
             'latest': dataset.web_prefix() / 'qc' / 'multiqc' / 'latest' / 'multiqc.html',
+            'latest_url': f'{web_base}/qc/multiqc/latest/multiqc.html',
             'json': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc_data.json',
             'checks': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'qc-checks.json',
         }
@@ -368,8 +365,6 @@ class QcMultiQC(stage.DatasetStage):
         paths.extend(map(str, inputs.as_path_by_target(SamtoolsStats, key='stats').values()))
         paths.extend(map(str, inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values()))
 
-        html_url = _convert_to_web_url(outputs['html'], dataset)
-
         jobs = multiqc.multiqc(
             paths=paths,
             ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics'},
@@ -377,7 +372,7 @@ class QcMultiQC(stage.DatasetStage):
             dataset=dataset,
             outputs=outputs,
             out_checks_path=outputs['checks'],
-            out_html_url=html_url,
+            out_html_url=str(outputs['html_url']),
             job_attrs=self.get_job_attrs(dataset),
             label='rna',
         )
@@ -388,24 +383,23 @@ class QcMultiQC(stage.DatasetStage):
 class GenerateSgQcReport(stage.DatasetStage):
     """Query Metamist for all rna_qc_flags and render an HTML summary report."""
 
-    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path]:
+    def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path | str]:
         timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d_%H%M%S')
+        web_base = dataset.web_url() or ''
         return {
             'timestamped': dataset.web_prefix() / 'qc' / timestamp / 'sg_qc_report.html',
             'html': dataset.web_prefix() / 'qc' / 'sg_qc_report.html',
+            'html_url': f'{web_base}/qc/sg_qc_report.html',
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput:
         outputs = self.expected_outputs(dataset)
-        out_html_url = _convert_to_web_url(outputs['html'], dataset)
-        multiqc_url = _convert_to_web_url(
-            inputs.as_path_by_target(QcMultiQC, 'latest')[dataset.name],
-            dataset,
-        )
+        web_base = dataset.web_url() or ''
+        multiqc_url = f'{web_base}/qc/multiqc/latest/multiqc.html'
         jobs = sg_qc_report.sg_qc_report_job(
             dataset=dataset.name,
             outputs=outputs,
-            out_html_url=out_html_url,
+            out_html_url=str(outputs['html_url']),
             multiqc_url=multiqc_url,
             job_attrs=self.get_job_attrs(dataset),
         )
