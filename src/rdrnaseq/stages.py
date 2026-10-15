@@ -338,6 +338,12 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
         return self.make_outputs(sequencing_group, data=output, jobs=jobs)
 
 
+def _convert_to_web_url(path: Path, dataset: targets.Dataset) -> str:
+    if base_url := dataset.web_url():
+        return str(path).replace(str(dataset.web_prefix()), base_url)
+    return str(path)
+
+
 @stage.stage(
     required_stages=[FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
@@ -358,21 +364,13 @@ class QcMultiQC(stage.DatasetStage):
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         outputs = self.expected_outputs(dataset)
         paths: list[str] = []
+        paths.extend(map(str, inputs.as_path_by_target(FastqScreen, key='screen_txt').values()))
+        paths.extend(map(str, inputs.as_path_by_target(SamtoolsStats, key='stats').values()))
+        paths.extend(map(str, inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values()))
 
-        for target_paths in inputs.as_path_by_target(FastqScreen, key='screen_txt').values():
-            paths.append(str(target_paths))
-        for target_paths in inputs.as_path_by_target(SamtoolsStats, key='stats').values():
-            paths.append(str(target_paths))
-        for target_paths in inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values():
-            paths.append(str(target_paths))
-
-        if base_url := dataset.web_url():
-            html_url = str(outputs['html']).replace(str(dataset.web_prefix()), base_url)
-        else:
-            raise ValueError(f'Dataset {dataset.name} has no web_url configured — cannot generate MultiQC HTML link')
+        html_url = _convert_to_web_url(outputs['html'], dataset)
 
         jobs = multiqc.multiqc(
-            tmp_prefix=dataset.tmp_prefix() / 'multiqc' / 'qc',
             paths=paths,
             ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics'},
             modules_to_trim_endings={'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
@@ -381,16 +379,9 @@ class QcMultiQC(stage.DatasetStage):
             out_checks_path=outputs['checks'],
             out_html_url=html_url,
             job_attrs=self.get_job_attrs(dataset),
-            sequencing_group_id_map=dataset.rich_id_map(),
             label='rna',
         )
         return self.make_outputs(dataset, data=outputs, jobs=jobs)
-
-
-def _convert_to_web_url(path: Path, dataset: targets.Dataset) -> str:
-    if base_url := dataset.web_url():
-        return str(path).replace(str(dataset.web_prefix()), base_url)
-    return str(path)
 
 
 @stage.stage(required_stages=QcMultiQC, forced=True)

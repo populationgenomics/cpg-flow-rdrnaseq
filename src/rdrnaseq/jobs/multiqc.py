@@ -11,19 +11,19 @@ from cpg_utils import Path, config, hail_batch
 
 def multiqc(
     dataset: targets.Dataset,
-    tmp_prefix: Path,
     paths: list[Path | str],
     outputs: dict[str, Path],
     out_html_url: str,
-    out_checks_path: Path | None,
+    out_checks_path: Path,
     label: str,
     ending_to_trim: set[str],
     modules_to_trim_endings: set[str],
     job_attrs: dict,
-    sequencing_group_id_map: dict[str, str],
 ) -> list[Job]:
     """Run MultiQC, then check thresholds, then record flags in Metamist."""
     batch_instance = hail_batch.get_batch()
+    tmp_prefix = dataset.tmp_prefix() / 'multiqc' / label
+    sequencing_group_id_map = dataset.rich_id_map()
 
     title = f'MultiQC [{label}]'
 
@@ -47,7 +47,7 @@ def multiqc(
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
 
-    copy_inputs = '\n'.join(f'cp {inp} inputs/' for inp in qc_inputs)
+    copy_inputs = '\n'.join(f'ln -s {inp} inputs/' for inp in qc_inputs)
     mqc_j.command(
         f"""
         mkdir inputs
@@ -118,8 +118,8 @@ def _check_report_job(
     dataset_name: str,
     multiqc_html_url: str,
     label: str,
+    out_checks_path: Path,
     rich_id_map: dict[str, str] | None = None,
-    out_checks_path: Path | None = None,
     job_attrs: dict | None = None,
 ) -> Job:
     """Check MultiQC JSON and send Slack notification."""
@@ -140,8 +140,7 @@ def _check_report_job(
     """
 
     check_j.command(cmd)
-    if out_checks_path:
-        b.write_output(check_j.output, str(out_checks_path))
+    b.write_output(check_j.output, str(out_checks_path))
     return check_j
 
 

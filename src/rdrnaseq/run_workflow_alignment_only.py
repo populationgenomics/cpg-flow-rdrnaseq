@@ -33,12 +33,6 @@ def cli_main() -> None:
     parser.add_argument('--dry_run', action='store_true', help='Dry run')
     args = parser.parse_args()
 
-    # Note - in production-pipelines the main.py script sets up layers of default configuration,
-    # overlaid with workflow-specific configuration, and then runs the workflow.
-    # If you want to re-use that model, this should be carried out before entering the workflow
-
-    # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
-    # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
     stages = [
         FastqScreen,
         TrimAlignRNA,
