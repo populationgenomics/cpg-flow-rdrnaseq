@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RNA QC Flag Summary — {{ dataset }}</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+               background: #f5f6fa; color: #2d3436; padding: 24px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { font-size: 1.6rem; margin-bottom: 4px; }
+        h2 { font-size: 1.15rem; margin: 32px 0 12px; display: flex; align-items: baseline; gap: 8px; }
+        h2 .count { font-size: 0.85rem; font-weight: 400; color: #636e72; }
+        .subtitle { color: #636e72; font-size: 0.9rem; margin-bottom: 6px; }
+        .blurb { color: #636e72; font-size: 0.85rem; max-width: 760px; line-height: 1.45; margin-bottom: 24px; }
+        .blurb a { color: #0984e3; }
+
+        .summary-cards { display: flex; gap: 16px; margin-bottom: 8px; flex-wrap: wrap; }
+        .card { background: #fff; border-radius: 8px; padding: 16px 24px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.08); min-width: 150px; }
+        .card .label { font-size: 0.8rem; color: #636e72; text-transform: uppercase; letter-spacing: 0.5px; }
+        .card .value { font-size: 1.8rem; font-weight: 700; margin-top: 4px; }
+        .card .value.red { color: #d63031; }
+        .card .value.green { color: #00b894; }
+        .card .value.grey { color: #636e72; }
+        .card .value.amber { color: #b9770e; }
+        .card .sub { font-size: 0.75rem; color: #636e72; margin-top: 2px; min-height: 1em; }
+
+        .all-clear { background: #e8f8f2; color: #0b8a63; border: 1px solid #b7e9d6;
+                     border-radius: 8px; padding: 14px 18px; font-weight: 600; }
+
+        .filter-bar { background: #fff; border-radius: 8px; padding: 14px 18px; margin-bottom: 10px;
+                      box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        .filter-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+        .filter-row:last-of-type { margin-bottom: 0; }
+        #search-input { padding: 6px 10px; border: 1px solid #dfe6e9; border-radius: 6px;
+                        font-size: 0.85rem; min-width: 280px; }
+        .chip { cursor: pointer; border: 1px solid #dfe6e9; background: #f1f3f5; color: #2d3436;
+                border-radius: 14px; padding: 4px 12px; font-size: 0.8rem; font-weight: 600; }
+        .chip:hover { background: #e9ecef; }
+        .chip.active { background: #0984e3; color: #fff; border-color: #0984e3; }
+        .filter-count { font-size: 0.8rem; color: #636e72; margin-top: 4px; }
+
+        table { width: 100%; border-collapse: collapse; background: #fff;
+                border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+        th { background: #dfe6e9; text-align: left; padding: 10px 14px;
+             font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        td { padding: 10px 14px; border-top: 1px solid #f0f0f0; font-size: 0.9rem; vertical-align: top; }
+        .sg-row { cursor: pointer; }
+        .sg-row:hover { background: #f8f9fa; }
+        .sg-row .toggle { color: #b2bec3; font-size: 0.8rem; }
+
+        .id-sgid { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.9rem; font-weight: 600; }
+
+        .flag-count { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.4px;
+                      color: #636e72; margin-bottom: 5px; }
+        .flag-line { font-size: 0.85rem; padding: 2px 0 2px 8px; border-left: 3px solid transparent; }
+        .flag-line.sev-fail { border-left-color: #d63031; }
+        .flag-line.sev-warn { border-left-color: #f39c12; }
+        .flag-line .metric { font-weight: 600; }
+        .flag-line .result { color: #636e72; }
+        .more-flags { font-size: 0.8rem; color: #0984e3; margin-top: 4px; padding-left: 8px; }
+
+        .badge { display: inline-block; padding: 2px 10px; border-radius: 12px;
+                 font-size: 0.75rem; font-weight: 600; }
+        .badge-fail { background: #ffd6d3; color: #c0392b; }
+        .badge-warn { background: #ffe8c2; color: #b9770e; }
+        .badge-resolved { background: #dfe6e9; color: #636e72; }
+        .sev-count-fail { color: #d63031; font-weight: 700; }
+        .sev-count-warn { color: #b9770e; font-weight: 700; }
+
+        .sg-detail td { background: #fafafa; padding: 8px 14px; }
+        .flag-detail-table { box-shadow: none; margin: 0; }
+        .flag-detail-table th { background: #eee; font-size: 0.72rem; }
+        .flag-detail-table td { font-size: 0.85rem; }
+
+        .resolved-section table { opacity: 0.72; }
+        .resolved-section h2 { color: #636e72; }
+        .flag-resolved td { color: #636e72; }
+    </style>
+</head>
+<body>
+{% macro flag_table(rows, resolved) %}
+<table>
+    <thead>
+        <tr>
+            <th style="width: 25%">Sequencing Group</th>
+            <th>{{ 'Resolved flags' if resolved else 'Active flags' }}</th>
+            <th style="width: 1%"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for sg in rows %}
+        <tr class="sg-row"
+            data-metrics="{{ sg.flags | map(attribute='flag') | unique | join(' ') }}"
+            data-severities="{{ sg.flags | map(attribute='severity') | unique | join(' ') }}"
+            data-search="{{ sg.sg_id | lower }}"
+            onclick="toggleDetail(this)">
+            <td><div class="id-sgid">{{ sg.sg_id }}</div></td>
+            <td>
+                <div class="flag-count">
+                    {{ sg.count_summary }}
+                    {%- if not resolved and (sg.n_fail or sg.n_warn) %} &middot;
+                        {% if sg.n_fail %}<span class="sev-count-fail">{{ sg.n_fail }} fail</span>{% endif %}
+                        {%- if sg.n_fail and sg.n_warn %} &middot; {% endif %}
+                        {%- if sg.n_warn %}<span class="sev-count-warn">{{ sg.n_warn }} warn</span>{% endif %}
+                    {%- endif %}
+                </div>
+                <div class="flag-glance">
+                    {% for f in sg.flags[:2] %}
+                    <div class="flag-line {{ ('sev-' ~ f.severity) if not f.resolved else '' }}">
+                        {% if not f.resolved %}<span class="badge badge-{{ f.severity }}">{{ f.severity_label }}</span>{% endif %}
+                        <span class="metric">{{ f.metric_label }}</span>
+                        <span class="result">{{ f.value_display }}</span>
+                    </div>
+                    {% endfor %}
+                    {% if sg.flags | length > 2 %}
+                    <div class="more-flags">+{{ (sg.flags | length) - 2 }} more</div>
+                    {% endif %}
+                </div>
+            </td>
+            <td class="toggle">&#x25B8;</td>
+        </tr>
+        <tr class="sg-detail" style="display:none">
+            <td colspan="3">
+                <table class="flag-detail-table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Tool</th>
+                            <th>Metric</th>
+                            <th>Result</th>
+                            <th>{{ 'Resolved' if resolved else 'Detected' }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for f in sg.flags %}
+                        <tr class="{{ 'flag-resolved' if f.resolved else 'flag-active' }}">
+                            <td>
+                                {%- if f.resolved -%}
+                                    <span class="badge badge-resolved">Resolved</span>
+                                {%- else -%}
+                                    <span class="badge badge-{{ f.severity }}">{{ f.severity_label }}</span>
+                                {%- endif -%}
+                            </td>
+                            <td>{{ f.section_label }}</td>
+                            <td>{{ f.metric_label }}</td>
+                            <td>{{ f.value_display }}</td>
+                            <td title="{{ f.date_full }}">{{ f.date_short or '&mdash;' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endmacro %}
+
+<div class="container">
+    <h1>RNA QC Flag Summary</h1>
+    <p class="subtitle">{{ dataset }} &mdash; generated {{ generated_at }}</p>
+    <p class="blurb">
+        QC issues flagged from RNA-seq MultiQC analysis.
+        <a href="{{ multiqc_url }}">View MultiQC report</a>
+    </p>
+
+    <div class="summary-cards">
+        <div class="card">
+            <div class="label">SGs scanned</div>
+            <div class="value grey">{{ summary.total_sgs }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Failing flags</div>
+            <div class="value {{ 'red' if summary.active_fail else 'green' }}">{{ summary.active_fail }}</div>
+            <div class="sub">{{ 'do not analyse without a decision' if summary.active_fail else 'no failures' }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Warning flags</div>
+            <div class="value {{ 'amber' if summary.active_warn else 'grey' }}">{{ summary.active_warn }}</div>
+            <div class="sub">{{ 'review recommended' if summary.active_warn else 'no warnings' }}</div>
+        </div>
+        <div class="card">
+            <div class="label">SGs affected</div>
+            <div class="value {{ 'red' if summary.sgs_affected else 'grey' }}">{{ summary.sgs_affected }}</div>
+        </div>
+        <div class="card">
+            <div class="label">Resolved</div>
+            <div class="value grey">{{ summary.resolved_flags }}</div>
+            <div class="sub">past incidents</div>
+        </div>
+    </div>
+
+    <h2>Unresolved flags <span class="count">{{ unresolved | length }} sequencing group{{ '' if unresolved | length == 1 else 's' }}</span></h2>
+    {% if unresolved %}
+        {% if active_metrics | length > 1 or active_severities | length > 1 or unresolved | length > 5 %}
+        <div class="filter-bar">
+            <div class="filter-row">
+                <input type="text" id="search-input" placeholder="Search SG ID..." oninput="applyFilters()">
+                {% if active_severities | length > 1 %}
+                <div style="display: flex; gap: 8px;">
+                    {% for s in active_severities %}
+                    <button type="button" class="chip severity-chip" data-severity="{{ s.key }}" onclick="toggleChip(this, 'severity')">{{ s.label }} ({{ s.count }})</button>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% if active_metrics | length > 1 %}
+            <div class="filter-row">
+                <button type="button" class="chip metric-chip active" data-metric="" onclick="selectAllMetrics(this)">All</button>
+                {% for m in active_metrics %}
+                <button type="button" class="chip metric-chip" data-metric="{{ m.key }}" onclick="toggleChip(this, 'metric')">{{ m.label }} ({{ m.count }})</button>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="filter-count" id="filter-count"></div>
+        </div>
+        {% endif %}
+        <div id="unresolved-rows">
+            {{ flag_table(unresolved, resolved=False) }}
+        </div>
+    {% else %}
+        <div class="all-clear">All clear — no active QC flags{% if summary.resolved_flags %} ({{ summary.resolved_flags }} previously resolved){% endif %}.</div>
+    {% endif %}
+
+    {% if resolved %}
+    <div class="resolved-section">
+        <h2>Resolved — past incidents <span class="count">{{ resolved | length }} sequencing group{{ '' if resolved | length == 1 else 's' }}</span></h2>
+        {{ flag_table(resolved, resolved=True) }}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleDetail(row) {
+    const detail = row.nextElementSibling;
+    const open = detail.style.display === 'none';
+    detail.style.display = open ? 'table-row' : 'none';
+    const toggle = row.querySelector('.toggle');
+    if (toggle) toggle.textContent = open ? '▾' : '▸';
+}
+
+function selectedChips(type) {
+    return Array.from(document.querySelectorAll('.' + type + '-chip.active'))
+        .map(c => c.dataset[type]).filter(v => v);
+}
+
+function toggleChip(btn, type) {
+    if (type === 'metric') {
+        const all = document.querySelector('.metric-chip[data-metric=""]');
+        if (all) all.classList.remove('active');
+    }
+    btn.classList.toggle('active');
+    if (type === 'metric' && selectedChips('metric').length === 0) {
+        const all = document.querySelector('.metric-chip[data-metric=""]');
+        if (all) all.classList.add('active');
+    }
+    applyFilters();
+}
+
+function selectAllMetrics(btn) {
+    document.querySelectorAll('.metric-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    applyFilters();
+}
+
+function applyFilters() {
+    const container = document.getElementById('unresolved-rows');
+    if (!container) return;
+    const metrics = selectedChips('metric');
+    const severities = selectedChips('severity');
+    const search = (document.getElementById('search-input') || {}).value || '';
+    const searchLower = search.toLowerCase().trim();
+
+    const rows = container.querySelectorAll('.sg-row');
+    let shown = 0;
+    rows.forEach(row => {
+        const rMetrics = (row.dataset.metrics || '').split(' ').filter(Boolean);
+        const rSeverities = (row.dataset.severities || '').split(' ').filter(Boolean);
+        const okMetric = metrics.length === 0 || metrics.some(m => rMetrics.includes(m));
+        const okSeverity = severities.length === 0 || severities.some(s => rSeverities.includes(s));
+        const okSearch = searchLower === '' || (row.dataset.search || '').includes(searchLower);
+        const visible = okMetric && okSeverity && okSearch;
+
+        row.style.display = visible ? '' : 'none';
+        const detail = row.nextElementSibling;
+        if (detail && detail.classList.contains('sg-detail')) {
+            detail.style.display = 'none';
+            const toggle = row.querySelector('.toggle');
+            if (toggle) toggle.textContent = '▸';
+        }
+        if (visible) shown++;
+    });
+
+    const counter = document.getElementById('filter-count');
+    if (counter) counter.textContent = 'Showing ' + shown + ' of ' + rows.length + ' sequencing groups';
+}
+
+document.addEventListener('DOMContentLoaded', applyFilters);
+</script>
+</body>
+</html>

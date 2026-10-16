@@ -14,23 +14,34 @@ adapter_type = "ILLUMINA_TRUSEQ"
 ref_fasta = "gs://cpg-common-main/references/hg38/v0/dragen_reference/Homo_sapiens_assembly38_masked.fasta"
 ensg_to_symbol = "gs://cpg-rdnow-test-web/transcriptome/rna_dashboard/ensg_to_symbol.tsv"
 somalier_sites = "gs://cpg-common-main/references/somalier/sites.hg38.vcf.gz"
+ref_flat = "gs://cpg-common-test/references/hg38/v0/refFlat.txt"
+ribosomal_intervals = "gs://cpg-common-test/references/hg38/v0/ribosomal.interval_list"
 
 [references.star]
 ref_dir = "gs://cpg-common-main/references/star/2.7.10b/hg38"
 gtf = "gs://cpg-common-main/references/star/hg38/hg38.gtf"
 fasta = "gs://cpg-common-main/references/star/hg38/hg38.fa"
+dict = "gs://cpg-common-test/references/star/hg38/hg38.dict"
+
+[references.fastq_screen_genomes]
+Human = "gs://cpg-common-test/references/fastq_screen/Human/Homo_sapiens.GRCh38"
+Ecoli = "gs://cpg-common-test/references/fastq_screen/E_coli/Ecoli"
+rRNA = "gs://cpg-common-test/references/fastq_screen/rRNA/GRCm38_rRNA"
+Adapters = "gs://cpg-common-test/references/fastq_screen/Adapters/Contaminants"
 
 [images]
 star = "australia-southeast1-docker.pkg.dev/cpg-common/images/star:2.7.10b"
 fastp = "australia-southeast1-docker.pkg.dev/cpg-common/images/fastp:1.0.1-1"
 fraser = "australia-southeast1-docker.pkg.dev/cpg-common/images/fraser:2.4.6-1"
 outrider = "australia-southeast1-docker.pkg.dev/cpg-common/images/outrider:1.18.1"
-picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:2.27.4"
+picard = "australia-southeast1-docker.pkg.dev/cpg-common/images/picard:3.5.0-1"
 sambamba = "australia-southeast1-docker.pkg.dev/cpg-common/images/sambamba:1.0.1"
 samblaster = "australia-southeast1-docker.pkg.dev/cpg-common/images/samblaster:0.1.26-1"
 samtools = "australia-southeast1-docker.pkg.dev/cpg-common/images/samtools:1.21-1"
 subread = "australia-southeast1-docker.pkg.dev/cpg-common/images/subread:2.0.6"
 somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1-1"
+multiqc = "australia-southeast1-docker.pkg.dev/cpg-common/images/multiqc:1.14-1"
+fastq_screen = "australia-southeast1-docker.pkg.dev/cpg-common/images-dev/fastq_screen:0.15.3-1"
 
 [fraser]
 pval_cutoff = 0.1
@@ -52,6 +63,32 @@ pval_cutoff = 0.1
 z_cutoff = 0.0
 ncpu = 12
 
+[workflow.qc_multiqc]
+send_to_slack = true
+
+[qc_thresholds.transcriptome.fail.under]
+"PCT_MRNA_BASES" = 30.0
+"reads_mapped_percent" = 50.0
+
+[qc_thresholds.transcriptome.warn.under]
+"PCT_MRNA_BASES" = 50.0
+"reads_mapped_percent" = 70.0
+
+[qc_thresholds.transcriptome.fail.over]
+"PCT_INTRONIC_BASES" = 50.0
+"MEDIAN_5PRIME_TO_3PRIME_BIAS" = 3.0
+"MEDIAN_CV_COVERAGE" = 1.5
+
+[qc_thresholds.transcriptome.warn.over]
+"PCT_INTRONIC_BASES" = 35.0
+"MEDIAN_5PRIME_TO_3PRIME_BIAS" = 2.0
+"MEDIAN_CV_COVERAGE" = 1.0
+
 [variant_splice_match]
-#mt_path = ... override for all mts
+mt_path = "gs://cpg-seqr-main/seqr_loader/67999d24b62e70040e4f1546826e71f38bb85e_7299.mt"
 #dataset_name = ... override for a mt from a specific dataset
+
+[slack]
+channel = 'workflows-qc'
+token_secret_id = 'slack-seqr-loader-token'
+token_project_id = 'seqr-308602'

@@ -13,7 +13,16 @@ from argparse import ArgumentParser
 
 from cpg_flow.workflow import run_workflow
 
-from rdrnaseq.stages import Count, Somalier, TrimAlignRNA
+from rdrnaseq.stages import (
+    Count,
+    FastqScreen,
+    GenerateSgQcReport,
+    PicardRnaSeqMetrics,
+    QcMultiQC,
+    SamtoolsStats,
+    Somalier,
+    TrimAlignRNA,
+)
 
 
 def cli_main() -> None:
@@ -24,13 +33,16 @@ def cli_main() -> None:
     parser.add_argument('--dry_run', action='store_true', help='Dry run')
     args = parser.parse_args()
 
-    # Note - in production-pipelines the main.py script sets up layers of default configuration,
-    # overlaid with workflow-specific configuration, and then runs the workflow.
-    # If you want to re-use that model, this should be carried out before entering the workflow
-
-    # Otherwise all configuration should be done by providing all relevant configs to analysis-runner
-    # https://github.com/populationgenomics/team-docs/blob/main/cpg_utils_config.md#config-in-analysis-runner-jobs
-    stages = [TrimAlignRNA, Count, Somalier]
+    stages = [
+        FastqScreen,
+        TrimAlignRNA,
+        Count,
+        Somalier,
+        SamtoolsStats,
+        PicardRnaSeqMetrics,
+        QcMultiQC,
+        GenerateSgQcReport,
+    ]
     run_workflow(name='rdrnaseq', stages=stages, dry_run=args.dry_run)
 
 

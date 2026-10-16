@@ -28,7 +28,7 @@ class Markdup:
         ]
 
     def __str__(self) -> str:
-        return 'mkdir -p $BATCH_TMPDIR/markdup && ' + ' '.join(self.command)
+        return 'ulimit -n 65536 && mkdir -p $BATCH_TMPDIR/markdup && ' + ' '.join(self.command)
 
     def __repr__(self) -> str:
         return str(self)
