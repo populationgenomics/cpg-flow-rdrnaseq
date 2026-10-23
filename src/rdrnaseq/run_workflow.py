@@ -11,6 +11,7 @@ This is re-implemented as a simpler form, only knowing how to build a single wor
 
 from argparse import ArgumentParser
 
+from cpg_flow.targets.types import Sex
 from cpg_flow.workflow import run_workflow
 
 from rdrnaseq.stages import (
@@ -27,6 +28,21 @@ from rdrnaseq.stages import (
     TrimAlignRNA,
     VariantSpliceMatch,
 )
+
+_cpg_flow_sex_parse = Sex.parse
+
+
+def _parse_sex_allowing_missing(input_sex: str | int | None) -> Sex:
+    """
+    Hotfix: cpg-flow reads pedigree sex as Sex.parse(str(ped_entry['sex'])), so a participant with no
+    reported sex arrives as the string 'None' and raises. Treat a missing sex as UNKNOWN instead.
+    """
+    if input_sex is None or (isinstance(input_sex, str) and input_sex.strip().lower() in {'', 'none'}):
+        return Sex.UNKNOWN
+    return _cpg_flow_sex_parse(input_sex)
+
+
+Sex.parse = staticmethod(_parse_sex_allowing_missing)
 
 
 def cli_main() -> None:
