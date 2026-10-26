@@ -43,6 +43,10 @@ somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1
 multiqc = "australia-southeast1-docker.pkg.dev/cpg-common/images/multiqc:1.14-1"
 fastq_screen = "australia-southeast1-docker.pkg.dev/cpg-common/images-dev/fastq_screen:0.15.3-1"
 
+[star]
+storage_gb = 300
+nthreads = 8
+
 [fraser]
 pval_cutoff = 0.1
 delta_psi_cutoff = 0.1

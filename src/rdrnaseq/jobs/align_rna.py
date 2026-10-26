@@ -157,8 +157,10 @@ def align_fq_pair(
     j = b.new_job(name='align_rna', attributes=job_attrs | {'tool': 'STAR'})
     j.image(config.config_retrieve(['images', 'star']))
 
-    nthreads = 8
-    res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=200)
+    star_config = config.config_retrieve(['star'], {})
+    nthreads = star_config.get('nthreads', 8)
+    storage_gb = star_config.get('storage_gb', 200)
+    res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=storage_gb)
 
     j.command(f"""
         STAR \\
