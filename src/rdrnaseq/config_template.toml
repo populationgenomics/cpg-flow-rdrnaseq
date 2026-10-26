@@ -89,7 +89,7 @@ send_to_slack = true
 "MEDIAN_CV_COVERAGE" = 1.0
 
 [variant_splice_match]
-mt_path = "gs://cpg-seqr-main/seqr_loader/67999d24b62e70040e4f1546826e71f38bb85e_7299.mt"
+#mt_path = "gs://cpg-seqr-main/seqr_loader/67999d24b62e70040e4f1546826e71f38bb85e_7299.mt"
 #dataset_name = ... override for a mt from a specific dataset
 
 [slack]
