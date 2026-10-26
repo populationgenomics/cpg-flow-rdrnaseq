@@ -43,6 +43,10 @@ somalier = "australia-southeast1-docker.pkg.dev/cpg-common/images/somalier:0.3.1
 multiqc = "australia-southeast1-docker.pkg.dev/cpg-common/images/multiqc:1.14-1"
 fastq_screen = "australia-southeast1-docker.pkg.dev/cpg-common/images-dev/fastq_screen:0.15.3-1"
 
+[star]
+storage_gb = 300
+nthreads = 8
+
 [fraser]
 pval_cutoff = 0.1
 delta_psi_cutoff = 0.1
@@ -85,7 +89,7 @@ send_to_slack = true
 "MEDIAN_CV_COVERAGE" = 1.0
 
 [variant_splice_match]
-mt_path = "gs://cpg-seqr-main/seqr_loader/67999d24b62e70040e4f1546826e71f38bb85e_7299.mt"
+#mt_path = ""
 #dataset_name = ... override for a mt from a specific dataset
 
 [slack]
