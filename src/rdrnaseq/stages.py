@@ -349,15 +349,15 @@ class QcMultiQC(stage.DatasetStage):
     """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
 
     def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path | str]:
-        sg_hash = dataset.get_alignment_inputs_hash()
+        timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d_%H%M%S')
         web_base = dataset.web_url() or ''
         return {
-            'html': dataset.web_prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc.html',
-            'html_url': f'{web_base}/qc/multiqc/{sg_hash}/multiqc.html',
+            'html': dataset.web_prefix() / 'qc' / 'multiqc' / timestamp / 'multiqc.html',
+            'html_url': f'{web_base}/qc/multiqc/{timestamp}/multiqc.html',
             'latest': dataset.web_prefix() / 'qc' / 'multiqc' / 'latest' / 'multiqc.html',
             'latest_url': f'{web_base}/qc/multiqc/latest/multiqc.html',
-            'json': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc_data.json',
-            'checks': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'qc-checks.json',
+            'json': dataset.prefix() / 'qc' / 'multiqc' / timestamp / 'multiqc_data.json',
+            'checks': dataset.prefix() / 'qc' / 'multiqc' / timestamp / 'qc-checks.json',
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
