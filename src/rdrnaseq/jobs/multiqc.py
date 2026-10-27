@@ -2,16 +2,81 @@
 Batch jobs to run MultiQC, check thresholds, and record QC flags.
 """
 
+from collections import defaultdict
+
 from hailtop.batch import Batch, Resource, ResourceFile
 from hailtop.batch.job import Job
+from loguru import logger
 
-from cpg_flow import resources, targets
+from cpg_flow import resources, targets, utils
 from cpg_utils import Path, config, hail_batch
+from metamist.graphql import gql, query
+
+QC_ANALYSES_QUERY = gql(
+    """
+    query QcAnalyses($dataset: String!) {
+        project(name: $dataset) {
+            analyses(active: {eq: true}, type: {eq: "qc"}, status: {eq: COMPLETED}) {
+                output
+                meta
+                timestampCompleted
+                sequencingGroups {
+                    id
+                }
+            }
+        }
+    }
+""",
+)
+
+MULTIQC_QC_STAGES = {'FastpQC', 'FastqScreen', 'SamtoolsStats', 'PicardRnaSeqMetrics'}
+
+
+def _get_registered_qc_paths(dataset: targets.Dataset) -> dict[str, list[str]]:
+    """Query Metamist for all registered QC outputs in the dataset.
+
+    Returns a dict mapping SG ID -> list of output paths (one per QC stage).
+    Deduplicates by taking the latest analysis per SG per stage.
+    """
+    dataset_name = dataset.name
+    if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in dataset_name:
+        dataset_name += '-test'
+
+    result = query(QC_ANALYSES_QUERY, variables={'dataset': dataset_name})
+
+    latest: dict[tuple[str, str], tuple[str, str]] = {}
+    for analysis in result.get('project', {}).get('analyses', []):
+        meta = analysis.get('meta', {})
+        stage_name = meta.get('stage')
+        if stage_name not in MULTIQC_QC_STAGES:
+            continue
+        sg_ids = [sg['id'] for sg in analysis.get('sequencingGroups', [])]
+        if len(sg_ids) != 1:
+            continue
+        sg_id = sg_ids[0]
+        ts = analysis.get('timestampCompleted', '')
+        key = (sg_id, stage_name)
+        if key not in latest or ts > latest[key][0]:
+            latest[key] = (ts, analysis['output'])
+
+    sg_paths: dict[str, list[str]] = defaultdict(list)
+    for (sg_id, _stage_name), (_ts, output) in latest.items():
+        sg_paths[sg_id].append(output)
+
+    return dict(sg_paths)
+
+
+def _add_fastp_paths(sg_paths: dict[str, list[str]], dataset: targets.Dataset) -> None:
+    """Derive fastp JSON paths by convention and add to sg_paths if the file exists."""
+    fastp_prefix = dataset.prefix() / 'qc' / 'fastp'
+    for sg_id in list(sg_paths):
+        fastp_path = str(fastp_prefix / f'{sg_id}.fastp.json')
+        if utils.can_reuse(fastp_path):
+            sg_paths[sg_id].append(fastp_path)
 
 
 def multiqc(
     dataset: targets.Dataset,
-    paths: list[Path | str],
     outputs: dict[str, Path],
     out_html_url: str,
     out_checks_path: Path,
@@ -24,6 +89,15 @@ def multiqc(
     batch_instance = hail_batch.get_batch()
     tmp_prefix = dataset.tmp_prefix() / 'multiqc' / label
     sequencing_group_id_map = dataset.rich_id_map()
+
+    sg_paths = _get_registered_qc_paths(dataset)
+    _add_fastp_paths(sg_paths, dataset)
+    logger.info(f'MultiQC for {dataset.name}: {len(sg_paths)} SGs with registered QC outputs')
+
+    all_paths = {p for sg_files in sg_paths.values() for p in sg_files}
+    if not all_paths:
+        logger.warning(f'No QC outputs found for dataset {dataset.name}, skipping MultiQC')
+        return []
 
     title = f'MultiQC [{label}]'
 
@@ -42,16 +116,17 @@ def multiqc(
 
     sg_id_mapping_file = batch_instance.read_input(sg_id_mapping_file_path)
 
-    qc_inputs = [batch_instance.read_input(str(p)) for p in paths]
+    infiles = {str(i): str(p) for i, p in enumerate(sorted(all_paths))}
+    qc_inputs = batch_instance.read_input_group(**infiles)
 
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
 
-    copy_inputs = '\n'.join(f'mv {inp} inputs/' for inp in qc_inputs)
+    move_inputs = '\n'.join(f'mv {qc_inputs[k]} inputs/' for k in infiles)
     mqc_j.command(
         f"""
         mkdir inputs
-        {copy_inputs}
+        {move_inputs}
 
         multiqc -f inputs -o output \\
         --replace-names {sg_id_mapping_file} \\

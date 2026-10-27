@@ -362,23 +362,14 @@ class QcMultiQC(stage.DatasetStage):
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         outputs = self.expected_outputs(dataset)
-        paths: list[str] = []
-        for fastp_path in inputs.as_dict_by_target(TrimAlignRNA).values():
-            p = str(fastp_path.get('fastp_json', ''))
-            if p and utils.can_reuse(p):
-                paths.append(p)
-        paths.extend(map(str, inputs.as_path_by_target(FastqScreen, key='screen_txt').values()))
-        paths.extend(map(str, inputs.as_path_by_target(SamtoolsStats, key='stats').values()))
-        paths.extend(map(str, inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values()))
 
         jobs = multiqc.multiqc(
-            paths=paths,
-            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics', '.fastp.json'},
-            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             dataset=dataset,
             outputs=outputs,
             out_checks_path=outputs['checks'],
             out_html_url=str(outputs['html_url']),
+            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics', '.fastp.json'},
+            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             job_attrs=self.get_job_attrs(dataset),
             label='rna',
         )
