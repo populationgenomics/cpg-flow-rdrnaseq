@@ -3,6 +3,7 @@ Batch jobs to run MultiQC, check thresholds, and record QC flags.
 """
 
 from collections import defaultdict
+from os.path import basename
 
 from hailtop.batch import Batch, Resource, ResourceFile
 from hailtop.batch.job import Job
@@ -116,19 +117,14 @@ def multiqc(
 
     sg_id_mapping_file = batch_instance.read_input(sg_id_mapping_file_path)
 
-    infiles = {str(i): str(p) for i, p in enumerate(sorted(all_paths))}
-    qc_inputs = batch_instance.read_input_group(**infiles)
+    qc_inputs = batch_instance.read_input_group(**{basename(p): p for p in sorted(all_paths)})
 
     joined_endings = ', '.join(ending_to_trim)
     joined_modules = ', '.join(modules_to_trim_endings)
 
-    move_inputs = '\n'.join(f'mv {qc_inputs[k]} inputs/' for k in infiles)
     mqc_j.command(
         f"""
-        mkdir inputs
-        {move_inputs}
-
-        multiqc -f inputs -o output \\
+        multiqc -f $(dirname {qc_inputs}) -o output \\
         --replace-names {sg_id_mapping_file} \\
         --title "{title} for dataset <b>{dataset.name}</b>" \\
         --filename report.html \\
