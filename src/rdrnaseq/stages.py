@@ -344,13 +344,14 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
     required_stages=[TrimAlignRNA, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
     analysis_keys=['json', 'html'],
+    forced=True
 )
 class QcMultiQC(stage.DatasetStage):
     """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
 
     def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path | str]:
-        timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d_%H%M%S')
-        web_base = dataset.web_url() or ''
+        timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+        web_base = dataset.web_url()
         return {
             'html': dataset.web_prefix() / 'qc' / 'multiqc' / timestamp / 'multiqc.html',
             'html_url': f'{web_base}/qc/multiqc/{timestamp}/multiqc.html',
