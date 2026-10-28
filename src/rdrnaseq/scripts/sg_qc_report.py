@@ -13,6 +13,7 @@ import jinja2
 from loguru import logger
 
 from cpg_utils import config, to_path
+from cpg_utils.config import dataset_for_access_level
 from cpg_utils.slack import send_message
 from metamist.graphql import gql, query
 
@@ -287,17 +288,8 @@ def _send_slack_summary(
             logger.exception('Failed to send Slack notification — continuing without it')
 
 
-def _metamist_project(dataset: str) -> str:
-    """Append access-level suffix so the Metamist project name resolves correctly."""
-    access_level = config.get_access_level()
-    suffix = f'-{access_level}'
-    if not dataset.endswith(suffix):
-        return f'{dataset}{suffix}'
-    return dataset
-
-
 def main(dataset: str, output: str, timestamped_output: str, out_html_url: str, multiqc_url: str):
-    project = _metamist_project(dataset)
+    project = dataset_for_access_level(dataset)
     logger.info(f'{dataset} :: Querying Metamist project {project} for RNA QC flags')
     response = query(DATASET_SGS_QUERY, variables={'dataset': project})
     sequencing_groups = response['project']['sequencingGroups']

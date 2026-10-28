@@ -12,6 +12,7 @@ from loguru import logger
 
 from cpg_flow.status import complete_analysis_job
 from cpg_utils import Path, config
+from cpg_utils.config import dataset_for_access_level
 from cpg_utils.hail_batch import command, get_batch
 from metamist.graphql import gql, query
 
@@ -53,7 +54,7 @@ def get_cpg_metadata(dataset_name: str, sg_ids: list[str]) -> tuple[dict[str, di
     project's display name from metamist (falls back to dataset_name).
     Runs at stage construction time (not inside the batch job).
     """
-    query_dataset = dataset_name
+    query_dataset = dataset_for_access_level(dataset_name)
 
     logger.info(f'Querying metamist project={query_dataset!r} for {len(sg_ids)} SG IDs: {sg_ids}')
     result = query(METADATA_QUERY, variables={'project': query_dataset, 'sgIds': sg_ids})
