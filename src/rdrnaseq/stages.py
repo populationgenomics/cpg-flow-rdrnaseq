@@ -599,7 +599,7 @@ class Dashboard(stage.CohortStage):
         fraser_csv = inputs.as_path(cohort, Fraser, 'sig_results')
         outrider_csv = inputs.as_path(cohort, Outrider, 'outrider_sig_csv')
 
-        _, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
+        datasets, sg_ids_by_dataset = get_datasets_and_sg_ids(cohort)
         cell_type, library_type = validate_cohort_types(cohort)
         cell_library_type = f'{cell_type}_{library_type}'
         sequencing_type = config.config_retrieve(['workflow', 'sequencing_type'])
@@ -615,6 +615,7 @@ class Dashboard(stage.CohortStage):
 
             output_paths_by_dataset[ds] = {
                 'folder': folder,
+                'web_url': datasets[ds].web_url(),
                 'dashboard_html': output[f'dashboard_html_{ds}'],
                 'private_dashboard_html': output[f'private_dashboard_html_{ds}'],
                 'fraser_csv': output[f'fraser_csv_{ds}'],

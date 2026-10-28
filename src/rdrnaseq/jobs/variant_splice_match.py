@@ -13,6 +13,7 @@ from loguru import logger
 
 from cpg_flow.status import complete_analysis_job
 from cpg_utils import Path, config
+from cpg_utils.config import dataset_for_access_level
 from cpg_utils.hail_batch import command, get_batch
 from metamist import graphql
 
@@ -54,9 +55,7 @@ def query_for_latest_analysis(
     """
 
     # swapping to a string we can freely modify
-    query_dataset = dataset
-    if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in query_dataset:
-        query_dataset += '-test'
+    query_dataset = dataset_for_access_level(dataset)
 
     logger.info(f'Querying for {analysis_type} in {query_dataset}')
 
