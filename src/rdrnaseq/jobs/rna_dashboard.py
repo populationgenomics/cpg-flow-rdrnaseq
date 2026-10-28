@@ -175,7 +175,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
                 continue
             b.write_output(j.out[k], str(p))
 
-        web_path = f'{output_paths["web_url"]}/transcriptome/dashboard/{output_paths["folder"]}/rna_dashboard.html'
+        web_path = f'{output_paths["web_url"]}/dashboard/{output_paths["folder"]}/rna_dashboard.html'
         logger.info(f'Dashboard job created for dataset {dataset_name}: {web_path}')
         jobs.append(j)
 
