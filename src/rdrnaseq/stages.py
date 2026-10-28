@@ -615,6 +615,7 @@ class Dashboard(stage.CohortStage):
 
             output_paths_by_dataset[ds] = {
                 'folder': folder,
+                'web_url': datasets[ds].web_url(),
                 'dashboard_html': output[f'dashboard_html_{ds}'],
                 'private_dashboard_html': output[f'private_dashboard_html_{ds}'],
                 'fraser_csv': output[f'fraser_csv_{ds}'],
