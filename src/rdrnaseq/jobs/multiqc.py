@@ -11,6 +11,7 @@ from loguru import logger
 
 from cpg_flow import resources, targets, utils
 from cpg_utils import Path, config, hail_batch
+from cpg_utils.config import dataset_for_access_level
 from metamist.graphql import gql, query
 
 QC_ANALYSES_QUERY = gql(
@@ -39,9 +40,7 @@ def _get_registered_qc_paths(dataset: targets.Dataset) -> dict[str, list[str]]:
     Returns a dict mapping SG ID -> list of output paths (one per QC stage).
     Deduplicates by taking the latest analysis per SG per stage.
     """
-    dataset_name = dataset.name
-    if config.config_retrieve(['workflow', 'access_level']) == 'test' and 'test' not in dataset_name:
-        dataset_name += '-test'
+    dataset_name = dataset_for_access_level(dataset.name)
 
     result = query(QC_ANALYSES_QUERY, variables={'dataset': dataset_name})
 
