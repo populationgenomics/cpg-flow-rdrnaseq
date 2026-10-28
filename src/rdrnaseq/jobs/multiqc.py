@@ -124,7 +124,7 @@ def multiqc(
 
     mqc_j.command(
         f"""
-        multiqc -f $(dirname {qc_inputs}) -o output \\
+        multiqc -f {qc_inputs} -o output \\
         --replace-names {sg_id_mapping_file} \\
         --title "{title} for dataset <b>{dataset.name}</b>" \\
         --filename report.html \\
