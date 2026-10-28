@@ -163,7 +163,6 @@ def align_fq_pair(
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=storage_gb)
 
     j.command(f"""
-        mkdir -p $BATCH_TMPDIR/_STARtmp
         STAR \\
         --runThreadN {(res.get_nthreads() - 1)} \\
         --genomeDir $(dirname {star_ref.genome_res_group.genome!s}) \\
