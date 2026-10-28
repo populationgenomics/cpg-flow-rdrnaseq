@@ -170,7 +170,7 @@ python3 -m rdrnaseq.scripts.create_interactive_dashboard \
 """),
         )
         for k, p in output_paths.items():
-            if k == 'folder':
+            if k in ('folder', 'web_url'):
                 continue
             b.write_output(j.out[k], str(p))
 
