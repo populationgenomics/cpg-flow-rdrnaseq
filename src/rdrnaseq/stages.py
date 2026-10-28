@@ -344,7 +344,7 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
     required_stages=[TrimAlignRNA, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
     analysis_keys=['json', 'html'],
-    forced=True
+    forced=True,
 )
 class QcMultiQC(stage.DatasetStage):
     """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
