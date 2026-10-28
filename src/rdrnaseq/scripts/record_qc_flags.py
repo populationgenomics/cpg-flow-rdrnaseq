@@ -5,7 +5,6 @@ from datetime import datetime
 import click
 from loguru import logger
 
-from cpg_utils import config
 from metamist.graphql import gql, query
 
 from rdrnaseq.utils import QcFlag
@@ -157,8 +156,8 @@ def main(
 ):
     """Read QC flags JSON and update SG meta in Metamist."""
     today = datetime.now()  # noqa: DTZ005
-    access_level = config.get_access_level()
-    project = dataset if dataset.endswith(f'-{access_level}') else f'{dataset}-{access_level}'
+
+    project = dataset
 
     with open(sg_id_mapping_file) as f:
         sg_id_map = dict(line.strip().split('\t') for line in f if line.strip())
