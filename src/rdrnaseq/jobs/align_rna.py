@@ -163,12 +163,14 @@ def align_fq_pair(
     res = HIGHMEM.set_resources(j=j, ncpu=nthreads, storage_gb=storage_gb)
 
     j.command(f"""
+        mkdir -p $BATCH_TMPDIR/_STARtmp
         STAR \\
         --runThreadN {(res.get_nthreads() - 1)} \\
         --genomeDir $(dirname {star_ref.genome_res_group.genome!s}) \\
         --outSAMtype BAM SortedByCoordinate \\
         --outSAMattrRGline ID:{sample_name} SN:{sample_name} \\
         --readFilesCommand zcat \\
+        --outTmpDir $BATCH_TMPDIR/_STARtmp \\
         --readFilesIn {fastq_pair.r1} {fastq_pair.r2}
         mv Aligned.sortedByCoord.out.bam {j.output_bam}
     """)

@@ -344,41 +344,33 @@ class PicardRnaSeqMetrics(stage.SequencingGroupStage):
     required_stages=[TrimAlignRNA, FastqScreen, SamtoolsStats, PicardRnaSeqMetrics],
     analysis_type='qc',
     analysis_keys=['json', 'html'],
+    forced=True,
 )
 class QcMultiQC(stage.DatasetStage):
     """Aggregate all QC outputs into a single MultiQC report, check thresholds, send Slack, record Metamist flags."""
 
     def expected_outputs(self, dataset: targets.Dataset) -> dict[str, Path | str]:
-        sg_hash = dataset.get_alignment_inputs_hash()
-        web_base = dataset.web_url() or ''
+        timestamp = datetime.now(tz=timezone.utc).strftime('%Y-%m-%d')
+        web_base = dataset.web_url()
         return {
-            'html': dataset.web_prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc.html',
-            'html_url': f'{web_base}/qc/multiqc/{sg_hash}/multiqc.html',
+            'html': dataset.web_prefix() / 'qc' / 'multiqc' / timestamp / 'multiqc.html',
+            'html_url': f'{web_base}/qc/multiqc/{timestamp}/multiqc.html',
             'latest': dataset.web_prefix() / 'qc' / 'multiqc' / 'latest' / 'multiqc.html',
             'latest_url': f'{web_base}/qc/multiqc/latest/multiqc.html',
-            'json': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'multiqc_data.json',
-            'checks': dataset.prefix() / 'qc' / 'multiqc' / sg_hash / 'qc-checks.json',
+            'json': dataset.prefix() / 'qc' / 'multiqc' / timestamp / 'multiqc_data.json',
+            'checks': dataset.prefix() / 'qc' / 'multiqc' / timestamp / 'qc-checks.json',
         }
 
     def queue_jobs(self, dataset: targets.Dataset, inputs: stage.StageInput) -> stage.StageOutput | None:
         outputs = self.expected_outputs(dataset)
-        paths: list[str] = []
-        for fastp_path in inputs.as_dict_by_target(TrimAlignRNA).values():
-            p = str(fastp_path.get('fastp_json', ''))
-            if p and utils.can_reuse(p):
-                paths.append(p)
-        paths.extend(map(str, inputs.as_path_by_target(FastqScreen, key='screen_txt').values()))
-        paths.extend(map(str, inputs.as_path_by_target(SamtoolsStats, key='stats').values()))
-        paths.extend(map(str, inputs.as_path_by_target(PicardRnaSeqMetrics, key='metrics').values()))
 
         jobs = multiqc.multiqc(
-            paths=paths,
-            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics', '.fastp.json'},
-            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             dataset=dataset,
             outputs=outputs,
             out_checks_path=outputs['checks'],
             out_html_url=str(outputs['html_url']),
+            ending_to_trim={'_screen.txt', '.stats.txt', '.rnaseq_metrics', '.fastp.json'},
+            modules_to_trim_endings={'fastp', 'fastq_screen', 'samtools/stats', 'picard/rnaseqmetrics'},
             job_attrs=self.get_job_attrs(dataset),
             label='rna',
         )
