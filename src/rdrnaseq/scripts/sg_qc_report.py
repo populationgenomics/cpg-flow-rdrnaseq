@@ -25,7 +25,7 @@ DATASET_SGS_QUERY = gql(
     """
     query datasetSgs($dataset: String!) {
         project(name: $dataset) {
-            sequencingGroups(type: {eq: "transcriptome"}) {
+            sequencingGroups(type: {in_: ["transcriptome", "totalrna", "polyarna", "singlecellrna"]}) {
                 id
                 meta
             }
