@@ -172,7 +172,7 @@ def align_fq_pair(
         --outFileNamePrefix $BATCH_TMPDIR/ \\
         --outTmpDir $BATCH_TMPDIR/_STARtmp \\
         --readFilesIn {fastq_pair.r1} {fastq_pair.r2}
-        mv $BATCH_TMPDIR/Aligned.sortedByCoord.out.bam {j.output_bam}
+        ln -s $BATCH_TMPDIR/Aligned.sortedByCoord.out.bam {j.output_bam}
     """)
 
     return j, j.output_bam
