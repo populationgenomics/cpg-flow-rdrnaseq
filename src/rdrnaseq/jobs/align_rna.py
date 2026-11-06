@@ -169,9 +169,10 @@ def align_fq_pair(
         --outSAMtype BAM SortedByCoordinate \\
         --outSAMattrRGline ID:{sample_name} SN:{sample_name} \\
         --readFilesCommand zcat \\
+        --outFileNamePrefix $BATCH_TMPDIR/ \\
         --outTmpDir $BATCH_TMPDIR/_STARtmp \\
         --readFilesIn {fastq_pair.r1} {fastq_pair.r2}
-        mv Aligned.sortedByCoord.out.bam {j.output_bam}
+        ln -s $BATCH_TMPDIR/Aligned.sortedByCoord.out.bam {j.output_bam}
     """)
 
     return j, j.output_bam
