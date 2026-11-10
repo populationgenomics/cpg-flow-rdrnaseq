@@ -35,6 +35,11 @@ from rdrnaseq.scripts.dashboard_utilities import (
 BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
+EMPTY_OUTPUT_COLUMNS = [
+    'locus', 'alleles', 'matching_genome_sg_id', 'rna_sg_id',
+    'fraser_distance', 'deltaPsi', 'psiValue',
+    'participant_external_id', 'family_id', 'affected',
+]
 
 
 def compute_span_distance(variant_start: int, variant_end: int, region_start: int, region_end: int) -> int:
@@ -364,6 +369,13 @@ def main():
 
     coarse_tsv_path = f'{args.output}.tsv'
 
+    if not genome_to_rna:
+        logger.info('No RNA-to-genome SG mappings found — participants have no genome sequencing data')
+        pd.DataFrame(columns=EMPTY_OUTPUT_COLUMNS).to_csv(args.output_tsv, sep='\t', index=False)
+        open(args.output_bed, 'w').close()
+        logger.info(f'Wrote empty outputs to {args.output_tsv} and {args.output_bed}')
+        return
+
     if hl.current_backend().fs.exists(coarse_tsv_path):
         logger.info(f'Coarse TSV already exists at {coarse_tsv_path}, skipping Hail subset')
     else:
@@ -372,6 +384,13 @@ def main():
         cpg_ids = set().union(*df['genome_ids'])
         logger.info(f'Found {len(cpg_ids)} unique genome sequencing group IDs after mapping from RNA SG IDs')
         logger.info(f'Found {len(df)} FRASER significant regions')
+
+        if len(df) == 0 or len(cpg_ids) == 0:
+            logger.info('No FRASER regions with mapped genome SGs — nothing to subset')
+            pd.DataFrame(columns=EMPTY_OUTPUT_COLUMNS).to_csv(args.output_tsv, sep='\t', index=False)
+            open(args.output_bed, 'w').close()
+            logger.info(f'Wrote empty outputs to {args.output_tsv} and {args.output_bed}')
+            return
 
         merged = merge_overlapping_intervals(df)
         logger.info(f'Merged into {len(merged)} non-overlapping intervals (±{BUFFER_BP}bp buffer)')
