@@ -36,9 +36,16 @@ BUFFER_BP = 200
 REFERENCE_GENOME = 'GRCh38'
 MAX_POPMAX_AF = 0.01
 EMPTY_OUTPUT_COLUMNS = [
-    'locus', 'alleles', 'matching_genome_sg_id', 'rna_sg_id',
-    'fraser_distance', 'deltaPsi', 'psiValue',
-    'participant_external_id', 'family_id', 'affected',
+    'locus',
+    'alleles',
+    'matching_genome_sg_id',
+    'rna_sg_id',
+    'fraser_distance',
+    'deltaPsi',
+    'psiValue',
+    'participant_external_id',
+    'family_id',
+    'affected',
 ]
 
 

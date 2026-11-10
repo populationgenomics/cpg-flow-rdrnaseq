@@ -74,14 +74,16 @@ def test_dashboard_parses_empty_tsv(empty_output_dir):
 def test_read_fraser_csv_filters_unmapped_samples(empty_output_dir):
     """FRASER CSV with samples that have no genome SGs should produce empty DataFrame."""
     csv_path = os.path.join(empty_output_dir, 'fraser.csv')
-    pd.DataFrame({
-        'seqnames': ['chr1', 'chr2'],
-        'start': [1000, 2000],
-        'end': [1500, 2500],
-        'sampleID': ['CPG_RNA_1', 'CPG_RNA_2'],
-        'pValue': [0.001, 0.002],
-        'padjust': [0.01, 0.02],
-    }).to_csv(csv_path, index=False)
+    pd.DataFrame(
+        {
+            'seqnames': ['chr1', 'chr2'],
+            'start': [1000, 2000],
+            'end': [1500, 2500],
+            'sampleID': ['CPG_RNA_1', 'CPG_RNA_2'],
+            'pValue': [0.001, 0.002],
+            'padjust': [0.01, 0.02],
+        }
+    ).to_csv(csv_path, index=False)
 
     rna_to_genome = {'CPG_RNA_1': set(), 'CPG_RNA_2': set()}
     result = read_fraser_csv(csv_path, rna_to_genome)
@@ -98,14 +100,16 @@ def test_merge_overlapping_intervals_empty_input():
 def test_read_fraser_csv_keeps_mapped_samples(empty_output_dir):
     """Samples with genome SGs should be retained."""
     csv_path = os.path.join(empty_output_dir, 'fraser.csv')
-    pd.DataFrame({
-        'seqnames': ['chr1', 'chr2'],
-        'start': [1000, 2000],
-        'end': [1500, 2500],
-        'sampleID': ['CPG_RNA_1', 'CPG_RNA_2'],
-        'pValue': [0.001, 0.002],
-        'padjust': [0.01, 0.02],
-    }).to_csv(csv_path, index=False)
+    pd.DataFrame(
+        {
+            'seqnames': ['chr1', 'chr2'],
+            'start': [1000, 2000],
+            'end': [1500, 2500],
+            'sampleID': ['CPG_RNA_1', 'CPG_RNA_2'],
+            'pValue': [0.001, 0.002],
+            'padjust': [0.01, 0.02],
+        }
+    ).to_csv(csv_path, index=False)
 
     rna_to_genome = {'CPG_RNA_1': {'CPG_GENOME_1'}, 'CPG_RNA_2': set()}
     result = read_fraser_csv(csv_path, rna_to_genome)

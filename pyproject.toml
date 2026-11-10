@@ -67,6 +67,7 @@ quote-style = "single"
 
 [tool.ruff.lint.per-file-ignores]
 "src/rdrnaseq/stages.py" = ["ARG002"]
+"test/**" = ["S101", "ANN"]
 
 [tool.ruff.lint]
 select = ["A", "B", "C", "E", "F", "G", "I", "I001", "N", "Q", "S", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "ERA", "EXE", "ICN", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "UP", "YTT"]
